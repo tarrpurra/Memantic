@@ -1,0 +1,27 @@
+{
+  "canisters": {
+    "Mementic_backend": {
+      "candid": "src/Mementic_backend/Mementic_backend.did",
+      "package": "Mementic_backend",
+      "type": "rust"
+    },
+    "Mementic_frontend": {
+      "dependencies": [
+        "Mementic_backend"
+      ],
+      "source": [
+        "src/Mementic_frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "Mementic_frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}

@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "src/Mementic_backend"
+]
+resolver = "2"
