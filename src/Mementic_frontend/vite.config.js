@@ -1,8 +1,13 @@
 import { fileURLToPath, URL } from 'url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import path from "path"
 import environment from 'vite-plugin-environment';
 import dotenv from 'dotenv';
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: '../../.env' });
 
@@ -33,9 +38,12 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        
+        "@": path.resolve(__dirname, "src"),
         find: "declarations",
         replacement: fileURLToPath(
-          new URL("../declarations", import.meta.url)
+          new URL("../declarations", import.meta.url),
+          
         ),
       },
     ],

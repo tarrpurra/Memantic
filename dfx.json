@@ -3,6 +3,7 @@
     "Mementic_backend": {
       "candid": "src/Mementic_backend/Mementic_backend.did",
       "package": "Mementic_backend",
+      "cargo_manifest": "canisters/Mementic_backend/Cargo.toml",
       "type": "rust"
     },
     "Mementic_frontend": {
