@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { useNavigate } from "react-router";
+import { useAuth } from "../hooks/useAuth";
 import { 
   ArrowLeft, 
   Wallet, 
@@ -12,13 +13,52 @@ import {
   DollarSign,
   Eye,
   Heart,
-  Share2
+  Share2,
+  LogOut,
+  User,
+  Settings
 } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
+import { useEffect } from "react";
 
 const Portfolio = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { principal, logout, isAuthenticated, isLoading } = useAuth();
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      console.log("User not authenticated, redirecting to login");
+      navigate("/login");
+    }
+  }, [isAuthenticated, isLoading, navigate]);
+
+  const handleLogout = async () => {
+    try {
+      const success = await logout();
+      if (success) {
+        toast({
+          title: "Logged Out Successfully 👋",
+          description: "You have been safely logged out of your account.",
+        });
+        navigate("/");
+      } else {
+        toast({
+          title: "Logout Error",
+          description: "There was an issue logging out. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast({
+        title: "Logout Error",
+        description: "An unexpected error occurred during logout.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const myNFTs = [
     { 
@@ -105,6 +145,23 @@ const Portfolio = () => {
 
   const totalEarnings = myNFTs.reduce((sum, nft) => sum + parseFloat(nft.earned.split(' ')[0]), 0);
 
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="text-lg text-muted-foreground">Loading your portfolio...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated (useEffect will handle redirect)
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -122,15 +179,66 @@ const Portfolio = () => {
                 <p className="text-muted-foreground">Manage your meme NFTs and earnings</p>
               </div>
             </div>
-            <Badge variant="secondary" className="text-lg px-4 py-2">
-              <Wallet className="w-4 h-4 mr-2" />
-              {totalEarnings.toFixed(1)} ICP Total
-            </Badge>
+            
+            {/* User Info and Logout Section */}
+            <div className="flex items-center gap-4">
+              <Badge variant="secondary" className="text-lg px-4 py-2">
+                <Wallet className="w-4 h-4 mr-2" />
+                {totalEarnings.toFixed(1)} ICP Total
+              </Badge>
+              
+              {/* User Menu */}
+              <div className="flex items-center gap-2">
+                {/* User Info */}
+                <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-muted/20 rounded-lg">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm font-mono text-muted-foreground">
+                    {principal ? `${principal.slice(0, 8)}...${principal.slice(-4)}` : 'Unknown'}
+                  </span>
+                </div>
+                
+                {/* Logout Button */}
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleLogout}
+                  className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  <span className="hidden sm:inline">Logout</span>
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Account Info Card - Mobile */}
+        <Card className="mb-6 sm:hidden">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <User className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Logged in as:</p>
+                  <p className="text-xs font-mono text-muted-foreground">
+                    {principal ? `${principal.slice(0, 12)}...${principal.slice(-6)}` : 'Unknown'}
+                  </p>
+                </div>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleLogout}
+                className="text-red-600 bg-gradient-to-t from-red-500 to-red-50  border-red-200 hero-button">
+                <LogOut className="w-4 h-4 mr-2  " />
+                Logout
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>

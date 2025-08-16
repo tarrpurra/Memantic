@@ -5,7 +5,7 @@ import { Badge } from "../components/ui/badge";
 import { Textarea } from "../components/ui/textarea";
 import { Input } from "../components/ui/input";
 import { useNavigate } from "react-router";
-import { Upload, Sparkles, Image, ArrowLeft, Send } from "lucide-react";
+import { Upload, User, Sparkles, Image, ArrowLeft, Send } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 
 const MyPlace = () => {
@@ -55,7 +55,7 @@ const MyPlace = () => {
       <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
+            <Button variant="ghost" size="icon" onClick={() => navigate("/Marketplace")}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div>
@@ -63,9 +63,9 @@ const MyPlace = () => {
               <p className="text-sm text-muted-foreground">AI-Powered Meme Generation</p>
             </div>
           </div>
-          <Badge variant="secondary">
-            <Sparkles className="w-4 h-4 mr-2" />
-            Creator Mode
+          <Badge variant="secondary" className="hero-button" onClick={navigate("/portfolio")}>
+            <User className="w-4 h-4 mr-2 hero-bg " />
+            Portfolio
           </Badge>
         </div>
       </div>

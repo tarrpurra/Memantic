@@ -3,18 +3,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge";
 import { useNavigate } from "react-router";
 import { TrendingUp, Zap, Users } from "lucide-react";
-
+import { useAuth } from "../hooks/useAuth";
 
 const Landing = () => {
   const navigate = useNavigate();
+  const { principal, isLoading, isAuthenticated } = useAuth();
+  
+  const handleCreateClick = () => {
+    console.log("Create button clicked");
+    console.log("isAuthenticated:", isAuthenticated);
+    console.log("principal:", principal);
+    
+    if (!isAuthenticated) {
+      console.log("User not authenticated, navigating to login");
+      navigate("/login");
+    } else {
+      console.log("User authenticated, navigating to myplace");
+      navigate("/myplace");
+    }
+  };
 
   const trendingMemes = [
-    {
-      id: 1,
-      title: "Diamond Hands Doge",
-      votes: 1250,
-      creator: "CryptoMemer42",
-    },
+    { id: 1, title: "Diamond Hands Doge", votes: 1250, creator: "CryptoMemer42" },
     { id: 2, title: "To The Moon Cat", votes: 980, creator: "MemeQueen" },
     { id: 3, title: "HODL Strong", votes: 875, creator: "DiamondHands" },
   ];
@@ -23,15 +33,11 @@ const Landing = () => {
     <div className="min-h-screen bg-background">
       {/* Hero Section */}
       <section className="relative py-20 px-6 text-center min-h-screen">
-        {/* Background image */}
         <div className="absolute inset-0 bg-[url('/back2.gif')] bg-cover bg-center"></div>
-
-        {/* Blur overlay */}
         <div className="absolute inset-0 backdrop-blur-md bg-black/20"></div>
 
-        {/* Content */}
         <div className="relative z-10 max-w-4xl mx-auto pl-6">
-          <h1 className="text-5xl  md:text-7xl font-black bg-gradient-hero bg-clip-text text-transparent mb-8 leading-tight">
+          <h1 className="text-5xl md:text-7xl font-black bg-gradient-hero bg-clip-text text-transparent mb-8 leading-tight">
             Create and Share Memes That Make the Internet Laugh
           </h1>
 
@@ -44,11 +50,17 @@ const Landing = () => {
             <Button
               variant="hero"
               size="xl"
-              onClick={() => navigate("/myplace")}
+              onClick={handleCreateClick}
               className="w-full sm:w-auto border-2 p-2 bg-gradient-hero hero-button"
+              disabled={isLoading}
             >
               <Zap className="mr-2" />
-              Create Meme
+              {isLoading 
+                ? "Loading..." 
+                : isAuthenticated 
+                  ? "Create Meme" 
+                  : "Login to Create Meme"
+              }
             </Button>
 
             <Button
@@ -62,21 +74,12 @@ const Landing = () => {
             </Button>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-2xl mx-auto">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-primary">50K+</div>
-              <div className="text-muted-foreground">Memes Created</div>
+          {/* Show authentication status for debugging */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="text-sm text-muted-foreground mb-4">
+              Debug: {isLoading ? 'Loading...' : isAuthenticated ? `Logged in as ${principal}` : 'Not logged in'}
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-secondary">15K+</div>
-              <div className="text-muted-foreground">Active Creators</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-accent">1M+</div>
-              <div className="text-muted-foreground">Total Votes</div>
-            </div>
-          </div>
+          )}
         </div>
       </section>
 
@@ -120,7 +123,7 @@ const Landing = () => {
             ))}
           </div>
 
-          <div className="text-center mt-12 ">
+          <div className="text-center mt-12">
             <Button
               variant="outline"
               size="lg"
@@ -146,10 +149,16 @@ const Landing = () => {
           <Button
             variant="hero"
             size="xl"
-            onClick={() => navigate("/myplace")}
+            onClick={handleCreateClick}
             className="bg-primary p-3 hero-button"
+            disabled={isLoading}
           >
-            Start Creating Now
+            {isLoading 
+              ? "Loading..." 
+              : isAuthenticated 
+                ? "Start Creating Now" 
+                : "Login to Start Creating"
+            }
           </Button>
         </div>
       </section>
