@@ -1,29 +1,46 @@
 import { useState } from "react";
-import { Button } from "../components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/Button";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/Card";
+import { Badge } from "../components/ui/Badge";
+import {
+  Heart,
+  Share2,
+  TrendingUp,
+  Coins,
+  Crown,
+  Zap,
+} from "../components/ui/Icon";
 import { useToast } from "../hooks/use-toast";
-import { Heart, Share2, TrendingUp, Coins, Crown, Zap } from "lucide-react";
 
-
-export const MemeCard = ({ 
-  title, 
-  imageUrl, 
-  creator, 
-  votes, 
-  stakeAmount, 
-  isViral = false,
-  isNFT = false 
-})=> {
+export const MemeCard = ({ meme, onVote, onShare }) => {
   const [hasVoted, setHasVoted] = useState(false);
   const [hasStaked, setHasStaked] = useState(false);
   const { toast } = useToast();
+
+  // Destructure meme properties with defaults
+  const {
+    title = "Untitled Meme",
+    creator = "Anonymous",
+    imageUrl = "",
+    votes = 0,
+    stakeAmount = 0,
+    isViral = false,
+    isNFT = false,
+  } = meme || {};
 
   const handleVote = () => {
     setHasVoted(!hasVoted);
     toast({
       title: hasVoted ? "Vote removed" : "Voted! 🚀",
-      description: hasVoted ? "Your vote has been removed" : "Supporting this meme for viral status!",
+      description: hasVoted
+        ? "Your vote has been removed"
+        : "Supporting this meme for viral status!",
     });
   };
 
@@ -31,7 +48,9 @@ export const MemeCard = ({
     setHasStaked(!hasStaked);
     toast({
       title: hasStaked ? "Stake withdrawn" : "Staked! 💎",
-      description: hasStaked ? "ICP stake withdrawn" : "Backing this meme with 10 ICP!",
+      description: hasStaked
+        ? "ICP stake withdrawn"
+        : "Backing this meme with 10 ICP!",
     });
   };
 
@@ -60,8 +79,8 @@ export const MemeCard = ({
 
       <CardContent className="pb-4">
         <div className="aspect-square bg-muted rounded-lg overflow-hidden mb-4 relative group-hover:scale-[1.02] transition-transform duration-300">
-          <img 
-            src={imageUrl} 
+          <img
+            src={imageUrl}
             alt={title}
             className="w-full h-full object-cover"
           />
@@ -92,10 +111,10 @@ export const MemeCard = ({
           onClick={handleVote}
           className="flex-1"
         >
-          <Heart className={`h-4 w-4 mr-1 ${hasVoted ? 'fill-current' : ''}`} />
-          {hasVoted ? 'Voted' : 'Vote'}
+          <Heart className={`h-4 w-4 mr-1 ${hasVoted ? "fill-current" : ""}`} />
+          {hasVoted ? "Voted" : "Vote"}
         </Button>
-        
+
         <Button
           variant={hasStaked ? "default" : "glow"}
           size="sm"
@@ -103,7 +122,7 @@ export const MemeCard = ({
           className="flex-1"
         >
           <Zap className="h-4 w-4 mr-1" />
-          {hasStaked ? 'Staked' : 'Stake ICP'}
+          {hasStaked ? "Staked" : "Stake ICP"}
         </Button>
       </CardFooter>
     </Card>

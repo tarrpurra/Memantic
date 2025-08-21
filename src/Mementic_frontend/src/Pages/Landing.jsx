@@ -1,19 +1,23 @@
-import { Button } from "../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/Button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/Card";
 import { useNavigate } from "react-router";
-import { TrendingUp, Zap, Users } from "lucide-react";
+import { TrendingUp, Zap, Users } from "../components/ui/Icon";
 import { useAuth } from "../hooks/useAuth";
 
 const Landing = () => {
   const navigate = useNavigate();
   const { principal, isLoading, isAuthenticated } = useAuth();
-  
+
   const handleCreateClick = () => {
     console.log("Create button clicked");
     console.log("isAuthenticated:", isAuthenticated);
     console.log("principal:", principal);
-    
+
     if (!isAuthenticated) {
       console.log("User not authenticated, navigating to login");
       navigate("/login");
@@ -24,7 +28,12 @@ const Landing = () => {
   };
 
   const trendingMemes = [
-    { id: 1, title: "Diamond Hands Doge", votes: 1250, creator: "CryptoMemer42" },
+    {
+      id: 1,
+      title: "Diamond Hands Doge",
+      votes: 1250,
+      creator: "CryptoMemer42",
+    },
     { id: 2, title: "To The Moon Cat", votes: 980, creator: "MemeQueen" },
     { id: 3, title: "HODL Strong", votes: 875, creator: "DiamondHands" },
   ];
@@ -55,12 +64,11 @@ const Landing = () => {
               disabled={isLoading}
             >
               <Zap className="mr-2" />
-              {isLoading 
-                ? "Loading..." 
-                : isAuthenticated 
-                  ? "Create Meme" 
-                  : "Login to Create Meme"
-              }
+              {isLoading
+                ? "Loading..."
+                : isAuthenticated
+                ? "Create Meme"
+                : "Login to Create Meme"}
             </Button>
 
             <Button
@@ -75,9 +83,14 @@ const Landing = () => {
           </div>
 
           {/* Show authentication status for debugging */}
-          {process.env.NODE_ENV === 'development' && (
+          {process.env.NODE_ENV === "development" && (
             <div className="text-sm text-muted-foreground mb-4">
-              Debug: {isLoading ? 'Loading...' : isAuthenticated ? `Logged in as ${principal}` : 'Not logged in'}
+              Debug:{" "}
+              {isLoading
+                ? "Loading..."
+                : isAuthenticated
+                ? `Logged in as ${principal}`
+                : "Not logged in"}
             </div>
           )}
         </div>
@@ -87,10 +100,10 @@ const Landing = () => {
       <section className="py-16 px-6 bg-muted/20">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
-            <Badge variant="secondary" className="mb-4">
+            <div className="inline-flex items-center px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-sm mb-4">
               <TrendingUp className="w-4 h-4 mr-2" />
               Trending Now
-            </Badge>
+            </div>
             <h2 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
               Viral Memes This Week
             </h2>
@@ -101,9 +114,9 @@ const Landing = () => {
               <Card key={meme.id} className="group cursor-pointer">
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <Badge variant={index === 0 ? "default" : "outline"}>
+                    <div className="inline-flex items-center px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-sm">
                       #{index + 1}
-                    </Badge>
+                    </div>
                     <div className="flex items-center text-sm text-muted-foreground">
                       <Users className="w-4 h-4 mr-1" />
                       {meme.votes}
@@ -153,12 +166,11 @@ const Landing = () => {
             className="bg-primary p-3 hero-button"
             disabled={isLoading}
           >
-            {isLoading 
-              ? "Loading..." 
-              : isAuthenticated 
-                ? "Start Creating Now" 
-                : "Login to Start Creating"
-            }
+            {isLoading
+              ? "Loading..."
+              : isAuthenticated
+              ? "Start Creating Now"
+              : "Login to Start Creating"}
           </Button>
         </div>
       </section>

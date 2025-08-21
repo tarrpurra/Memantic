@@ -1,12 +1,25 @@
 import { useState } from "react";
-import { Button } from "../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
-import { Textarea } from "../components/ui/textarea";
-import { Input } from "../components/ui/input";
+import { Button } from "../components/ui/Button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/Card";
+import { Badge } from "../components/ui/Badge";
+import { Textarea } from "../components/ui/Textarea";
+import { Input } from "../components/ui/Input";
 import { useNavigate } from "react-router";
-import { Upload, User, Sparkles, Image, ArrowLeft, Send } from "lucide-react";
+import {
+  Upload,
+  User,
+  Sparkles,
+  Image,
+  ArrowLeft,
+  Send,
+} from "../components/ui/Icon";
 import { useToast } from "../hooks/use-toast";
+import { BackendTest } from "../components/BackendTest";
 
 const MyPlace = () => {
   const navigate = useNavigate();
@@ -33,7 +46,7 @@ const MyPlace = () => {
       });
       return;
     }
-    
+
     setGeneratedMeme(true);
     toast({
       title: "Meme Generated! 🎉",
@@ -55,18 +68,27 @@ const MyPlace = () => {
       <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/Marketplace")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/Marketplace")}
+            >
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div>
               <h1 className="text-2xl font-bold">My Creative Space</h1>
-              <p className="text-sm text-muted-foreground">AI-Powered Meme Generation</p>
+              <p className="text-sm text-muted-foreground">
+                AI-Powered Meme Generation
+              </p>
             </div>
           </div>
-          <Badge variant="secondary" className="hero-button" onClick={navigate("/portfolio")}>
-            <User className="w-4 h-4 mr-2 hero-bg " />
+          <div
+            className="px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-sm cursor-pointer"
+            onClick={() => navigate("/portfolio")}
+          >
+            <User className="w-4 h-4 mr-2 inline" />
             Portfolio
-          </Badge>
+          </div>
         </div>
       </div>
 
@@ -103,7 +125,9 @@ const MyPlace = () => {
                       }`}
                       onClick={() => setSelectedTemplate(template.id)}
                     >
-                      <div className="text-2xl text-center mb-2">{template.emoji}</div>
+                      <div className="text-2xl text-center mb-2">
+                        {template.emoji}
+                      </div>
                       <p className="text-xs text-center">{template.name}</p>
                     </div>
                   ))}
@@ -126,14 +150,24 @@ const MyPlace = () => {
                   className="min-h-[120px] resize-none"
                 />
                 <div className="flex flex-wrap gap-2">
-                  {["Funny", "Crypto", "Relatable", "Trending", "Sarcastic"].map((tag) => (
-                    <Badge key={tag} variant="outline" className="cursor-pointer hover:bg-primary/10">
+                  {[
+                    "Funny",
+                    "Crypto",
+                    "Relatable",
+                    "Trending",
+                    "Sarcastic",
+                  ].map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="outline"
+                      className="cursor-pointer hover:bg-primary/10"
+                    >
                       #{tag}
                     </Badge>
                   ))}
                 </div>
-                <Button 
-                  className="w-full" 
+                <Button
+                  className="w-full"
                   size="lg"
                   onClick={handleGenerate}
                   disabled={!prompt.trim()}
@@ -156,17 +190,19 @@ const MyPlace = () => {
                   <div className="space-y-4">
                     <div className="aspect-square bg-gradient-glow rounded-lg p-8 flex items-center justify-center">
                       <div className="text-center">
-                        <div className="text-6xl mb-4">{templates[selectedTemplate].emoji}</div>
+                        <div className="text-6xl mb-4">
+                          {templates[selectedTemplate].emoji}
+                        </div>
                         <div className="bg-background/90 p-4 rounded-lg">
                           <p className="font-bold text-lg">{prompt}</p>
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="space-y-3">
-                      <Button 
-                        variant="hero" 
-                        size="lg" 
+                      <Button
+                        variant="hero"
+                        size="lg"
                         className="w-full"
                         onClick={handlePostToMarketplace}
                       >
@@ -202,6 +238,11 @@ const MyPlace = () => {
               </CardContent>
             </Card>
           </div>
+        </div>
+
+        {/* Backend Integration Test */}
+        <div className="mt-8">
+          <BackendTest />
         </div>
       </div>
     </div>

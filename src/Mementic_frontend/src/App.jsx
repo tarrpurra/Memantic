@@ -8,19 +8,24 @@ import Landing from "./pages/Landing";
 import MyPlace from "./pages/MyPlace";
 import Marketplace from "./pages/Marketplace";
 import Portfolio from "./pages/Portfolio";
-import Wallet from "./pages/Wallet";
+import Wallet_Page from "./pages/Wallet";
 import NotFound from "./pages/NotFound";
-import { Toaster } from "../src/components/ui/toaster";
-import { Toaster as Sonner } from "../src/components/ui/sonner";
-import { TooltipProvider } from "../src/components/ui/tooltip";
+import { ToastContainer } from "./components/Toast";
+import { AuthProvider } from "./contexts/AuthContext";
+import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 
+// Component to display toasts
+const ToastDisplay = () => {
+  const { toasts, dismissToast } = useToastContext();
+  return <ToastContainer toasts={toasts} onDismiss={dismissToast} />;
+};
 
 function App() {
   // const [greeting, setGreeting] = useState('');
 
   // function handleSubmit(event) {
   //   event.preventDefault();
-  //   const name = event.target.elements.name.value;
+  //   const name = event.target.value;
   //   Mementic_backend.greet(name).then((greeting) => {
   //     setGreeting(greeting);
   //   });
@@ -28,9 +33,9 @@ function App() {
   // }
 
   return (
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
+    <ToastProvider>
+      <AuthProvider>
+        <ToastDisplay />
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
@@ -38,11 +43,12 @@ function App() {
           <Route path="/myplace" element={<MyPlace />} />
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/portfolio" element={<Portfolio />} />
-          <Route path="/wallet" element={<Wallet />} />
+          <Route path="/wallet" element={<Wallet_Page />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
-    </TooltipProvider>
+      </AuthProvider>
+    </ToastProvider>
   );
 }
 

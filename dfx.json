@@ -3,16 +3,12 @@
     "Mementic_backend": {
       "candid": "src/Mementic_backend/Mementic_backend.did",
       "package": "Mementic_backend",
-      "cargo_manifest": "canisters/Mementic_backend/Cargo.toml",
+      "cargo_manifest": "src/Mementic_backend/Cargo.toml",
       "type": "rust"
     },
     "Mementic_frontend": {
-      "dependencies": [
-        "Mementic_backend"
-      ],
-      "source": [
-        "src/Mementic_frontend/dist"
-      ],
+      "dependencies": ["Mementic_backend"],
+      "source": ["src/Mementic_frontend/dist"],
       "type": "assets",
       "workspace": "Mementic_frontend"
     }

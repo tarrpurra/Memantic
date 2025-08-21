@@ -1,21 +1,35 @@
 import { useState } from "react";
-import { Button } from "../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
-import { useNavigate } from "react-router";
-import { 
-  ArrowLeft, 
-  Wallet, 
-  Copy,
+import { Button } from "../components/ui/Button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/Card";
+import { Badge } from "../components/ui/Badge";
+import {
+  TrendingUp,
+  Coins,
+  Crown,
+  Zap,
+  ArrowUp,
+  ArrowDown,
+  User,
+  Timer,
+  Sparkles,
+  ArrowLeft,
+  RefreshCw,
+  Wallet,
   Eye,
   EyeOff,
-  RefreshCw,
   Send,
-  Download
-} from "lucide-react";
+  Copy,
+} from "../components/ui/Icon";
+import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
+import { useNavigate } from "react-router";
 
-const WalletPage = () => {
+const Wallet_Page = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showBalance, setShowBalance] = useState(true);
@@ -28,14 +42,38 @@ const WalletPage = () => {
     userId: "rdmx6-jaaaa-aaaah-qcaiq-cai",
     walletAddress: "rrkah-fqaaa-aaaah-qcuremq-cai",
     totalEarned: "856.32",
-    totalSpent: "421.88"
+    totalSpent: "421.88",
   };
 
   const recentTransactions = [
-    { id: 1, type: "earned", amount: "+45.2 ICP", description: "Meme NFT Royalties", time: "2 hours ago" },
-    { id: 2, type: "spent", amount: "-5.0 ICP", description: "Meme Generation Fee", time: "5 hours ago" },
-    { id: 3, type: "earned", amount: "+12.8 ICP", description: "Staking Rewards", time: "1 day ago" },
-    { id: 4, type: "spent", amount: "-2.5 ICP", description: "NFT Minting Fee", time: "2 days ago" }
+    {
+      id: 1,
+      type: "earned",
+      amount: "+45.2 ICP",
+      description: "Meme NFT Royalties",
+      time: "2 hours ago",
+    },
+    {
+      id: 2,
+      type: "spent",
+      amount: "-5.0 ICP",
+      description: "Meme Generation Fee",
+      time: "5 hours ago",
+    },
+    {
+      id: 3,
+      type: "earned",
+      amount: "+12.8 ICP",
+      description: "Staking Rewards",
+      time: "1 day ago",
+    },
+    {
+      id: 4,
+      type: "spent",
+      amount: "-2.5 ICP",
+      description: "NFT Minting Fee",
+      time: "2 days ago",
+    },
   ];
 
   const copyToClipboard = (text, label) => {
@@ -64,23 +102,31 @@ const WalletPage = () => {
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => navigate("/portfolio")}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate("/portfolio")}
+              >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
               <div>
                 <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
                   My Wallet
                 </h1>
-                <p className="text-muted-foreground">Manage your ICP balance and transactions</p>
+                <p className="text-muted-foreground">
+                  Manage your ICP balance and transactions
+                </p>
               </div>
             </div>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="icon"
               onClick={handleRefresh}
               disabled={isRefreshing}
             >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw
+                className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
+              />
             </Button>
           </div>
         </div>
@@ -96,23 +142,29 @@ const WalletPage = () => {
                 <Wallet className="w-6 h-6" />
                 Wallet Balance
               </CardTitle>
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="icon"
                 onClick={() => setShowBalance(!showBalance)}
               >
-                {showBalance ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                {showBalance ? (
+                  <Eye className="w-4 h-4" />
+                ) : (
+                  <EyeOff className="w-4 h-4" />
+                )}
               </Button>
             </div>
           </CardHeader>
           <CardContent className="relative space-y-4">
             <div className="text-center">
               <div className="text-4xl font-bold mb-2">
-                {showBalance ? `${walletData.balance} ${walletData.currency}` : "••••••"}
+                {showBalance
+                  ? `${walletData.balance} ${walletData.currency}`
+                  : "••••••"}
               </div>
               <p className="text-muted-foreground">Available Balance</p>
             </div>
-            
+
             <div className="flex gap-4 justify-center">
               <Button className="flex-1 max-w-32">
                 <Send className="w-4 h-4 mr-2" />
@@ -134,9 +186,11 @@ const WalletPage = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <code className="text-sm font-mono break-all">{walletData.userId}</code>
-                <Button 
-                  variant="ghost" 
+                <code className="text-sm font-mono break-all">
+                  {walletData.userId}
+                </code>
+                <Button
+                  variant="ghost"
                   size="icon"
                   onClick={() => copyToClipboard(walletData.userId, "User ID")}
                 >
@@ -155,11 +209,15 @@ const WalletPage = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <code className="text-sm font-mono break-all">{walletData.walletAddress}</code>
-                <Button 
-                  variant="ghost" 
+                <code className="text-sm font-mono break-all">
+                  {walletData.walletAddress}
+                </code>
+                <Button
+                  variant="ghost"
                   size="icon"
-                  onClick={() => copyToClipboard(walletData.walletAddress, "Wallet Address")}
+                  onClick={() =>
+                    copyToClipboard(walletData.walletAddress, "Wallet Address")
+                  }
                 >
                   <Copy className="w-4 h-4" />
                 </Button>
@@ -175,13 +233,17 @@ const WalletPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
             <CardContent className="p-6 text-center">
-              <div className="text-2xl font-bold text-green-500">{walletData.totalEarned} ICP</div>
+              <div className="text-2xl font-bold text-green-500">
+                {walletData.totalEarned} ICP
+              </div>
               <p className="text-sm text-muted-foreground">Total Earned</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-6 text-center">
-              <div className="text-2xl font-bold text-red-500">{walletData.totalSpent} ICP</div>
+              <div className="text-2xl font-bold text-red-500">
+                {walletData.totalSpent} ICP
+              </div>
               <p className="text-sm text-muted-foreground">Total Spent</p>
             </CardContent>
           </Card>
@@ -195,14 +257,25 @@ const WalletPage = () => {
           <CardContent>
             <div className="space-y-4">
               {recentTransactions.map((transaction) => (
-                <div key={transaction.id} className="flex items-center justify-between p-4 border border-border rounded-lg">
+                <div
+                  key={transaction.id}
+                  className="flex items-center justify-between p-4 border border-border rounded-lg"
+                >
                   <div className="flex-1">
                     <p className="font-medium">{transaction.description}</p>
-                    <p className="text-sm text-muted-foreground">{transaction.time}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {transaction.time}
+                    </p>
                   </div>
-                  <Badge 
-                    variant={transaction.type === "earned" ? "default" : "secondary"}
-                    className={transaction.type === "earned" ? "text-green-600" : "text-red-600"}
+                  <Badge
+                    variant={
+                      transaction.type === "earned" ? "default" : "secondary"
+                    }
+                    className={
+                      transaction.type === "earned"
+                        ? "text-green-600"
+                        : "text-red-600"
+                    }
                   >
                     {transaction.amount}
                   </Badge>
@@ -216,4 +289,4 @@ const WalletPage = () => {
   );
 };
 
-export default WalletPage;
+export default Wallet_Page;

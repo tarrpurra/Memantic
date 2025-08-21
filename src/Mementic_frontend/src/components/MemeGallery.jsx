@@ -1,14 +1,21 @@
+import { useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { TrendingUp, Crown, Flame, Filter } from "../components/ui/Icon";
 import { MemeCard } from "./MemeCard";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { TrendingUp, Crown, Flame, Filter } from "lucide-react";
 
 // Mock data for demo
 const mockMemes = [
   {
     id: "1",
     title: "When ICP hits $100 but you're still holding",
-    imageUrl: "https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=400&h=400&fit=crop",
+    imageUrl:
+      "https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=400&h=400&fit=crop",
     creator: "cryptokid",
     votes: 1250,
     stakeAmount: 45,
@@ -16,9 +23,10 @@ const mockMemes = [
     isNFT: true,
   },
   {
-    id: "2", 
+    id: "2",
     title: "Me checking my portfolio at 3 AM",
-    imageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop",
+    imageUrl:
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop",
     creator: "moonlover",
     votes: 890,
     stakeAmount: 32,
@@ -28,7 +36,8 @@ const mockMemes = [
   {
     id: "3",
     title: "When someone says blockchain is just a fad",
-    imageUrl: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=400&fit=crop", 
+    imageUrl:
+      "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=400&fit=crop",
     creator: "degenmaster",
     votes: 670,
     stakeAmount: 28,
@@ -38,8 +47,9 @@ const mockMemes = [
   {
     id: "4",
     title: "HODLing through the bear market like...",
-    imageUrl: "https://images.unsplash.com/photo-1425082661705-1834bfd09dca?w=400&h=400&fit=crop",
-    creator: "diamondhands", 
+    imageUrl:
+      "https://images.unsplash.com/photo-1425082661705-1834bfd09dca?w=400&h=400&fit=crop",
+    creator: "diamondhands",
     votes: 456,
     stakeAmount: 15,
     isViral: false,
@@ -48,7 +58,8 @@ const mockMemes = [
   {
     id: "5",
     title: "When gas fees cost more than your transaction",
-    imageUrl: "https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400&h=400&fit=crop",
+    imageUrl:
+      "https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400&h=400&fit=crop",
     creator: "ethburner",
     votes: 1100,
     stakeAmount: 38,
@@ -58,7 +69,8 @@ const mockMemes = [
   {
     id: "6",
     title: "Trying to explain DeFi to my parents",
-    imageUrl: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=400&fit=crop",
+    imageUrl:
+      "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=400&fit=crop",
     creator: "web3wizard",
     votes: 320,
     stakeAmount: 8,
@@ -128,21 +140,27 @@ export const MemeGallery = () => {
                 <div className="text-center p-6 bg-card/50 rounded-lg border border-primary/10">
                   <div className="text-3xl mb-2">🥇</div>
                   <h3 className="font-semibold mb-1">Most Voted</h3>
-                  <p className="text-sm text-muted-foreground">When ICP hits $100...</p>
+                  <p className="text-sm text-muted-foreground">
+                    When ICP hits $100...
+                  </p>
                   <p className="text-primary font-bold mt-2">1,250 votes</p>
                 </div>
-                
+
                 <div className="text-center p-6 bg-card/50 rounded-lg border border-secondary/10">
                   <div className="text-3xl mb-2">🥈</div>
                   <h3 className="font-semibold mb-1">Highest Stake</h3>
-                  <p className="text-sm text-muted-foreground">When someone says blockchain...</p>
+                  <p className="text-sm text-muted-foreground">
+                    When someone says blockchain...
+                  </p>
                   <p className="text-secondary font-bold mt-2">45 ICP staked</p>
                 </div>
-                
+
                 <div className="text-center p-6 bg-card/50 rounded-lg border border-accent/10">
                   <div className="text-3xl mb-2">🥉</div>
                   <h3 className="font-semibold mb-1">Fresh NFT</h3>
-                  <p className="text-sm text-muted-foreground">HODLing through bear market...</p>
+                  <p className="text-sm text-muted-foreground">
+                    HODLing through bear market...
+                  </p>
                   <p className="text-accent font-bold mt-2">Newly Minted</p>
                 </div>
               </div>

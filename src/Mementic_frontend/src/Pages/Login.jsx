@@ -1,4 +1,4 @@
-import { Button } from "../components/ui/button";
+import { Button } from "../components/ui/Button";
 import { useNavigate } from "react-router";
 import { useAuth } from "../hooks/useAuth";
 import { useEffect, useState } from "react";
@@ -18,13 +18,13 @@ const Login = () => {
 
   const handleLogin = async () => {
     if (isLoggingIn) return;
-    
+
     try {
       setIsLoggingIn(true);
       console.log("Starting login process...");
-      
+
       const success = await login();
-      
+
       if (success) {
         console.log("Login successful, will redirect via useEffect");
       } else {
@@ -57,7 +57,9 @@ const Login = () => {
       <div className="min-h-screen bg-background flex items-center justify-center px-6 bg-[url('/back2.gif')] bg-cover bg-center">
         <div className="absolute inset-0 backdrop-blur-md bg-black/20"></div>
         <div className="relative z-10 text-center">
-          <div className="text-2xl text-foreground mb-4">Checking authentication...</div>
+          <div className="text-2xl text-foreground mb-4">
+            Checking authentication...
+          </div>
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
         </div>
       </div>
@@ -85,10 +87,9 @@ const Login = () => {
               {isAuthenticated ? "Welcome Back!" : "Welcome Creator"}
             </h2>
             <p className="text-muted-foreground">
-              {isAuthenticated 
+              {isAuthenticated
                 ? "You're already logged in. Continue to the app or logout."
-                : "Access your digital identity to start creating viral content"
-              }
+                : "Access your digital identity to start creating viral content"}
             </p>
           </div>
 
@@ -134,7 +135,8 @@ const Login = () => {
           {principal && (
             <div className="mt-4 p-3 bg-muted/20 rounded-lg">
               <p className="text-xs text-muted-foreground">
-                Logged in as: <span className="font-mono text-primary">{principal}</span>
+                Logged in as:{" "}
+                <span className="font-mono text-primary">{principal}</span>
               </p>
             </div>
           )}
@@ -169,9 +171,10 @@ const Login = () => {
         </div>
 
         {/* Debug info in development */}
-        {process.env.NODE_ENV === 'development' && (
+        {process.env.NODE_ENV === "development" && (
           <div className="mt-4 p-2 bg-black/20 rounded text-xs text-muted-foreground">
-            Debug: isLoading={isLoading.toString()}, isAuthenticated={isAuthenticated.toString()}, principal={principal || 'null'}
+            Debug: isLoading={isLoading.toString()}, isAuthenticated=
+            {isAuthenticated.toString()}, principal={principal || "null"}
           </div>
         )}
       </div>

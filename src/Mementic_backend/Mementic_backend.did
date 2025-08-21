@@ -1,3 +1,175 @@
-service : {
-    "greet": (text) -> (text) query;
+type GeneratorInput = record {
+  style : opt text;
+  return_base64 : bool;
+  prompt : text;
+};
+type GeneratorResponse = record {
+  meme_id : opt nat64;
+  error_message : opt text;
+  meme_data : opt MemeData;
+  success : bool;
+  calls_remaining_today : nat8;
+};
+type HttpHeader = record { value : text; name : text };
+type HttpResponse = record {
+  status : nat;
+  body : blob;
+  headers : vec HttpHeader;
+};
+type InitArgs = record {
+  admin : opt principal;
+  logo : opt text;
+  name : opt text;
+  description : opt text;
+  symbol : opt text;
+};
+type LeaderboardEntry = record {
+  meme_id : nat64;
+  votes : MemeVotes;
+  rank : nat32;
+  meme_data : opt PublicStoredMeme;
+};
+type MemeData = record {
+  image_url : text;
+  metadata : PythonMetadata;
+  image_format : text;
+  prompt : text;
+  image_filename : text;
+};
+type MemeVotes = record {
+  upvotes : nat32;
+  last_vote_time : nat64;
+  meme_id : nat64;
+  score : float64;
+  total_voters : nat32;
+  downvotes : nat32;
+  created_week : nat64;
+};
+type MetadataValue = variant {
+  Map : vec record { text; MetadataValue };
+  Blob : blob;
+  Text : text;
+  Array : vec MetadataValue;
+};
+type MintedPair = record { meme_id : nat64; token_id : nat; owner : principal };
+type PublicStoredMeme = record {
+  id : nat64;
+  owner : principal;
+  created_at : nat64;
+  meme_data : MemeData;
+  canister_timestamp : nat64;
+};
+type PythonMetadata = record {
+  "service" : text;
+  processing_time : float64;
+  timestamp : nat64;
+  file_size_bytes : nat64;
+};
+type Result = variant { Ok : GeneratorResponse; Err : text };
+type Result_1 = variant { Ok; Err : text };
+type Result_2 = variant { Ok : vec TopEntry; Err : text };
+type Result_3 = variant { Ok : vec MintedPair; Err : text };
+type Result_4 = variant { Ok : VoteResponse; Err : text };
+type SupportedStandard = record { url : text; name : text };
+type TokenMetadataEntry = record {
+  value : MetadataValue;
+  name : text;
+  immutable : bool;
+};
+type TokenRecord = record {
+  meme_id : nat64;
+  token_id : nat;
+  owner : principal;
+  metadata : vec TokenMetadataEntry;
+  minted_at : nat64;
+};
+type TopEntry = record {
+  upvotes : nat32;
+  last_vote_time : nat64;
+  meme_id : nat64;
+  score : float64;
+  downvotes : nat32;
+};
+type TransformArgs = record { context : blob; response : HttpResponse };
+type VoteRecord = record { vote_type : VoteType; timestamp : nat64 };
+type VoteResponse = record {
+  new_vote_count : nat32;
+  message : text;
+  success : bool;
+  user_previous_vote : opt VoteType;
+};
+type VoteType = variant { Downvote; Upvote };
+type WeeklyLeaderboard = record {
+  week_id : nat64;
+  period : WeeklyPeriod;
+  top_memes : vec LeaderboardEntry;
+  is_active : bool;
+};
+type WeeklyPeriod = record {
+  meme_count : nat32;
+  week_id : nat64;
+  end_time : nat64;
+  is_completed : bool;
+  start_time : nat64;
+};
+service : (opt InitArgs) -> {
+  // Main function: Makes HTTPS call to AI generator and stores result in stable memory
+  call_generator : (text, GeneratorInput) -> (Result);
+  // Get user's remaining calls for today
+  check_remaining_calls : () -> (nat8) query;
+  // Mark any past weeks complete if their end_time has passed
+  close_finished_weeks : () -> ();
+  // Manually finalize any weeks that have ended.
+  // Useful to ensure `is_completed = true` even if no votes happen at boundary.
+  finalize_finished_weeks : () -> (text);
+  // Force-complete a specific week_id (admin/ops hook).
+  finalize_week : (nat64) -> (Result_1);
+  // Completed weeks
+  get_completed_weeks : () -> (vec WeeklyPeriod) query;
+  // Current weekly leaderboard (active week). Limit max 50.
+  get_current_leaderboard : (opt nat32) -> (WeeklyLeaderboard) query;
+  // Status for current week
+  get_current_week_status : () -> (nat64, nat64, nat64, bool) query;
+  // Get a specific meme by ID
+  get_meme : (nat64) -> (opt PublicStoredMeme) query;
+  // Get per-meme votes
+  get_meme_votes : (nat64) -> (opt MemeVotes) query;
+  get_token : (nat) -> (opt TokenRecord) query;
+  get_token_by_meme_id : (nat64) -> (opt nat) query;
+  // Return **Top 3** for a given week (for NFT mint step).
+  // Fails if the week is not completed yet.
+  get_top3_for_week : (nat64) -> (Result_2) query;
+  // Get total number of stored memes
+  get_total_memes : () -> (nat64) query;
+  // Get user's meme count
+  get_user_meme_count : () -> (nat32) query;
+  // Get all memes for the calling user
+  get_user_memes : () -> (vec PublicStoredMeme) query;
+  // Did caller vote on meme?
+  get_user_vote : (nat64) -> (opt VoteRecord) query;
+  // Leaderboard for any week id. Returns None if week not found.
+  get_week_leaderboard : (nat64, opt nat32) -> (opt WeeklyLeaderboard) query;
+  // Health check for the meme generator service
+  health : () -> (text) query;
+  icrc7_name : () -> (text) query;
+  icrc7_owner_of : (vec nat) -> (vec opt principal) query;
+  icrc7_supported_standards : () -> (vec SupportedStandard) query;
+  icrc7_symbol : () -> (text) query;
+  icrc7_tokens_of : (principal) -> (vec nat) query;
+  icrc7_total_supply : () -> (nat) query;
+  mint_week_top3_from_voting : (principal, nat64) -> (Result_3);
+  // Simple health probe
+  // Orchestrator: mint Top-3 for a completed `week_id` using the local modules.
+  // 
+  // Internally calls `nft_module::mint_week_top3_from_voting` with this canister's
+  // principal as the voting canister (since `voting` + `http_outcall` live here).
+  // 
+  // Access control is enforced in the NFT module (admin-only).
+  mint_week_top3_here : (nat64) -> (Result_3);
+  // Remove your vote (works only for current active week)
+  remove_vote : (nat64) -> (Result_4);
+  transform : (TransformArgs) -> (HttpResponse) query;
+  // Cast or change a vote on a meme in the **current active week**.
+  // Rejects if meme is not from current week or if the week is completed/expired.
+  vote_meme : (nat64, VoteType) -> (Result_4);
 }
