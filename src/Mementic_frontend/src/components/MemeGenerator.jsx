@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "../components/ui/Button";
 import {
   Card,
@@ -24,6 +24,28 @@ import { useMemeGeneration } from "../hooks/useMemeGeneration";
 const MemeImageDisplay = ({ generatedMeme, onClear }) => {
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const [imageUrl, setImageUrl] = useState("");
+
+  // Process the image URL when component mounts or generatedMeme changes
+  useEffect(() => {
+    if (generatedMeme && generatedMeme.image_url) {
+      // Validate the URL
+      try {
+        new URL(generatedMeme.image_url);
+        setImageUrl(generatedMeme.image_url);
+        setImageLoading(true);
+        setImageError(false);
+      } catch (error) {
+        console.error("Invalid image URL:", generatedMeme.image_url);
+        setImageError(true);
+        setImageLoading(false);
+      }
+    } else if (generatedMeme) {
+      // No image URL provided
+      setImageError(true);
+      setImageLoading(false);
+    }
+  }, [generatedMeme]);
 
   const handleImageLoad = () => {
     setImageLoading(false);
@@ -33,11 +55,15 @@ const MemeImageDisplay = ({ generatedMeme, onClear }) => {
   const handleImageError = () => {
     setImageLoading(false);
     setImageError(true);
+    console.error("Failed to load image:", imageUrl);
   };
 
   const handleDownload = async () => {
     try {
-      const response = await fetch(generatedMeme.image_url);
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -49,6 +75,7 @@ const MemeImageDisplay = ({ generatedMeme, onClear }) => {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Download failed:", error);
+      alert("Failed to download image. Please try again.");
     }
   };
 
@@ -58,7 +85,7 @@ const MemeImageDisplay = ({ generatedMeme, onClear }) => {
         await navigator.share({
           title: "Check out this meme!",
           text: generatedMeme.prompt,
-          url: generatedMeme.image_url,
+          url: imageUrl,
         });
       } catch (error) {
         console.error("Share failed:", error);
@@ -66,12 +93,20 @@ const MemeImageDisplay = ({ generatedMeme, onClear }) => {
     } else {
       // Fallback: copy to clipboard
       try {
-        await navigator.clipboard.writeText(generatedMeme.image_url);
+        await navigator.clipboard.writeText(imageUrl);
         alert("Image URL copied to clipboard!");
       } catch (error) {
         console.error("Copy failed:", error);
       }
     }
+  };
+
+  const handleRetry = () => {
+    setImageError(false);
+    setImageLoading(true);
+    // Force image reload by adding timestamp
+    const separator = imageUrl.includes("?") ? "&" : "?";
+    setImageUrl(`${imageUrl}${separator}t=${Date.now()}`);
   };
 
   return (
@@ -101,65 +136,96 @@ const MemeImageDisplay = ({ generatedMeme, onClear }) => {
         </div>
 
         {/* Image Display with Loading and Error States */}
-        {generatedMeme.image_url && (
-          <div>
-            <span className="text-sm font-medium">Generated Image:</span>
-            <div className="mt-2 relative">
-              {/* Loading Spinner */}
-              {imageLoading && (
-                <div className="flex items-center justify-center h-64 bg-muted rounded-lg border border-border">
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
-                    <p className="text-sm text-muted-foreground">
-                      Loading image...
+        <div>
+          <span className="text-sm font-medium">Generated Image:</span>
+          <div className="mt-2 relative">
+            {/* Loading Spinner */}
+            {imageLoading && (
+              <div className="flex items-center justify-center h-64 bg-muted rounded-lg border border-border">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
+                  <p className="text-sm text-muted-foreground">
+                    Loading image...
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Error State */}
+            {imageError && (
+              <div className="flex items-center justify-center h-64 bg-muted rounded-lg border border-destructive/20">
+                <div className="flex flex-col items-center gap-2 text-destructive">
+                  <Image className="h-8 w-8" />
+                  <p className="text-sm text-center">
+                    {imageUrl
+                      ? "Failed to load image"
+                      : "No image URL provided"}
+                  </p>
+                  {imageUrl && (
+                    <p className="text-xs text-muted-foreground text-center max-w-xs">
+                      The image URL may be invalid or the server may be
+                      unavailable
                     </p>
+                  )}
+                  <div className="flex gap-2">
+                    {imageUrl && (
+                      <Button variant="outline" size="sm" onClick={handleRetry}>
+                        Retry
+                      </Button>
+                    )}
+                    {imageUrl && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(imageUrl, "_blank")}
+                      >
+                        Open in New Tab
+                      </Button>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Error State */}
-              {imageError && (
-                <div className="flex items-center justify-center h-64 bg-muted rounded-lg border border-destructive/20">
-                  <div className="flex flex-col items-center gap-2 text-destructive">
-                    <Image className="h-8 w-8" />
-                    <p className="text-sm">Failed to load image</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setImageError(false);
-                        setImageLoading(true);
-                      }}
-                    >
-                      Retry
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Actual Image */}
+            {/* Actual Image */}
+            {imageUrl && !imageLoading && !imageError && (
               <img
-                src={generatedMeme.image_url}
+                src={imageUrl}
                 alt={`Generated meme: ${generatedMeme.prompt}`}
                 crossOrigin="anonymous"
-                className={`max-w-full h-auto rounded-lg border border-border transition-opacity duration-200 ${
-                  imageLoading || imageError
-                    ? "opacity-0 absolute"
-                    : "opacity-100"
-                }`}
+                className="max-w-full h-auto rounded-lg border border-border transition-opacity duration-200 opacity-100"
                 onLoad={handleImageLoad}
                 onError={handleImageError}
                 loading="lazy"
+                style={{ maxHeight: "500px", objectFit: "contain" }}
               />
-            </div>
+            )}
+          </div>
 
-            {/* Action Buttons */}
+          {/* URL Debug/Copy */}
+          {imageUrl && (
+            <div className="mt-2 text-xs text-muted-foreground break-all">
+              <span className="font-medium">Image URL:</span>{" "}
+              <a
+                href={imageUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="underline hover:text-primary transition-colors"
+              >
+                {imageUrl}
+              </a>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          {imageUrl && !imageError && (
             <div className="flex gap-2 mt-3">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleDownload}
                 className="flex items-center gap-1"
+                disabled={imageError}
               >
                 <Download className="h-4 w-4" />
                 Download
@@ -169,36 +235,63 @@ const MemeImageDisplay = ({ generatedMeme, onClear }) => {
                 size="sm"
                 onClick={handleShare}
                 className="flex items-center gap-1"
+                disabled={imageError}
               >
                 <Share2 className="h-4 w-4" />
                 Share
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(imageUrl, "_blank")}
+                className="flex items-center gap-1"
+              >
+                <Image className="h-4 w-4" />
+                Open
+              </Button>
+            </div>
+          )}
+
+          {/* No Image URL Message */}
+          {!imageUrl && !imageLoading && (
+            <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="text-xs text-amber-800">
+                <span className="font-medium">
+                  Meme generated successfully!
+                </span>
+                <div className="mt-1">
+                  However, no image URL was returned. This might be a temporary
+                  issue with the image generation service.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Metadata */}
+        {generatedMeme.metadata && (
+          <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground">
+            <div>
+              <span className="font-medium">Created:</span>
+              <br />
+              {new Date(
+                Number(generatedMeme.metadata.timestamp) * 1000
+              ).toLocaleString()}
+            </div>
+            <div>
+              <span className="font-medium">Processing Time:</span>
+              <br />
+              {generatedMeme.metadata.processing_time?.toFixed(2) || "N/A"}s
             </div>
           </div>
         )}
-
-        {/* Metadata */}
-        <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground">
-          <div>
-            <span className="font-medium">Created:</span>
-            <br />
-            {new Date(
-              Number(generatedMeme.metadata.timestamp) * 1000
-            ).toLocaleString()}
-          </div>
-          <div>
-            <span className="font-medium">Processing Time:</span>
-            <br />
-            {generatedMeme.metadata.processing_time.toFixed(2)}s
-          </div>
-        </div>
 
         {/* File Info */}
         {generatedMeme.image_filename && (
           <div className="text-xs text-muted-foreground">
             <span className="font-medium">Filename:</span>{" "}
             {generatedMeme.image_filename}
-            {generatedMeme.metadata.file_size_bytes && (
+            {generatedMeme.metadata?.file_size_bytes && (
               <span>
                 {" "}
                 • Size:{" "}
@@ -415,7 +508,7 @@ export const MemeGenerator = () => {
         {/* Enhanced Generated Meme Display */}
         {generatedMeme && (
           <MemeImageDisplay
-            generatedMeme={generatedMeme.meme_data || generatedMeme}
+            generatedMeme={generatedMeme}
             onClear={clearGeneratedMeme}
           />
         )}

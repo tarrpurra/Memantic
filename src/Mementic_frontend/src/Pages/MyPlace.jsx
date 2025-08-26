@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "../components/ui/Button";
 import {
   Card,
@@ -24,9 +24,11 @@ import { BackendTest } from "../components/BackendTest";
 const MyPlace = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const fileInputRef = useRef(null);
   const [prompt, setPrompt] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState(0);
   const [generatedMeme, setGeneratedMeme] = useState(false);
+  const [uploadedImage, setUploadedImage] = useState(null);
 
   const templates = [
     { id: 0, name: "Drake Pointing", emoji: "👉" },
@@ -36,6 +38,33 @@ const MyPlace = () => {
     { id: 4, name: "Expanding Brain", emoji: "🧠" },
     { id: 5, name: "Change My Mind", emoji: "💭" },
   ];
+
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setUploadedImage(e.target.result);
+        };
+        reader.readAsDataURL(file);
+        toast({
+          title: "Image Uploaded! 📷",
+          description: "Your custom image is ready to use.",
+        });
+      } else {
+        toast({
+          title: "Invalid File Type",
+          description: "Please upload an image file (PNG, JPG, GIF, etc.).",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
 
   const handleGenerate = () => {
     if (!prompt.trim()) {
@@ -62,6 +91,13 @@ const MyPlace = () => {
     navigate("/marketplace");
   };
 
+  const handleTagClick = (tag) => {
+    const tagText = `#${tag.toLowerCase()} `;
+    if (!prompt.includes(tagText)) {
+      setPrompt(prev => prev + tagText);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -71,7 +107,8 @@ const MyPlace = () => {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate("/Marketplace")}
+              onClick={() => navigate("/marketplace")}
+              aria-label="Go back to marketplace"
             >
               <ArrowLeft className="w-5 h-5" />
             </Button>
@@ -83,7 +120,7 @@ const MyPlace = () => {
             </div>
           </div>
           <div
-            className="px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-sm cursor-pointer"
+            className="px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-sm cursor-pointer hover:bg-secondary/80 transition-colors"
             onClick={() => navigate("/portfolio")}
           >
             <User className="w-4 h-4 mr-2 inline" />
@@ -93,9 +130,9 @@ const MyPlace = () => {
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           {/* Creation Panel */}
-          <div className="space-y-6">
+          <div className="space-y-8">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -105,12 +142,26 @@ const MyPlace = () => {
               </CardHeader>
               <CardContent>
                 {/* Upload Option */}
-                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center mb-6 hover:border-primary transition-colors cursor-pointer">
+                <div 
+                  className="border-2 border-dashed border-border rounded-lg p-6 text-center mb-6 hover:border-primary transition-colors cursor-pointer"
+                  onClick={handleUploadClick}
+                >
                   <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">
-                    Upload your own image or drag & drop
+                    {uploadedImage ? "Change uploaded image" : "Upload your own image or drag & drop"}
                   </p>
-                  <Input type="file" className="hidden" />
+                  {uploadedImage && (
+                    <div className="mt-2 text-xs text-primary">
+                      ✓ Custom image uploaded
+                    </div>
+                  )}
+                  <Input 
+                    ref={fileInputRef}
+                    type="file" 
+                    className="hidden" 
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                  />
                 </div>
 
                 {/* Template Grid */}
@@ -118,17 +169,19 @@ const MyPlace = () => {
                   {templates.map((template) => (
                     <div
                       key={template.id}
-                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${
                         selectedTemplate === template.id
-                          ? "border-primary bg-primary/10"
+                          ? "border-primary bg-primary/10 shadow-md"
                           : "border-border hover:border-primary/50"
                       }`}
                       onClick={() => setSelectedTemplate(template.id)}
                     >
-                      <div className="text-2xl text-center mb-2">
+                      <div className="text-xl text-center mb-2">
                         {template.emoji}
                       </div>
-                      <p className="text-xs text-center">{template.name}</p>
+                      <p className="text-xs text-center font-medium">
+                        {template.name}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -160,7 +213,8 @@ const MyPlace = () => {
                     <Badge
                       key={tag}
                       variant="outline"
-                      className="cursor-pointer hover:bg-primary/10"
+                      className="cursor-pointer hover:bg-primary/10 transition-colors"
+                      onClick={() => handleTagClick(tag)}
                     >
                       #{tag}
                     </Badge>
@@ -180,7 +234,7 @@ const MyPlace = () => {
           </div>
 
           {/* Preview Panel */}
-          <div className="space-y-6">
+          <div className="space-y-8">
             <Card>
               <CardHeader>
                 <CardTitle>Live Preview</CardTitle>
@@ -189,13 +243,25 @@ const MyPlace = () => {
                 {generatedMeme ? (
                   <div className="space-y-4">
                     <div className="aspect-square bg-gradient-glow rounded-lg p-8 flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="text-6xl mb-4">
-                          {templates[selectedTemplate].emoji}
-                        </div>
-                        <div className="bg-background/90 p-4 rounded-lg">
-                          <p className="font-bold text-lg">{prompt}</p>
-                        </div>
+                      <div className="text-center w-full">
+                        {uploadedImage ? (
+                          <div className="relative w-full h-32 mb-4 bg-cover bg-center rounded-lg" style={{backgroundImage: `url(${uploadedImage})`}}>
+                            <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center">
+                              <div className="bg-background/90 p-2 rounded">
+                                <p className="font-bold text-sm">{prompt}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-full flex items-center justify-center text-3xl">
+                              {templates[selectedTemplate].emoji}
+                            </div>
+                            <div className="bg-background/90 p-4 rounded-lg">
+                              <p className="font-bold text-lg">{prompt}</p>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -228,13 +294,28 @@ const MyPlace = () => {
             {/* Tips */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">💡 Pro Tips</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  Pro Tips
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p>• Be specific with your prompts for better results</p>
-                <p>• Use trending topics for viral potential</p>
-                <p>• Keep text short and punchy</p>
-                <p>• Check spelling before posting</p>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
+                  <p>Be specific with your prompts for better results</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
+                  <p>Use trending topics for viral potential</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
+                  <p>Keep text short and punchy</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
+                  <p>Check spelling before posting</p>
+                </div>
               </CardContent>
             </Card>
           </div>

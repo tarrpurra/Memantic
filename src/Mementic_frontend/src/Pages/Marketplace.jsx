@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../components/ui/Button";
 import {
   Card,
@@ -9,16 +9,9 @@ import {
 import { Input } from "../components/ui/Input";
 import {
   TrendingUp,
-  Flame,
   Crown,
-  Coins,
   Filter,
   Search,
-} from "../components/ui/Icon";
-import { MemeCard } from "../components/MemeCard";
-import { useNavigate } from "react-router";
-import { useAuth } from "../hooks/useAuth";
-import {
   ArrowUp,
   Timer,
   User,
@@ -27,133 +20,211 @@ import {
   Home,
   Zap,
 } from "../components/ui/Icon";
+import { MemeCard } from "../components/MemeCard";
+import { useNavigate } from "react-router";
+import { useAuth } from "../hooks/useAuth";
+
+// Import actor from the correct path
+import { Mementic_backend } from "../../../../.dfx/local/canisters/Mementic_backend";
+
+// --- Small utilities ---
+const PAGE_SIZE = 12;
+
+function getWeekEndIST(now = new Date()) {
+  const offsetIST = 330; // +05:30
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const ist = new Date(utc + offsetIST * 60000);
+
+  const day = ist.getDay(); // 0=Sun ... 6=Sat
+  const daysToSunday = (7 - day) % 7;
+  const end = new Date(ist);
+  end.setDate(ist.getDate() + daysToSunday);
+  end.setHours(23, 59, 59, 999);
+
+  const backUtc = end.getTime() - offsetIST * 60000;
+  return new Date(backUtc - end.getTimezoneOffset() * 60000);
+}
+
+function formatRemaining(ms) {
+  if (ms <= 0) return "0d 0h 0m";
+  const d = Math.floor(ms / (24 * 3600e3));
+  const h = Math.floor((ms % (24 * 3600e3)) / 3600e3);
+  const m = Math.floor((ms % 3600e3) / 60e3);
+  return `${d}d ${h}h ${m}m`;
+}
+
+const SkeletonCard = () => (
+  <Card className="relative overflow-hidden">
+    <CardContent className="p-6 animate-pulse">
+      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted" />
+      <div className="h-5 w-3/4 mx-auto bg-muted rounded mb-2" />
+      <div className="h-4 w-1/2 mx-auto bg-muted rounded mb-6" />
+      <div className="h-9 w-28 mx-auto bg-muted rounded" />
+    </CardContent>
+  </Card>
+);
 
 const Marketplace = () => {
-  const { principal, isLoading, isAuthenticated } = useAuth();
+  const { principal, isLoading: authLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  // UI State
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sort, setSort] = useState("trending");
+  const [page, setPage] = useState(1);
 
-  // Mock countdown timer (7 days from now)
-  const timeLeft = "6d 14h 32m";
+  // Data State
+  const [topMemes, setTopMemes] = useState([]);
+  const [memes, setMemes] = useState([]);
+  const [total, setTotal] = useState(0);
 
-  const topMemes = [
-    {
-      id: 1,
-      title: "Diamond Hands Forever",
-      creator: "CryptoKing",
-      votes: 2840,
-      emoji: "💎",
-      rank: 1,
-    },
-    {
-      id: 2,
-      title: "To The Moon Baby",
-      creator: "MoonWalker",
-      votes: 2650,
-      emoji: "🚀",
-      rank: 2,
-    },
-    {
-      id: 3,
-      title: "HODL Strong Together",
-      creator: "DiamondQueen",
-      votes: 2420,
-      emoji: "🙌",
-      rank: 3,
-    },
-  ];
+  // Loading/Error
+  const [loadingTop, setLoadingTop] = useState(true);
+  const [loadingList, setLoadingList] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const allMemes = [
-    {
-      id: 4,
-      title: "AI Robot Learning Memes",
-      creator: "TechMemer",
-      votes: 1850,
-      emoji: "🤖",
-    },
-    {
-      id: 5,
-      title: "Web3 Explained Simply",
-      creator: "SimplifyGuru",
-      votes: 1620,
-      emoji: "🌐",
-    },
-    {
-      id: 6,
-      title: "NFT Collection Goals",
-      creator: "ArtCollector",
-      votes: 1480,
-      emoji: "🎨",
-    },
-    {
-      id: 7,
-      title: "Blockchain for Beginners",
-      creator: "CryptoTeacher",
-      votes: 1350,
-      emoji: "⛓️",
-    },
-    {
-      id: 8,
-      title: "DeFi Summer Vibes",
-      creator: "DeFiExplorer",
-      votes: 1200,
-      emoji: "☀️",
-    },
-    {
-      id: 9,
-      title: "Smart Contract Humor",
-      creator: "CodeComedy",
-      votes: 1150,
-      emoji: "📝",
-    },
-    {
-      id: 10,
-      title: "Gas Fees Reality Check",
-      creator: "EthereumMemer",
-      votes: 980,
-      emoji: "⛽",
-    },
-    {
-      id: 11,
-      title: "Metaverse Adventures",
-      creator: "VRExplorer",
-      votes: 890,
-      emoji: "🥽",
-    },
-    {
-      id: 12,
-      title: "Crypto Winter Survival",
-      creator: "WinterWarrior",
-      votes: 750,
-      emoji: "❄️",
-    },
-  ];
+  // Week countdown
+  const [now, setNow] = useState(new Date());
+  const weekEnd = useMemo(() => getWeekEndIST(now), [now]);
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const timeLeft = formatRemaining(weekEnd.getTime() - now.getTime());
 
-  const handleVote = (memeId) => {
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setPage(1);
+      setSearchQuery(searchInput.trim());
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // Filter memes based on search query
+  const filteredMemes = useMemo(() => {
+    if (!searchQuery.trim()) return memes;
+    const query = searchQuery.toLowerCase();
+    return memes.filter(
+      (meme) =>
+        meme.title?.toLowerCase().includes(query) ||
+        meme.prompt?.toLowerCase().includes(query)
+    );
+  }, [memes, searchQuery]);
+
+  // Fetch Top 3
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingTop(true);
+      setErrorMsg("");
+      try {
+        const res = await Mementic_backend.get_leaderboard_top3();
+        if (!cancelled) setTopMemes(res || []);
+      } catch (e) {
+        if (!cancelled) setErrorMsg("Failed to load top memes.");
+      } finally {
+        if (!cancelled) setLoadingTop(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetch paginated list
+  async function fetchList({ reset = false } = {}) {
+    setLoadingList(true);
+    setErrorMsg("");
+    try {
+      const res = await Mementic_backend.list_memes(
+        page,
+        PAGE_SIZE,
+        searchQuery,
+        sort
+      );
+      setTotal(Number(res?.total || 0));
+      setMemes((prev) =>
+        page === 1 || reset
+          ? res?.items || []
+          : [...prev, ...(res?.items || [])]
+      );
+    } catch (e) {
+      setErrorMsg("Failed to load memes.");
+    } finally {
+      setLoadingList(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchList({ reset: page === 1 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchQuery, sort]);
+
+  // Vote
+  const votingLock = useRef(false);
+  const handleVote = async (memeId, currentVotes) => {
     if (!isAuthenticated) {
       alert("Please login to vote on memes!");
       navigate("/login");
       return;
     }
-    console.log(`Voted for meme ${memeId} by user ${principal}`);
-    // Add your voting logic here
-  };
+    if (votingLock.current) return;
+    votingLock.current = true;
 
-  const handleCreateMeme = () => {
-    if (!isAuthenticated) {
-      navigate("/login");
-    } else {
-      navigate("/myplace");
+    // optimistic update
+    setMemes((prev) =>
+      prev.map((m) =>
+        String(m.meme_id) === String(memeId)
+          ? { ...m, votes: Number(m.votes || 0) + 1 }
+          : m
+      )
+    );
+
+    try {
+      const res = await Mementic_backend.vote_meme(BigInt(memeId));
+      if (!res?.ok) {
+        setMemes((prev) =>
+          prev.map((m) =>
+            String(m.meme_id) === String(memeId)
+              ? { ...m, votes: currentVotes }
+              : m
+          )
+        );
+        alert(res?.error || "Voting failed. You may have hit the limit.");
+      } else if (typeof res.new_score === "number") {
+        setMemes((prev) =>
+          prev.map((m) =>
+            String(m.meme_id) === String(memeId)
+              ? { ...m, votes: res.new_score }
+              : m
+          )
+        );
+      }
+    } catch {
+      setMemes((prev) =>
+        prev.map((m) =>
+          String(m.meme_id) === String(memeId)
+            ? { ...m, votes: currentVotes }
+            : m
+        )
+      );
+      alert("Network error while voting.");
+    } finally {
+      votingLock.current = false;
     }
   };
 
-  const filteredMemes = allMemes.filter(
-    (meme) =>
-      meme.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      meme.creator.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleCreateMeme = () => {
+    if (!isAuthenticated) navigate("/login");
+    else navigate("/myplace");
+  };
+
+  const canLoadMore = memes.length < total;
 
   return (
+    // ⬇️ Your JSX unchanged except now using `backend` directly
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
@@ -175,7 +246,7 @@ const Marketplace = () => {
                 Home
               </Button>
 
-              {isLoading ? (
+              {authLoading ? (
                 <div className="text-sm text-muted-foreground">Loading...</div>
               ) : isAuthenticated ? (
                 <>
@@ -207,7 +278,7 @@ const Marketplace = () => {
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Authentication Status Alert */}
-        {!isAuthenticated && !isLoading && (
+        {!isAuthenticated && !authLoading && (
           <Card className="mb-6 border-yellow-500/20 bg-yellow-500/5">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -232,8 +303,8 @@ const Marketplace = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <Input
               placeholder="Search memes..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="pl-10"
             />
           </div>

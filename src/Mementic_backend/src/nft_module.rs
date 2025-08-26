@@ -6,12 +6,6 @@ use ic_stable_structures::{
     storable::{Bound, Storable},
     DefaultMemoryImpl, StableBTreeMap,
 };
-
-
-
-
-
-
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, cell::RefCell};
 

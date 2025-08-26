@@ -35,7 +35,19 @@ export const BackendTest = () => {
         addTestResult("Health Check", "FAILED", error.message);
       }
 
-      // Test 2: Get Total Memes
+      // Test 2: Authentication Status
+      try {
+        const authStatus = await backendService.getAuthStatus();
+        addTestResult(
+          "Authentication Status",
+          "PASSED",
+          `Auth Client: ${authStatus.authClientAuthenticated}, Service: ${authStatus.serviceAuthenticated}, Has Actor: ${authStatus.hasActor}`
+        );
+      } catch (error) {
+        addTestResult("Authentication Status", "FAILED", error.message);
+      }
+
+      // Test 3: Get Total Memes
       try {
         const totalMemes = await backendService.getTotalMemes();
         addTestResult("Get Total Memes", "PASSED", null);
@@ -43,7 +55,7 @@ export const BackendTest = () => {
         addTestResult("Get Total Memes", "FAILED", error.message);
       }
 
-      // Test 3: Get Current Leaderboard
+      // Test 4: Get Current Leaderboard
       try {
         const leaderboard = await backendService.getCurrentLeaderboard(10);
         addTestResult("Get Current Leaderboard", "PASSED", null);
@@ -51,25 +63,29 @@ export const BackendTest = () => {
         addTestResult("Get Current Leaderboard", "FAILED", error.message);
       }
 
-      // Test 4: Check Remaining Calls (if authenticated)
-      if (isAuthenticated) {
-        try {
-          const calls = await backendService.getRemainingCalls();
-          addTestResult("Check Remaining Calls", "PASSED", null);
-        } catch (error) {
-          addTestResult("Check Remaining Calls", "FAILED", error.message);
+      // Test 5: Check Remaining Calls (always test, but note authentication status)
+      try {
+        const calls = await backendService.getRemainingCalls();
+        if (isAuthenticated) {
+          addTestResult(
+            "Check Remaining Calls",
+            "PASSED",
+            `User has ${calls} calls remaining`
+          );
+        } else {
+          addTestResult(
+            "Check Remaining Calls",
+            "PASSED",
+            `Unauthenticated user has ${calls} calls remaining (expected: 0)`
+          );
         }
-      } else {
-        addTestResult(
-          "Check Remaining Calls",
-          "SKIPPED",
-          "User not authenticated"
-        );
+      } catch (error) {
+        addTestResult("Check Remaining Calls", "FAILED", error.message);
       }
 
       toast({
         title: "Backend Tests Complete",
-        description: `Ran ${testResults.length + 4} tests`,
+        description: `Ran ${testResults.length + 5} tests`,
       });
     } catch (error) {
       toast({

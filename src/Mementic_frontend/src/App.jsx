@@ -2,14 +2,14 @@
 // import { Mementic_backend } from 'declarations/Mementic_backend';
 
 import { Routes, Route } from "react-router";
-import Index from "./pages/index";
-import Login from "./pages/Login";
-import Landing from "./pages/Landing";
-import MyPlace from "./pages/MyPlace";
-import Marketplace from "./pages/Marketplace";
-import Portfolio from "./pages/Portfolio";
-import Wallet_Page from "./pages/Wallet";
-import NotFound from "./pages/NotFound";
+import Index from "./Pages/index";
+import Login from "./Pages/Login";
+import Landing from "./Pages/Landing";
+import MyPlace from "./Pages/MyPlace";
+import Marketplace from "./Pages/Marketplace";
+import Portfolio from "./Pages/Portfolio";
+import Wallet_Page from "./Pages/Wallet";
+import NotFound from "./Pages/NotFound";
 import { ToastContainer } from "./components/Toast";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";

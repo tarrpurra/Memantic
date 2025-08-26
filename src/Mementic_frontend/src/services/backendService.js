@@ -1,6 +1,5 @@
 import { Actor, HttpAgent } from "@dfinity/agent";
 import { AuthClient } from "@dfinity/auth-client";
-import { idlFactory } from "../../../declarations/Mementic_backend/Mementic_backend.did.js";
 import {
   getCanisterId,
   getAgentHost,
@@ -9,9 +8,44 @@ import {
 } from "../config/environment";
 
 // Configuration
-const CANISTER_ID = getCanisterId();
-const AGENT_HOST = getAgentHost();
-const IDP_URL = getIdentityProvider();
+let CANISTER_ID = null;
+let AGENT_HOST = null;
+let IDP_URL = null;
+let idlFactory = null;
+
+// Initialize configuration
+const initializeConfig = async () => {
+  try {
+    AGENT_HOST = getAgentHost();
+    IDP_URL = getIdentityProvider();
+
+    if (isDevMode()) {
+      // For local development, load from dfx generated files
+      try {
+        const backendModule = await import(
+          "../../../../.dfx/local/canisters/Mementic_backend/index.js"
+        );
+        idlFactory = backendModule.idlFactory;
+        CANISTER_ID = backendModule.canisterId;
+      } catch (error) {
+        console.warn(
+          "Could not load local canister, falling back to default:",
+          error
+        );
+        // Fallback to default canister ID
+        CANISTER_ID = "uxrrr-q7777-77774-qaaaq-cai";
+      }
+    } else {
+      // For production
+      CANISTER_ID = getCanisterId();
+      // You'll need to provide the idlFactory for production
+      console.warn("Production mode: idlFactory needs to be provided");
+    }
+  } catch (error) {
+    console.error("Failed to initialize configuration:", error);
+    throw new Error("Backend service configuration failed");
+  }
+};
 
 class BackendService {
   constructor() {
@@ -19,11 +53,17 @@ class BackendService {
     this.actor = null;
     this.authClient = null;
     this.isAuthenticated = false;
+    this.initialized = false;
   }
 
   // Initialize the service
   async initialize() {
+    if (this.initialized) return true;
+
     try {
+      // Initialize configuration first
+      await initializeConfig();
+
       // Create auth client
       this.authClient = await AuthClient.create({
         idleOptions: {
@@ -39,6 +79,7 @@ class BackendService {
         await this.setupAuthenticatedAgent();
       }
 
+      this.initialized = true;
       return true;
     } catch (error) {
       console.error("Failed to initialize backend service:", error);
@@ -49,6 +90,10 @@ class BackendService {
   // Setup authenticated agent
   async setupAuthenticatedAgent() {
     try {
+      if (!idlFactory || !CANISTER_ID) {
+        throw new Error("Backend service not properly configured");
+      }
+
       const identity = this.authClient.getIdentity();
       this.agent = new HttpAgent({
         identity,
@@ -77,6 +122,10 @@ class BackendService {
 
   // Setup anonymous agent/actor (no login required)
   async setupAnonymousAgent() {
+    if (!idlFactory || !CANISTER_ID) {
+      throw new Error("Backend service not properly configured");
+    }
+
     const agent = new HttpAgent({ host: AGENT_HOST });
     if (isDevMode()) {
       await agent.fetchRootKey();
@@ -153,27 +202,18 @@ class BackendService {
         throw new Error("Actor not initialized. Please login first.");
       }
 
-      const input = {
-        prompt,
-        style: style ? [style] : [], // Keep as optional array for Candid
-        return_base64: returnBase64,
-      };
+      // Call the backend's generate_meme method directly
+      const result = await this.actor.generate_meme(prompt);
 
-      // Use the actual meme generator URL instead of empty string
-      const memeGeneratorUrl = "https://meme-generator-0kk3.onrender.com";
-      const result = await this.actor.call_generator(memeGeneratorUrl, input);
-
-      // Your Rust function returns Result<GeneratorResponse, String>
-      // So the result should be directly the GeneratorResponse or an error
-      if (
-        result &&
-        typeof result === "object" &&
-        result.success !== undefined
-      ) {
-        return result; // This is the GeneratorResponse
+      // The backend returns Result<String, String> where Ok contains the image URL
+      if (typeof result === "string") {
+        return {
+          success: true,
+          image_url: result,
+          prompt: prompt,
+        };
       } else {
-        // If it's a string, it's likely an error
-        throw new Error(result || "Failed to generate meme");
+        throw new Error("Failed to generate meme");
       }
     } catch (error) {
       console.error("Failed to generate meme:", error);

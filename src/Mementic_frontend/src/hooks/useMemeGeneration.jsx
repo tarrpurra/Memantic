@@ -3,18 +3,11 @@ import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "./use-toast";
 
 export const useMemeGeneration = () => {
-  const MEME_GEN_BASE_URL = "https://meme-generator-0kk3.onrender.com";
-
   const normalizeMemeResponse = (raw) => {
     if (!raw || typeof raw !== "object") return raw;
 
     // Prefer explicit image_url if present
     let imageUrl = raw.image_url || raw.url;
-
-    // If server returned a relative path, prefix the generator base URL
-    if (imageUrl && imageUrl.startsWith("/")) {
-      imageUrl = `${MEME_GEN_BASE_URL}${imageUrl}`;
-    }
 
     // If base64 is returned, convert to data URL
     if (!imageUrl && (raw.image_base64 || raw.base64 || raw.imageData)) {
