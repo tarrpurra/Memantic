@@ -60,6 +60,59 @@ class BackendService {
   }
 
   /**
+   * Create a properly configured agent for development
+    */
+   async _createAgent(identity = null) {
+     console.log("Creating agent with host:", getAgentHost());
+     console.log("Development mode:", isDevMode());
+
+     const agentOptions = {
+       host: getAgentHost(),
+       if (identity) {
+       agentOptions.identity = identity;
+     },
+        verifyQuerySignatures: false,
+       // CRITICAL: This must be set to false for localhost to disable signature verification
+     };
+
+     
+
+     // Create the agent
+     const agent = new HttpAgent(agentOptions);
+
+     // CRITICAL: For development, we must fetch the root key
+     if (isDevMode()) {
+       console.log("Fetching root key...");
+       try {
+         await agent.fetchRootKey();
+         console.log("Root key fetched successfully");
+
+         // Verify the agent configuration
+         console.log("Agent configuration:", {
+           host: agent._host || agent.host,
+           verifyQuerySignatures: agent._verifyQuerySignatures,
+           rootKeyPresent: !!agent.rootKey,
+           rootKeyLength: agent.rootKey?.byteLength || 0
+         });
+
+       } catch (error) {
+         console.error("Root key fetch failed:", error);
+         // In development, this is usually fatal
+         throw new Error(`Root key fetch failed: ${error.message}`);
+       }
+     }
+
+     // Additional check: Ensure signature verification is disabled
+     if (agent._verifyQuerySignatures !== false) {
+       console.warn("Warning: verifyQuerySignatures is not properly set to false");
+       // Force disable it
+       agent._verifyQuerySignatures = false;
+     }
+
+     return agent;
+   }
+
+  /**
    * Setup authenticated agent with user identity
    */
   async _setupAuthenticatedAgent() {
@@ -69,28 +122,9 @@ class BackendService {
 
     console.log("Setting up authenticated agent");
     const identity = this.authClient.getIdentity();
-    this.agent = new HttpAgent({
-      identity,
-      host: getAgentHost(),
-      verifyQuerySignatures: false
-    });
+    console.log("Identity principal:", identity.getPrincipal().toString());
 
-    // Additional certificate verification override for development
-    if (isDevMode()) {
-      // Override the certificate verification method
-      this.agent._verifyQuerySignatures = () => true;
-    }
-
-    if (isDevMode()) {
-      console.log("Fetching root key for authenticated agent...");
-      try {
-        await this.agent.fetchRootKey();
-        console.log("Root key fetched successfully for authenticated agent");
-      } catch (error) {
-        console.warn("Failed to fetch root key for authenticated agent:", error);
-        // Continue anyway - this is common in some setups
-      }
-    }
+    this.agent = await this._createAgent(identity);
 
     console.log("Creating authenticated actor with canisterId:", Id);
     this.actor = Actor.createActor(idlFactory, {
@@ -110,31 +144,11 @@ class BackendService {
       throw new Error("Backend service not properly configured");
     }
 
-    console.log("Setting up anonymous agent with host:", getAgentHost());
+    console.log("Setting up anonymous agent");
 
-    this.agent = new HttpAgent({
-      host: getAgentHost(),
-      verifyQuerySignatures: false,
-    });
+    this.agent = await this._createAgent();
 
-    // Additional certificate verification override for development
-    if (isDevMode()) {
-      // Override the certificate verification method
-      this.agent._verifyQuerySignatures = () => true;
-    }
-
-    if (isDevMode()) {
-      console.log("Fetching root key for anonymous agent...");
-      try {
-        await this.agent.fetchRootKey();
-        console.log("Root key fetched successfully for anonymous agent");
-      } catch (error) {
-        console.warn("Failed to fetch root key for anonymous agent:", error);
-        // Continue anyway - this is common in some setups
-      }
-    }
-
-    console.log("Creating actor with canisterId:", Id);
+    console.log("Creating anonymous actor with canisterId:", Id);
     this.actor = Actor.createActor(idlFactory, {
       agent: this.agent,
       canisterId: Id,
@@ -159,14 +173,21 @@ class BackendService {
         windowOpenerFeatures: "toolbar=0,location=0,menubar=0,width=500,height=500,left=100,top=100",
         onSuccess: async () => {
           try {
+            console.log("Login successful, setting up authenticated agent...");
             await this._setupAuthenticatedAgent();
             resolve(true);
           } catch (error) {
+            console.error("Authenticated agent setup failed:", error);
             reject(error);
           }
         },
         onError: (error) => {
-          reject(new Error(`Login failed: ${error}`));
+          console.error("Login failed:", error);
+          if (error === "UserInterrupt") {
+            reject(new Error("Login was cancelled. Please allow popups and try again."));
+          } else {
+            reject(new Error(`Login failed: ${error}`));
+          }
         },
       });
     });
@@ -190,14 +211,68 @@ class BackendService {
     return this.isAuthenticated;
   }
 
+  /* ============ SAFE CALL WRAPPER ============ */
+
+  /**
+   * Safe wrapper for canister calls with error handling and retries
+   */
+  async _safeCall(methodName, ...args) {
+    const maxRetries = 2;
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`Calling ${methodName} (attempt ${attempt}/${maxRetries})`);
+        
+        // Ensure we're ready
+        await this.ensureReady();
+        
+        const result = await this.actor[methodName](...args);
+        console.log(`${methodName} succeeded on attempt ${attempt}`);
+        return result;
+        
+      } catch (error) {
+        console.error(`${methodName} failed on attempt ${attempt}:`, error);
+        lastError = error;
+
+        // If it's a certificate/signature error and we're in development, try recreating the agent
+        if (error.message.includes('certificate') ||
+            error.message.includes('signature') ||
+            error.message.includes('verification') ||
+            error.message.includes('delegation')) {
+
+          if (isDevMode() && attempt < maxRetries) {
+            console.log("Certificate/signature error detected, recreating agent...");
+            try {
+              if (this.isAuthenticated) {
+                await this._setupAuthenticatedAgent();
+              } else {
+                await this._setupAnonymousAgent();
+              }
+              console.log("Agent recreated successfully, retrying call...");
+            } catch (agentError) {
+              console.error("Failed to recreate agent:", agentError);
+            }
+          }
+        }
+
+        // Wait before retry
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
   /* ============ MEME OPERATIONS ============ */
 
   /**
    * Generate a new meme
    */
   async generateMeme(prompt) {
-    await this.ensureReady();
-    const result = await this.actor.generate_meme(prompt);
+    const result = await this._safeCall('generate_meme', prompt);
     return this._unwrapResult(result, "generate_meme failed");
   }
 
@@ -205,34 +280,30 @@ class BackendService {
    * Get user's memes
    */
   async getUserMemes() {
-    await this.ensureReady();
-    return await this.actor.get_user_memes();
+    return await this._safeCall('get_user_memes');
   }
 
   /**
    * Get total number of memes
    */
   async getTotalMemes() {
-    await this.ensureReady();
-    return await this.actor.get_total_memes();
+    return await this._safeCall('get_total_memes');
   }
 
   /**
    * Get current leaderboard
    */
   async getCurrentLeaderboard(limit = 50) {
-    await this.ensureReady();
     const limitOpt = typeof limit === "number" ? [limit] : [];
-    return await this.actor.get_current_leaderboard(limitOpt);
+    return await this._safeCall('get_current_leaderboard', limitOpt);
   }
 
   /**
    * Vote on a meme
    */
   async voteMeme(memeId, voteType) {
-    await this.ensureReady();
     const voteVariant = this._toVoteVariant(voteType);
-    const result = await this.actor.vote_meme(memeId, voteVariant);
+    const result = await this._safeCall('vote_meme', memeId, voteVariant);
     return this._unwrapResult(result, "vote_meme failed");
   }
 
@@ -240,8 +311,7 @@ class BackendService {
    * Remove vote from a meme
    */
   async removeVote(memeId) {
-    await this.ensureReady();
-    const result = await this.actor.remove_vote(memeId);
+    const result = await this._safeCall('remove_vote', memeId);
     return this._unwrapResult(result, "remove_vote failed");
   }
 
@@ -249,8 +319,7 @@ class BackendService {
    * Get specific meme by ID
    */
   async getMeme(memeId) {
-    await this.ensureReady();
-    const result = await this.actor.get_meme(memeId);
+    const result = await this._safeCall('get_meme', memeId);
     return this._fromOpt(result);
   }
 
@@ -258,8 +327,7 @@ class BackendService {
    * Get meme votes
    */
   async getMemeVotes(memeId) {
-    await this.ensureReady();
-    const result = await this.actor.get_meme_votes(memeId);
+    const result = await this._safeCall('get_meme_votes', memeId);
     return this._fromOpt(result);
   }
 
@@ -269,18 +337,16 @@ class BackendService {
    * Get remaining API calls
    */
   async getRemainingCalls() {
-    await this.ensureReady();
-    return await this.actor.check_remaining_calls();
+    return await this._safeCall('check_remaining_calls');
   }
 
   /**
    * Health check
    */
   async healthCheck() {
-    await this.ensureReady();
     console.log("Performing health check...");
     try {
-      const result = await this.actor.health();
+      const result = await this._safeCall('health');
       console.log("Health check successful:", result);
       return result;
     } catch (error) {
@@ -295,7 +361,7 @@ class BackendService {
   async testConnection() {
     try {
       console.log("Testing connection to canister...");
-      console.log("Agent host:", this.agent?.host);
+      console.log("Agent host:", this.agent?._host || this.agent?.host);
       console.log("Canister ID:", Id);
       console.log("Is development mode:", isDevMode());
 

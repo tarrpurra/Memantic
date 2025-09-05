@@ -3,7 +3,7 @@
 const NETWORK = 'local'; // 'local' | 'ic' | 'mainnet' | 'playground'
 const CANISTER_ID = 'uxrrr-q7777-77774-qaaaq-cai';
 
-export const isDevMode = () => import.meta.env.DEV === true;
+export const isDevMode = () => true;
 
 // Agent host: must match the page origin for delegation verification
 export const getAgentHost = () => {
