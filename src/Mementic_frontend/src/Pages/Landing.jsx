@@ -5,9 +5,10 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/Card";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { TrendingUp, Zap, Users } from "../components/ui/Icon";
 import { useAuth } from "../hooks/useAuth";
+
 
 const Landing = () => {
   const navigate = useNavigate();

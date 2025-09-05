@@ -10,7 +10,15 @@
       "dependencies": ["Mementic_backend"],
       "source": ["src/Mementic_frontend/dist"],
       "type": "assets",
-      "workspace": "Mementic_frontend"
+      "workspace": "Mementic_frontend",
+      "headers": {
+        "/": {
+          "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:* https://icp0.io https://*.icp0.io https://icp-api.io; frame-ancestors 'self';"
+        },
+        "/**": {
+          "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:* https://icp0.io https://*.icp0.io https://icp-api.io; frame-ancestors 'self';"
+        }
+      }
     }
   },
   "defaults": {

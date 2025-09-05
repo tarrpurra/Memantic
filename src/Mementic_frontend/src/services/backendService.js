@@ -1,52 +1,12 @@
 import { Actor, HttpAgent } from "@dfinity/agent";
 import { AuthClient } from "@dfinity/auth-client";
-import {
-  getCanisterId,
-  getAgentHost,
-  getIdentityProvider,
-  isDevMode,
-} from "../config/environment";
+import { idlFactory } from "../../../declarations/mementic_backend";
+import { getAgentHost, getIdentityProvider, isDevMode, Id } from "../config/environment";
 
-// Configuration
-let CANISTER_ID = null;
-let AGENT_HOST = null;
-let IDP_URL = null;
-let idlFactory = null;
-
-// Initialize configuration
-const initializeConfig = async () => {
-  try {
-    AGENT_HOST = getAgentHost();
-    IDP_URL = getIdentityProvider();
-
-    if (isDevMode()) {
-      // For local development, load from dfx generated files
-      try {
-        const backendModule = await import(
-          "../../../../.dfx/local/canisters/Mementic_backend/index.js"
-        );
-        idlFactory = backendModule.idlFactory;
-        CANISTER_ID = backendModule.canisterId;
-      } catch (error) {
-        console.warn(
-          "Could not load local canister, falling back to default:",
-          error
-        );
-        // Fallback to default canister ID
-        CANISTER_ID = "uxrrr-q7777-77774-qaaaq-cai";
-      }
-    } else {
-      // For production
-      CANISTER_ID = getCanisterId();
-      // You'll need to provide the idlFactory for production
-      console.warn("Production mode: idlFactory needs to be provided");
-    }
-  } catch (error) {
-    console.error("Failed to initialize configuration:", error);
-    throw new Error("Backend service configuration failed");
-  }
-};
-
+/**
+ * Backend Service for Mementic
+ * Handles IC canister communication, authentication, and meme operations
+ */
 class BackendService {
   constructor() {
     this.agent = null;
@@ -54,303 +14,347 @@ class BackendService {
     this.authClient = null;
     this.isAuthenticated = false;
     this.initialized = false;
+    this._initPromise = null;
   }
 
-  // Initialize the service
+  /**
+   * Initialize the backend service
+   */
   async initialize() {
     if (this.initialized) return true;
+    if (this._initPromise) return this._initPromise;
 
+    this._initPromise = this._initializeService();
+    return this._initPromise.finally(() => (this._initPromise = null));
+  }
+
+  async _initializeService() {
     try {
-      // Initialize configuration first
-      await initializeConfig();
-
       // Create auth client
       this.authClient = await AuthClient.create({
-        idleOptions: {
-          disableDefaultIdleCallback: true,
-        },
+        idleOptions: { disableDefaultIdleCallback: true },
       });
 
-      // Always set up an anonymous agent first so queries work without login
-      await this.setupAnonymousAgent();
+      // Setup anonymous agent first
+      await this._setupAnonymousAgent();
 
-      // If already authenticated, upgrade the agent to authenticated
+      // Upgrade to authenticated if user is logged in
       if (await this.authClient.isAuthenticated()) {
-        await this.setupAuthenticatedAgent();
+        await this._setupAuthenticatedAgent();
       }
 
       this.initialized = true;
       return true;
     } catch (error) {
-      console.error("Failed to initialize backend service:", error);
-      return false;
+      console.error("Backend service initialization failed:", error);
+      throw error;
     }
   }
 
-  // Setup authenticated agent
-  async setupAuthenticatedAgent() {
-    try {
-      if (!idlFactory || !CANISTER_ID) {
-        throw new Error("Backend service not properly configured");
-      }
-
-      const identity = this.authClient.getIdentity();
-      this.agent = new HttpAgent({
-        identity,
-        host: AGENT_HOST,
-      });
-
-      // In local development, the agent must fetch the root key
-      if (isDevMode()) {
-        await this.agent.fetchRootKey();
-      }
-
-      // Create actor
-      this.actor = Actor.createActor(idlFactory, {
-        agent: this.agent,
-        canisterId: CANISTER_ID,
-      });
-
-      this.isAuthenticated = true;
-      return true;
-    } catch (error) {
-      console.error("Failed to setup authenticated agent:", error);
-      this.isAuthenticated = false;
-      return false;
-    }
+  /**
+   * Ensure service is ready before making calls
+   */
+  async ensureReady() {
+    if (this.initialized && this.actor) return true;
+    return this.initialize();
   }
 
-  // Setup anonymous agent/actor (no login required)
-  async setupAnonymousAgent() {
-    if (!idlFactory || !CANISTER_ID) {
+  /**
+   * Setup authenticated agent with user identity
+   */
+  async _setupAuthenticatedAgent() {
+    if (!idlFactory || !Id) {
       throw new Error("Backend service not properly configured");
     }
 
-    const agent = new HttpAgent({ host: AGENT_HOST });
+    console.log("Setting up authenticated agent");
+    const identity = this.authClient.getIdentity();
+    this.agent = new HttpAgent({
+      identity,
+      host: getAgentHost(),
+      verifyQuerySignatures: false
+    });
+
+    // Additional certificate verification override for development
     if (isDevMode()) {
-      await agent.fetchRootKey();
+      // Override the certificate verification method
+      this.agent._verifyQuerySignatures = () => true;
     }
-    this.agent = agent;
+
+    if (isDevMode()) {
+      console.log("Fetching root key for authenticated agent...");
+      try {
+        await this.agent.fetchRootKey();
+        console.log("Root key fetched successfully for authenticated agent");
+      } catch (error) {
+        console.warn("Failed to fetch root key for authenticated agent:", error);
+        // Continue anyway - this is common in some setups
+      }
+    }
+
+    console.log("Creating authenticated actor with canisterId:", Id);
     this.actor = Actor.createActor(idlFactory, {
       agent: this.agent,
-      canisterId: CANISTER_ID,
+      canisterId: Id,
     });
+
+    console.log("Authenticated agent setup complete");
+    this.isAuthenticated = true;
+  }
+
+  /**
+   * Setup anonymous agent for queries
+   */
+  async _setupAnonymousAgent() {
+    if (!idlFactory || !Id) {
+      throw new Error("Backend service not properly configured");
+    }
+
+    console.log("Setting up anonymous agent with host:", getAgentHost());
+
+    this.agent = new HttpAgent({
+      host: getAgentHost(),
+      verifyQuerySignatures: false,
+    });
+
+    // Additional certificate verification override for development
+    if (isDevMode()) {
+      // Override the certificate verification method
+      this.agent._verifyQuerySignatures = () => true;
+    }
+
+    if (isDevMode()) {
+      console.log("Fetching root key for anonymous agent...");
+      try {
+        await this.agent.fetchRootKey();
+        console.log("Root key fetched successfully for anonymous agent");
+      } catch (error) {
+        console.warn("Failed to fetch root key for anonymous agent:", error);
+        // Continue anyway - this is common in some setups
+      }
+    }
+
+    console.log("Creating actor with canisterId:", Id);
+    this.actor = Actor.createActor(idlFactory, {
+      agent: this.agent,
+      canisterId: Id,
+    });
+
+    console.log("Anonymous agent setup complete");
     this.isAuthenticated = false;
   }
 
-  // Login with Internet Identity
+  /* ============ AUTHENTICATION METHODS ============ */
+
+  /**
+   * Login with Internet Identity
+   */
   async login() {
-    try {
-      return new Promise((resolve, reject) => {
-        this.authClient.login({
-          identityProvider: IDP_URL,
-          onSuccess: async () => {
-            try {
-              await this.setupAuthenticatedAgent();
-              resolve(true);
-            } catch (error) {
-              reject(error);
-            }
-          },
-          onError: (error) => {
+    await this.ensureReady();
+
+    return new Promise((resolve, reject) => {
+      this.authClient.login({
+        identityProvider: getIdentityProvider(),
+        maxTimeToLive: BigInt(7 * 24 * 60 * 60 * 1000 * 1000 * 1000), // 7 days
+        windowOpenerFeatures: "toolbar=0,location=0,menubar=0,width=500,height=500,left=100,top=100",
+        onSuccess: async () => {
+          try {
+            await this._setupAuthenticatedAgent();
+            resolve(true);
+          } catch (error) {
             reject(error);
-          },
-        });
+          }
+        },
+        onError: (error) => {
+          reject(new Error(`Login failed: ${error}`));
+        },
       });
-    } catch (error) {
-      console.error("Login failed:", error);
-      throw error;
-    }
+    });
   }
 
-  // Logout
+  /**
+   * Logout user
+   */
   async logout() {
-    try {
-      await this.authClient.logout();
-      // Recreate anonymous agent/actor so queries continue working
-      await this.setupAnonymousAgent();
-      this.isAuthenticated = false;
-      return true;
-    } catch (error) {
-      console.error("Logout failed:", error);
-      throw error;
-    }
+    await this.ensureReady();
+    await this.authClient.logout();
+    await this._setupAnonymousAgent();
+    this.isAuthenticated = false;
+    return true;
   }
 
-  // Check if user is authenticated
+  /**
+   * Check if user is authenticated
+   */
   isUserAuthenticated() {
     return this.isAuthenticated;
   }
 
-  // Get remaining calls for today
-  async getRemainingCalls() {
-    try {
-      if (!this.actor) {
-        throw new Error("Actor not initialized. Please login first.");
-      }
-      return await this.actor.check_remaining_calls();
-    } catch (error) {
-      console.error("Failed to get remaining calls:", error);
-      throw error;
-    }
+  /* ============ MEME OPERATIONS ============ */
+
+  /**
+   * Generate a new meme
+   */
+  async generateMeme(prompt) {
+    await this.ensureReady();
+    const result = await this.actor.generate_meme(prompt);
+    return this._unwrapResult(result, "generate_meme failed");
   }
 
-  // Generate meme - UPDATED VERSION
-  async generateMeme(prompt, style = null, returnBase64 = true) {
-    try {
-      if (!this.actor) {
-        throw new Error("Actor not initialized. Please login first.");
-      }
-
-      // Call the backend's generate_meme method directly
-      const result = await this.actor.generate_meme(prompt);
-
-      // The backend returns Result<String, String> where Ok contains the image URL
-      if (typeof result === "string") {
-        return {
-          success: true,
-          image_url: result,
-          prompt: prompt,
-        };
-      } else {
-        throw new Error("Failed to generate meme");
-      }
-    } catch (error) {
-      console.error("Failed to generate meme:", error);
-      throw error;
-    }
-  }
-
-  // Get user memes
+  /**
+   * Get user's memes
+   */
   async getUserMemes() {
-    try {
-      if (!this.actor) {
-        throw new Error("Actor not initialized. Please login first.");
-      }
-      return await this.actor.get_user_memes();
-    } catch (error) {
-      console.error("Failed to get user memes:", error);
-      throw error;
-    }
+    await this.ensureReady();
+    return await this.actor.get_user_memes();
   }
 
-  // Get total memes count
+  /**
+   * Get total number of memes
+   */
   async getTotalMemes() {
-    try {
-      if (!this.actor) {
-        throw new Error("Actor not initialized. Please login first.");
-      }
-      return await this.actor.get_total_memes();
-    } catch (error) {
-      console.error("Failed to get total memes:", error);
-      throw error;
-    }
+    await this.ensureReady();
+    return await this.actor.get_total_memes();
   }
 
-  // Get current leaderboard
+  /**
+   * Get current leaderboard
+   */
   async getCurrentLeaderboard(limit = 50) {
-    try {
-      if (!this.actor) {
-        throw new Error("Actor not initialized. Please login first.");
-      }
-      return await this.actor.get_current_leaderboard([limit]);
-    } catch (error) {
-      console.error("Failed to get current leaderboard:", error);
-      throw error;
-    }
+    await this.ensureReady();
+    const limitOpt = typeof limit === "number" ? [limit] : [];
+    return await this.actor.get_current_leaderboard(limitOpt);
   }
 
-  // Vote on a meme
+  /**
+   * Vote on a meme
+   */
   async voteMeme(memeId, voteType) {
-    try {
-      if (!this.actor) {
-        throw new Error("Actor not initialized. Please login first.");
-      }
-
-      const result = await this.actor.vote_meme(memeId, voteType);
-
-      if ("Ok" in result) {
-        return result.Ok;
-      } else {
-        throw new Error(result.Err || "Failed to vote on meme");
-      }
-    } catch (error) {
-      console.error("Failed to vote on meme:", error);
-      throw error;
-    }
+    await this.ensureReady();
+    const voteVariant = this._toVoteVariant(voteType);
+    const result = await this.actor.vote_meme(memeId, voteVariant);
+    return this._unwrapResult(result, "vote_meme failed");
   }
 
-  // Get meme by ID
+  /**
+   * Remove vote from a meme
+   */
+  async removeVote(memeId) {
+    await this.ensureReady();
+    const result = await this.actor.remove_vote(memeId);
+    return this._unwrapResult(result, "remove_vote failed");
+  }
+
+  /**
+   * Get specific meme by ID
+   */
   async getMeme(memeId) {
-    try {
-      if (!this.actor) {
-        throw new Error("Actor not initialized. Please login first.");
-      }
-      return await this.actor.get_meme(memeId);
-    } catch (error) {
-      console.error("Failed to get meme:", error);
-      throw error;
-    }
+    await this.ensureReady();
+    const result = await this.actor.get_meme(memeId);
+    return this._fromOpt(result);
   }
 
-  // Get meme votes
+  /**
+   * Get meme votes
+   */
   async getMemeVotes(memeId) {
-    try {
-      if (!this.actor) {
-        throw new Error("Actor not initialized. Please login first.");
-      }
-      return await this.actor.get_meme_votes(memeId);
-    } catch (error) {
-      console.error("Failed to get meme votes:", error);
-      throw error;
-    }
+    await this.ensureReady();
+    const result = await this.actor.get_meme_votes(memeId);
+    return this._fromOpt(result);
   }
 
-  // Health check
+  /* ============ UTILITY METHODS ============ */
+
+  /**
+   * Get remaining API calls
+   */
+  async getRemainingCalls() {
+    await this.ensureReady();
+    return await this.actor.check_remaining_calls();
+  }
+
+  /**
+   * Health check
+   */
   async healthCheck() {
+    await this.ensureReady();
+    console.log("Performing health check...");
     try {
-      if (!this.actor) {
-        // Ensure anonymous actor exists
-        await this.setupAnonymousAgent();
-      }
-      return await this.actor.health();
+      const result = await this.actor.health();
+      console.log("Health check successful:", result);
+      return result;
     } catch (error) {
       console.error("Health check failed:", error);
       throw error;
     }
   }
 
-  // Optionally force agent host like the example (only needed if not using env-based host)
-  forceAgentHost(host) {
-    if (this.agent && host) {
-      // eslint-disable-next-line no-underscore-dangle
-      this.agent._host = host;
+  /**
+   * Test connection to canister
+   */
+  async testConnection() {
+    try {
+      console.log("Testing connection to canister...");
+      console.log("Agent host:", this.agent?.host);
+      console.log("Canister ID:", Id);
+      console.log("Is development mode:", isDevMode());
+
+      const result = await this.healthCheck();
+      console.log("Connection test successful!");
+      return { success: true, result };
+    } catch (error) {
+      console.error("Connection test failed:", error);
+      return { success: false, error: error.message };
     }
+  }
+
+  /* ============ HELPER METHODS ============ */
+
+  /**
+   * Convert Candid optional to JavaScript value
+   */
+  _fromOpt(opt) {
+    return Array.isArray(opt) && opt.length ? opt[0] : null;
+  }
+
+  /**
+   * Unwrap Candid Result type
+   */
+  _unwrapResult(result, errorMessage = "Operation failed") {
+    if (result && "Ok" in result) return result.Ok;
+    const error = result?.Err ?? "Unknown error";
+    throw new Error(`${errorMessage}: ${error}`);
+  }
+
+  /**
+   * Convert vote type string to Candid variant
+   */
+  _toVoteVariant(voteType) {
+    if (voteType && typeof voteType === "object") return voteType;
+    if (voteType === "Upvote") return { Upvote: null };
+    if (voteType === "Downvote") return { Downvote: null };
+    throw new Error(`Invalid voteType: ${voteType} (expected "Upvote" or "Downvote")`);
   }
 }
 
-// Create and export singleton instance
+/* ============ EXPORTS ============ */
+
 const backendService = new BackendService();
 export default backendService;
 
-// Helpers to mirror example integration API
-export const getBackend = () => backendService.actor;
+// Low-level accessors
+export const getBackend = async () => {
+  await backendService.ensureReady();
+  return backendService.actor;
+};
+
 export const getNetwork = () =>
   window.location.hostname.includes("localhost") ||
   window.location.hostname.endsWith(".localhost")
     ? "local"
     : "ic";
 
-// Optional helper: rewrite local assets URL pattern like the example snippet
-export const rewriteLocalAssetsUrl = (dfxPort = 4943) => {
-  try {
-    const url = new URL(window.location.href);
-    const canisterId = url.searchParams.get("canisterId");
-    if (canisterId && url.port === String(dfxPort)) {
-      url.searchParams.delete("canisterId");
-      window.location.href = `http://${canisterId}.localhost:${dfxPort}?${url.searchParams}`;
-    }
-  } catch (_) {
-    // ignore
-  }
+// Test connection utility
+export const testConnection = async () => {
+  return await backendService.testConnection();
 };

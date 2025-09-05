@@ -16,7 +16,7 @@ import {
   Sparkles,
 } from "../components/ui/Icon";
 import { useAuth } from "../hooks/useAuth";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { useToast } from "../hooks/use-toast";
 
 // Import from the correct path
@@ -24,7 +24,7 @@ import {
   Mementic_backend as AnonBackendActor,
   createActor as createBackendActor,
   canisterId as BACKEND_CANISTER_ID,
-} from "../../../../.dfx/local/canisters/Mementic_backend";
+} from "../../../declarations/Mementic_backend";
 
 // for authenticated actor
 import { HttpAgent } from "@dfinity/agent";

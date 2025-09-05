@@ -21,11 +21,10 @@ import {
   Zap,
 } from "../components/ui/Icon";
 import { MemeCard } from "../components/MemeCard";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
-// Import actor from the correct path
-import { Mementic_backend } from "../../../../.dfx/local/canisters/Mementic_backend";
+// Import actor from the correct pathckend";
 
 // --- Small utilities ---
 const PAGE_SIZE = 12;

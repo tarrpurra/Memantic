@@ -1,7 +1,7 @@
 // import { useState } from 'react';
 // import { Mementic_backend } from 'declarations/Mementic_backend';
 
-import { Routes, Route } from "react-router";
+import { Routes, Route } from "react-router-dom";
 import Index from "./Pages/index";
 import Login from "./Pages/Login";
 import Landing from "./Pages/Landing";

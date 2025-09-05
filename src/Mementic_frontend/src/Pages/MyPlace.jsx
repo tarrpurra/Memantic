@@ -9,7 +9,7 @@ import {
 import { Badge } from "../components/ui/Badge";
 import { Textarea } from "../components/ui/Textarea";
 import { Input } from "../components/ui/Input";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import {
   Upload,
   User,

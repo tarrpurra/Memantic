@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { AuthClient } from "@dfinity/auth-client";
+import { getIdentityProvider } from "../config/environment";
 
 export function useAuth() {
   const [principal, setPrincipal] = useState(null);
@@ -73,7 +74,7 @@ export function useAuth() {
       
       return new Promise((resolve) => {
         client.login({
-          identityProvider: "https://identity.ic0.app",
+          identityProvider: getIdentityProvider(),
           maxTimeToLive: BigInt(7 * 24 * 60 * 60 * 1000 * 1000 * 1000), // 7 days in nanoseconds
           windowOpenerFeatures: "toolbar=0,location=0,menubar=0,width=500,height=600,left=100,top=100",
           onSuccess: () => {

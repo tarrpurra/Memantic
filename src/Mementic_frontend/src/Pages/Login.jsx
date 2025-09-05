@@ -1,11 +1,11 @@
 import { Button } from "../components/ui/Button";
-import { useNavigate } from "react-router";
-import { useAuth } from "../hooks/useAuth";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import { useEffect, useState } from "react";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { principal, login, logout, isLoading, isAuthenticated } = useAuth();
+  const { login, logout, isLoading, isAuthenticated } = useAuth();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Redirect if already logged in
@@ -38,6 +38,7 @@ const Login = () => {
       setIsLoggingIn(false);
     }
   };
+  
 
   const handleLogout = async () => {
     try {
@@ -132,14 +133,6 @@ const Login = () => {
             </div>
           )}
 
-          {principal && (
-            <div className="mt-4 p-3 bg-muted/20 rounded-lg">
-              <p className="text-xs text-muted-foreground">
-                Logged in as:{" "}
-                <span className="font-mono text-primary">{principal}</span>
-              </p>
-            </div>
-          )}
 
           <div className="text-sm text-muted-foreground mt-6">
             Secure • Decentralized • Anonymous
@@ -174,7 +167,7 @@ const Login = () => {
         {process.env.NODE_ENV === "development" && (
           <div className="mt-4 p-2 bg-black/20 rounded text-xs text-muted-foreground">
             Debug: isLoading={isLoading.toString()}, isAuthenticated=
-            {isAuthenticated.toString()}, principal={principal || "null"}
+            {isAuthenticated.toString()}
           </div>
         )}
       </div>

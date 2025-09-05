@@ -27,7 +27,7 @@ import {
 } from "../components/ui/Icon";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 
 const Wallet_Page = () => {
   const navigate = useNavigate();

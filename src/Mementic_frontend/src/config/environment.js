@@ -1,72 +1,52 @@
-// Environment configuration for Mementic frontend
-// This file loads configuration from dfx generated files
+// environment.ts (or .js)
 
-// Load canister IDs from dfx generated files
-let canisterIds = {};
-let agentHost = "https://icp-api.io";
-let identityProvider = "https://identity.ic0.app";
+const NETWORK = 'local'; // 'local' | 'ic' | 'mainnet' | 'playground'
+const CANISTER_ID = 'uxrrr-q7777-77774-qaaaq-cai';
 
-// Try to load from dfx generated files
-try {
-  // For local development
-  if (import.meta.env.DEV) {
-    const localCanisterIds = await import(
-      "../../../../.dfx/local/canister_ids.json"
-    );
-    canisterIds = localCanisterIds.default || localCanisterIds;
-    agentHost = "http://127.0.0.1:4943";
-    identityProvider =
-      "http://127.0.0.1:4943?canisterId=rdmx6-jaaaa-aaaaa-aaadq-cai";
-  } else {
-    // For production - you'll need to set these in your deployment
-    canisterIds = {
-      Mementic_backend: {
-        ic:
-          process.env.VITE_MEMENTIC_BACKEND_CANISTER_ID ||
-          "uxrrr-q7777-77774-qaaaq-cai",
-      },
-    };
-  }
-} catch (error) {
-  console.warn("Could not load canister IDs from dfx files:", error);
-  // Fallback to environment variables
-  canisterIds = {
-    Mementic_backend: {
-      ic:
-        import.meta.env.VITE_MEMENTIC_BACKEND_CANISTER_ID ||
-        "uxrrr-q7777-77774-qaaaq-cai",
-    },
-  };
-}
+export const isDevMode = () => import.meta.env.DEV === true;
 
-export const getCanisterId = (canisterName = "Mementic_backend") => {
-  const canister = canisterIds[canisterName];
-  if (!canister) {
-    throw new Error(`Canister ${canisterName} not found in configuration`);
-  }
-
-  // Return the appropriate canister ID based on environment
-  if (import.meta.env.DEV && canister.local) {
-    return canister.local;
-  }
-  return canister.ic || canister.local;
-};
-
+// Agent host: must match the page origin for delegation verification
 export const getAgentHost = () => {
-  return import.meta.env.VITE_AGENT_HOST || agentHost;
+  if (import.meta.env.VITE_AGENT_HOST) return import.meta.env.VITE_AGENT_HOST;
+
+  // In development, use the current page origin to match delegation
+  if (isDevMode() && typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+
+  // Fallback for production
+  return "https://icp-api.io";
 };
 
+// Internet Identity provider
 export const getIdentityProvider = () => {
-  return import.meta.env.VITE_INTERNET_IDENTITY_HOST || identityProvider;
+  if (import.meta.env.VITE_INTERNET_IDENTITY_HOST) {
+    return import.meta.env.VITE_INTERNET_IDENTITY_HOST;
+  }
+
+  // Use mainnet II for local development (recommended)
+  return "https://identity.ic0.app";
 };
 
-export const isDevMode = () => {
-  return import.meta.env.DEV;
-};
+// Export canister id
+export const Id = CANISTER_ID;
 
-export const config = {
-  canisterIds,
+// Debug logs
+console.log("All environment variables:", import.meta.env);
+console.log("Final configuration:", {
+  Id,
   agentHost: getAgentHost(),
   identityProvider: getIdentityProvider(),
   isDevMode: isDevMode(),
+  network: NETWORK,
+  VITE_CANISTER_ID_MEMENTIC_BACKEND: import.meta.env.VITE_CANISTER_ID_MEMENTIC_BACKEND,
+  CANISTER_ID_MEMENTIC_BACKEND: import.meta.env.CANISTER_ID_MEMENTIC_BACKEND
+});
+
+// Optional bundled object
+export const config = {
+  isDevMode: isDevMode(),
+  agentHost: getAgentHost(),
+  identityProvider: getIdentityProvider(),
+  Id: CANISTER_ID,
 };

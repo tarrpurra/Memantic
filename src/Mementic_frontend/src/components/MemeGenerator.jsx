@@ -20,8 +20,10 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { useMemeGeneration } from "../hooks/useMemeGeneration";
 
+
 // Enhanced Image Display Component
 const MemeImageDisplay = ({ generatedMeme, onClear }) => {
+  
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
   const [imageUrl, setImageUrl] = useState("");

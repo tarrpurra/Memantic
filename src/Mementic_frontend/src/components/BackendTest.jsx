@@ -3,13 +3,14 @@ import { Button } from "./ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../hooks/use-toast";
+import backendService from "../services/backendService";
+import { testConnection } from "../services/backendService";
 
 export const BackendTest = () => {
   const [testResults, setTestResults] = useState([]);
   const [isTesting, setIsTesting] = useState(false);
-  const { isAuthenticated, backendService } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { toast } = useToast();
-
   const addTestResult = (test, result, error = null) => {
     setTestResults((prev) => [
       ...prev,
@@ -27,21 +28,33 @@ export const BackendTest = () => {
     setTestResults([]);
 
     try {
-      // Test 1: Health Check
+      // Test 1: Connection Test
+      try {
+        const connectionResult = await testConnection();
+        if (connectionResult.success) {
+          addTestResult("Connection Test", "PASSED", "Backend connection successful");
+        } else {
+          addTestResult("Connection Test", "FAILED", connectionResult.error);
+        }
+      } catch (error) {
+        addTestResult("Connection Test", "FAILED", error.message);
+      }
+
+      // Test 2: Health Check
       try {
         const health = await backendService.healthCheck();
-        addTestResult("Health Check", "PASSED", null);
+        addTestResult("Health Check", "PASSED", `Health: ${health}`);
       } catch (error) {
         addTestResult("Health Check", "FAILED", error.message);
       }
 
-      // Test 2: Authentication Status
+      // Test 3: Authentication Status
       try {
-        const authStatus = await backendService.getAuthStatus();
+        const isAuth = backendService.isUserAuthenticated();
         addTestResult(
           "Authentication Status",
           "PASSED",
-          `Auth Client: ${authStatus.authClientAuthenticated}, Service: ${authStatus.serviceAuthenticated}, Has Actor: ${authStatus.hasActor}`
+          `Service Authenticated: ${isAuth}`
         );
       } catch (error) {
         addTestResult("Authentication Status", "FAILED", error.message);
@@ -55,32 +68,32 @@ export const BackendTest = () => {
         addTestResult("Get Total Memes", "FAILED", error.message);
       }
 
-      // Test 4: Get Current Leaderboard
+      // Test 4: Get Total Memes
       try {
-        const leaderboard = await backendService.getCurrentLeaderboard(10);
-        addTestResult("Get Current Leaderboard", "PASSED", null);
+        const totalMemes = await backendService.getTotalMemes();
+        addTestResult("Get Total Memes", "PASSED", `Total memes: ${totalMemes}`);
       } catch (error) {
-        addTestResult("Get Current Leaderboard", "FAILED", error.message);
+        addTestResult("Get Total Memes", "FAILED", error.message);
       }
 
-      // Test 5: Check Remaining Calls (always test, but note authentication status)
-      try {
-        const calls = await backendService.getRemainingCalls();
-        if (isAuthenticated) {
+      // Test 5: Check Remaining Calls (only if authenticated)
+      if (isAuthenticated) {
+        try {
+          const calls = await backendService.getRemainingCalls();
           addTestResult(
             "Check Remaining Calls",
             "PASSED",
             `User has ${calls} calls remaining`
           );
-        } else {
-          addTestResult(
-            "Check Remaining Calls",
-            "PASSED",
-            `Unauthenticated user has ${calls} calls remaining (expected: 0)`
-          );
+        } catch (error) {
+          addTestResult("Check Remaining Calls", "FAILED", error.message);
         }
-      } catch (error) {
-        addTestResult("Check Remaining Calls", "FAILED", error.message);
+      } else {
+        addTestResult(
+          "Check Remaining Calls",
+          "SKIPPED",
+          "User not authenticated"
+        );
       }
 
       toast({
@@ -111,6 +124,27 @@ export const BackendTest = () => {
         <div className="flex gap-2">
           <Button onClick={runTests} disabled={isTesting} variant="default">
             {isTesting ? "Running Tests..." : "Run Backend Tests"}
+          </Button>
+          <Button
+            onClick={async () => {
+              try {
+                const result = await testConnection();
+                toast({
+                  title: result.success ? "Connection Successful" : "Connection Failed",
+                  description: result.success ? "Backend is reachable" : result.error,
+                  variant: result.success ? "default" : "destructive",
+                });
+              } catch (error) {
+                toast({
+                  title: "Connection Test Failed",
+                  description: error.message,
+                  variant: "destructive",
+                });
+              }
+            }}
+            variant="outline"
+          >
+            Test Connection
           </Button>
           <Button
             onClick={clearResults}
