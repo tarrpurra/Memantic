@@ -17,6 +17,15 @@ type LeaderboardEntry = record {
   rank : nat32;
   meme_data : opt PublicStoredMeme;
 };
+type MarketData = record {
+  listing_price : opt nat64;
+  total_sales : nat64;
+  last_sale_price : opt nat64;
+  is_listed : bool;
+  last_sale_at : opt nat64;
+  total_earned : nat64;
+  listed_at : opt nat64;
+};
 type MemeData = record {
   image_url : text;
   metadata : PythonMetadata;
@@ -43,6 +52,7 @@ type MintedPair = record { meme_id : nat64; token_id : nat; owner : principal };
 type PublicStoredMeme = record {
   id : nat64;
   owner : principal;
+  market_data : MarketData;
   created_at : nat64;
   meme_data : MemeData;
   canister_timestamp : nat64;
@@ -57,7 +67,8 @@ type Result = variant { Ok; Err : text };
 type Result_1 = variant { Ok : text; Err : text };
 type Result_2 = variant { Ok : vec TopEntry; Err : text };
 type Result_3 = variant { Ok : vec MintedPair; Err : text };
-type Result_4 = variant { Ok : VoteResponse; Err : text };
+type Result_4 = variant { Ok : PublicStoredMeme; Err : text };
+type Result_5 = variant { Ok : VoteResponse; Err : text };
 type SupportedStandard = record { url : text; name : text };
 type TokenMetadataEntry = record {
   value : MetadataValue;
@@ -110,12 +121,16 @@ service : (opt InitArgs) -> {
   // Force-complete a specific week_id (admin/ops hook).
   finalize_week : (nat64) -> (Result);
   generate_meme : (text) -> (Result_1);
+  // List all memes for marketplace (newest first)
+  get_all_memes : () -> (vec PublicStoredMeme) query;
   // Completed weeks
   get_completed_weeks : () -> (vec WeeklyPeriod) query;
   // Current weekly leaderboard (active week). Limit max 50.
   get_current_leaderboard : (opt nat32) -> (WeeklyLeaderboard) query;
   // Status for current week
   get_current_week_status : () -> (nat64, nat64, nat64, bool) query;
+  // Get only memes that are listed for sale on the marketplace
+  get_marketplace_memes : () -> (vec PublicStoredMeme) query;
   get_meme : (nat64) -> (opt PublicStoredMeme) query;
   // Get per-meme votes
   get_meme_votes : (nat64) -> (opt MemeVotes) query;
@@ -138,12 +153,23 @@ service : (opt InitArgs) -> {
   icrc7_symbol : () -> (text) query;
   icrc7_tokens_of : (principal) -> (vec nat) query;
   icrc7_total_supply : () -> (nat) query;
+  // Check if a meme has been minted as an NFT
+  is_meme_minted : (nat64) -> (bool) query;
+  // List a meme for sale on the marketplace
+  list_meme_for_sale : (nat64, nat64) -> (Result);
   mint_week_top3_from_voting : (principal, nat64) -> (Result_3);
   mint_week_top3_here : (nat64) -> (Result_3);
+  // Store a generated meme into marketplace (associated to caller)
+  publish_meme : (MemeData) -> (Result_4);
+  // Record a sale (called internally or by marketplace canister)
+  record_meme_sale : (nat64, nat64) -> (Result);
+  // Remove a meme from the marketplace
+  remove_meme_from_market : (nat64) -> (Result);
   // Remove your vote (works only for current active week)
-  remove_vote : (nat64) -> (Result_4);
+  remove_vote : (nat64) -> (Result_5);
   transform : (TransformArgs) -> (HttpResponse) query;
   // Cast or change a vote on a meme in the **current active week**.
   // Rejects if meme is not from current week or if the week is completed/expired.
-  vote_meme : (nat64, VoteType) -> (Result_4);
+  vote_meme : (nat64, VoteType) -> (Result_5);
+  whoami : () -> (principal) query;
 }

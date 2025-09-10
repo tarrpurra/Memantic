@@ -7,11 +7,11 @@ export const isDevMode = () => true;
 
 // Agent host: must match the page origin for delegation verification
 export const getAgentHost = () => {
-  if (import.meta.env.VITE_AGENT_HOST) return import.meta.env.VITE_AGENT_HOST;
+  if (import.meta.env?.VITE_AGENT_HOST) return import.meta.env.VITE_AGENT_HOST;
 
-  // In development, use the current page origin to match delegation
-  if (isDevMode() && typeof window !== 'undefined') {
-    return window.location.origin;
+  // In development, default to local replica if not provided
+  if (isDevMode()) {
+    return "http://127.0.0.1:4943";
   }
 
   // Fallback for production
@@ -29,7 +29,10 @@ export const getIdentityProvider = () => {
 };
 
 // Export canister id
-export const Id = CANISTER_ID;
+export const Id =
+  import.meta.env?.VITE_CANISTER_ID_MEMENTIC_BACKEND ||
+  import.meta.env?.CANISTER_ID_MEMENTIC_BACKEND ||
+  CANISTER_ID;
 
 // Debug logs
 console.log("All environment variables:", import.meta.env);
@@ -43,10 +46,24 @@ console.log("Final configuration:", {
   CANISTER_ID_MEMENTIC_BACKEND: import.meta.env.CANISTER_ID_MEMENTIC_BACKEND
 });
 
-// Optional bundled object
+// Helpers and optional bundled object
+export const getCanisterId = () => Id;
+
+export const hasBackendCanisterId = () =>
+  Boolean(
+    import.meta.env?.VITE_CANISTER_ID_MEMENTIC_BACKEND ||
+      import.meta.env?.CANISTER_ID_MEMENTIC_BACKEND
+  );
+
+export const hasFrontendCanisterId = () =>
+  Boolean(
+    import.meta.env?.VITE_CANISTER_ID_MEMENTIC_FRONTEND ||
+      import.meta.env?.CANISTER_ID_MEMENTIC_FRONTEND
+  );
+
 export const config = {
   isDevMode: isDevMode(),
   agentHost: getAgentHost(),
   identityProvider: getIdentityProvider(),
-  Id: CANISTER_ID,
+  Id,
 };

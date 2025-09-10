@@ -496,6 +496,38 @@ export const Icon = ({ name, size = 24, className = "", ...props }) => {
         <line x1="15" y1="12" x2="3" y2="12" />
       </svg>
     ),
+    loader2: (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+        {...props}
+      >
+        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+      </svg>
+    ),
+    wand2: (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+        {...props}
+      >
+        <path d="M21.64 3.64a1.5 1.5 0 0 0-2.12 0l-1.97 1.97L15.5 3.5l1.97-1.97a1.5 1.5 0 0 0 0-2.12L15.5.5 12 4l-3.5-3.5L4 4l3.5 3.5L4 12l3.5 3.5L4 20l4 4 3.5-3.5L15.5 20l4-4-3.5-3.5L20 12l-3.5-3.5L15.5 8l1.97-1.97 1.97 1.97a1.5 1.5 0 0 0 2.12-2.12Z" />
+      </svg>
+    ),
   };
 
   return icons[name] || null;
@@ -530,3 +562,5 @@ export const EyeOff = (props) => <Icon name="eyeOff" {...props} />;
 export const Copy = (props) => <Icon name="copy" {...props} />;
 export const Home = (props) => <Icon name="home" {...props} />;
 export const LogIn = (props) => <Icon name="logIn" {...props} />;
+export const Loader2 = (props) => <Icon name="loader2" {...props} />;
+export const Wand2 = (props) => <Icon name="wand2" {...props} />;

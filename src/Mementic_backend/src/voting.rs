@@ -284,6 +284,31 @@ fn close_finished_weeks() {
             if let Some(mut p) = periods.get(&week_id) {
                 p.is_completed = true;
                 periods.insert(week_id, p); // write back
+
+                // Automatically mint NFTs for top 3 memes of completed week
+                mint_top3_for_completed_week(week_id);
+            }
+        }
+    });
+}
+
+/// Automatically mint NFTs for the top 3 memes of a completed week
+fn mint_top3_for_completed_week(week_id: u64) {
+    ic_cdk::println!("Attempting to mint NFTs for completed week: {}", week_id);
+
+    // Spawn an async task to mint the NFTs
+    ic_cdk::spawn(async move {
+        let voting_canister = ic_cdk::api::id();
+        match crate::nft_module::mint_week_top3_from_voting(voting_canister, week_id).await {
+            Ok(minted_pairs) => {
+                ic_cdk::println!("Successfully minted {} NFTs for week {}", minted_pairs.len(), week_id);
+                for pair in minted_pairs {
+                    ic_cdk::println!("Minted NFT {} for meme {} owned by {}",
+                        pair.token_id, pair.meme_id, pair.owner);
+                }
+            }
+            Err(e) => {
+                ic_cdk::println!("Failed to mint NFTs for week {}: {}", week_id, e);
             }
         }
     });
@@ -297,6 +322,14 @@ fn close_finished_weeks() {
 #[update]
 pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, String> {
     let user = caller();
+    ic_cdk::println!("Vote meme - Caller principal: {}", user.to_text());
+
+    if user == Principal::anonymous() {
+        ic_cdk::println!("Vote meme - Anonymous user detected, rejecting request");
+        return Err("Authentication required".into());
+    }
+
+    ic_cdk::println!("Vote meme - Authenticated user: {}", user.to_text());
     let now = time();
 
     // Input validation
@@ -309,6 +342,11 @@ pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, Stri
 
     // Validate meme exists
     let meme = get_meme(meme_id).ok_or("Meme not found")?;
+
+    // Prevent self-voting: check if caller is the meme owner
+    if meme.owner == user {
+        return Err("Cannot vote on your own meme".into());
+    }
 
     // Determine meme's week and current week
     let meme_week = get_week_id(meme.created_at);
@@ -382,6 +420,14 @@ pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, Stri
 #[update]
 pub fn remove_vote(meme_id: u64) -> Result<VoteResponse, String> {
     let user = caller();
+    ic_cdk::println!("Remove vote - Caller principal: {}", user.to_text());
+
+    if user == Principal::anonymous() {
+        ic_cdk::println!("Remove vote - Anonymous user detected, rejecting request");
+        return Err("Authentication required".into());
+    }
+
+    ic_cdk::println!("Remove vote - Authenticated user: {}", user.to_text());
     let now = time();
 
     // Input validation
@@ -393,6 +439,12 @@ pub fn remove_vote(meme_id: u64) -> Result<VoteResponse, String> {
 
     // Need meme, and must belong to current week and be active
     let meme = get_meme(meme_id).ok_or("Meme not found")?;
+
+    // Prevent self-voting removal: check if caller is the meme owner
+    if meme.owner == user {
+        return Err("Cannot remove votes from your own meme".into());
+    }
+
     let meme_week = get_week_id(meme.created_at);
     let period = get_or_create_current_week();
     if meme_week != period.week_id {
@@ -501,6 +553,7 @@ pub fn get_week_leaderboard(week_id: u64, limit: Option<u32>) -> Option<WeeklyLe
 /// Fails if the week is not completed yet.
 #[query]
 pub fn get_top3_for_week(week_id: u64) -> Result<Vec<TopEntry>, String> {
+    // Ensure no active voting and week exists
     close_finished_weeks();
 
     let p = WEEKLY_PERIODS.with(|wp| wp.borrow().get(&week_id));
@@ -509,14 +562,48 @@ pub fn get_top3_for_week(week_id: u64) -> Result<Vec<TopEntry>, String> {
         return Err("Week not completed yet".into());
     }
 
-    let winners = get_top_memes_for_week_stable(week_id, 3);
-    let out = winners.into_iter().map(|(meme_id, mv)| TopEntry {
-        meme_id,
-        score: mv.score,
-        upvotes: mv.upvotes,
-        downvotes: mv.downvotes,
-        last_vote_time: mv.last_vote_time,
-    }).collect();
+    // Compute Top-3 strictly by highest upvotes (descending).
+    // Tie-breakers: last_vote_time (desc), meme_id (asc).
+    let mut items: Vec<(u64, MemeVotes)> = VOTES.with(|v| {
+        let votes = v.borrow();
+        votes
+            .iter()
+            .filter_map(|e| {
+                let mv = e.value();
+                if mv.created_week == week_id {
+                    Some((*e.key(), mv))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    });
+
+    use std::cmp::Ordering;
+    items.sort_by(|a, b| {
+        // upvotes desc
+        b.1.upvotes
+            .cmp(&a.1.upvotes)
+            // then most recent activity
+            .then_with(|| b.1.last_vote_time.cmp(&a.1.last_vote_time))
+            // then smaller id first for determinism
+            .then_with(|| a.0.cmp(&b.0))
+    });
+
+    if items.len() > 3 {
+        items.truncate(3);
+    }
+
+    let out = items
+        .into_iter()
+        .map(|(meme_id, mv)| TopEntry {
+            meme_id,
+            score: mv.score, // kept for reference/telemetry, not used for ranking here
+            upvotes: mv.upvotes,
+            downvotes: mv.downvotes,
+            last_vote_time: mv.last_vote_time,
+        })
+        .collect();
 
     Ok(out)
 }

@@ -7,7 +7,8 @@ import {
 } from "../components/ui/Card";
 import { useNavigate } from "react-router-dom";
 import { TrendingUp, Zap, Users } from "../components/ui/Icon";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
+import { Sparkles } from "lucide-react";
 
 
 const Landing = () => {
@@ -47,9 +48,12 @@ const Landing = () => {
         <div className="absolute inset-0 backdrop-blur-md bg-black/20"></div>
 
         <div className="relative z-10 max-w-4xl mx-auto pl-6">
-          <h1 className="text-5xl md:text-7xl font-black bg-gradient-hero bg-clip-text text-transparent mb-8 leading-tight">
-            Create and Share Memes That Make the Internet Laugh
-          </h1>
+          <div className="flex items-center justify-center mb-8">
+            <Sparkles className="w-12 h-12 md:w-16 md:h-16 text-primary mr-4" />
+            <h1 className="text-5xl md:text-7xl font-black bg-gradient-hero bg-clip-text text-transparent leading-tight">
+              Create and Share Memes That Make the Internet Laugh
+            </h1>
+          </div>
 
           <p className="text-xl md:text-2xl text-muted-foreground mb-12 max-w-2xl mx-auto">
             Join the revolution where AI meets meme culture in a decentralized

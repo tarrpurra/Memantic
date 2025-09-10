@@ -237,7 +237,7 @@ fn get_token(token_id: Nat) -> Option<TokenRecord> {
 }
 
 #[query]
-fn get_token_by_meme_id(meme_id: u64) -> Option<Nat> {
+pub fn get_token_by_meme_id(meme_id: u64) -> Option<Nat> {
     MINT_INDEX.with(|m| m.borrow().get(&meme_id).map(|sn| sn.0))
 }
 

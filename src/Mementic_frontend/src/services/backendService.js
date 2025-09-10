@@ -30,16 +30,34 @@ class BackendService {
 
   async _initializeService() {
     try {
-      // Create auth client
-      this.authClient = await AuthClient.create({
-        idleOptions: { disableDefaultIdleCallback: true },
-      });
+      // Check if declarations are available
+      if (!idlFactory || !Id) {
+        throw new Error("Backend declarations not available. Please check your build configuration.");
+      }
+
+      // Check if storage is available (important for incognito/private browsing)
+      const isStorageAvailable = this._checkStorageAvailability();
+      if (!isStorageAvailable) {
+        console.warn("Storage is not available (possibly incognito mode). Authentication will be limited.");
+        // Create a minimal auth client that won't try to access storage
+        this.authClient = {
+          login: () => Promise.reject(new Error("Storage not available. Please disable incognito/private browsing mode.")),
+          logout: () => Promise.resolve(),
+          isAuthenticated: () => Promise.resolve(false),
+          getIdentity: () => ({ getPrincipal: () => ({ toText: () => "2vxsx-fae" }) }),
+        };
+      } else {
+        // Create auth client normally
+        this.authClient = await AuthClient.create({
+          idleOptions: { disableDefaultIdleCallback: true },
+        });
+      }
 
       // Setup anonymous agent first
       await this._setupAnonymousAgent();
 
-      // Upgrade to authenticated if user is logged in
-      if (await this.authClient.isAuthenticated()) {
+      // Upgrade to authenticated if user is logged in (only if storage is available)
+      if (isStorageAvailable && await this.authClient.isAuthenticated()) {
         await this._setupAuthenticatedAgent();
       }
 
@@ -47,6 +65,14 @@ class BackendService {
       return true;
     } catch (error) {
       console.error("Backend service initialization failed:", error);
+      // If it's a storage-related error, provide a more helpful message
+      if (error.message && (error.message.includes('anchor_number') || error.message.includes('storage'))) {
+        throw new Error("Authentication failed: Storage access is required. Please disable incognito/private browsing mode and try again.");
+      }
+      // If it's a declarations error, provide a helpful message
+      if (error.message && error.message.includes('declarations')) {
+        throw new Error("Backend configuration error. Please check that the canister is properly deployed and declarations are generated.");
+      }
       throw error;
     }
   }
@@ -60,20 +86,44 @@ class BackendService {
   }
 
   /**
+   * Check if localStorage and sessionStorage are available
+   * This is important for incognito/private browsing modes
+   */
+  _checkStorageAvailability() {
+    try {
+      const testKey = '__storage_test__';
+      localStorage.setItem(testKey, 'test');
+      localStorage.removeItem(testKey);
+      sessionStorage.setItem(testKey, 'test');
+      sessionStorage.removeItem(testKey);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
    * Create a properly configured agent for development
     */
    async _createAgent(identity = null) {
      console.log("Creating agent with host:", getAgentHost());
      console.log("Development mode:", isDevMode());
 
+     // Determine the identity to use
+     let finalIdentity = identity;
+     if (!finalIdentity) {
+       finalIdentity = this.authClient.getIdentity();
+       console.log("Using anonymous identity:", finalIdentity.getPrincipal().toString());
+     } else {
+       console.log("Using provided identity:", finalIdentity.getPrincipal().toString());
+     }
+
      const agentOptions = {
        host: getAgentHost(),
-       if (identity) {
-       agentOptions.identity = identity;
-     },
-        verifyQuerySignatures: false,
-       // CRITICAL: This must be set to false for localhost to disable signature verification
+       identity: finalIdentity,
      };
+       // CRITICAL: This must be set to false for localhost to disable signature verification
+     console.log("Agent options:", agentOptions);
 
      
 
@@ -89,6 +139,7 @@ class BackendService {
 
          // Verify the agent configuration
          console.log("Agent configuration:", {
+           identity: finalIdentity ? finalIdentity.getPrincipal().toString() : "anonymous",
            host: agent._host || agent.host,
            verifyQuerySignatures: agent._verifyQuerySignatures,
            rootKeyPresent: !!agent.rootKey,
@@ -130,6 +181,7 @@ class BackendService {
     this.actor = Actor.createActor(idlFactory, {
       agent: this.agent,
       canisterId: Id,
+      identity
     });
 
     console.log("Authenticated agent setup complete");
@@ -161,10 +213,15 @@ class BackendService {
   /* ============ AUTHENTICATION METHODS ============ */
 
   /**
-   * Login with Internet Identity
-   */
+    * Login with Internet Identity
+    */
   async login() {
     await this.ensureReady();
+
+    // Check if storage is available
+    if (!this._checkStorageAvailability()) {
+      throw new Error("Storage not available. Please disable incognito/private browsing mode to login.");
+    }
 
     return new Promise((resolve, reject) => {
       this.authClient.login({
@@ -205,10 +262,37 @@ class BackendService {
   }
 
   /**
-   * Check if user is authenticated
-   */
+    * Check if user is authenticated
+    */
   isUserAuthenticated() {
     return this.isAuthenticated;
+  }
+
+  /**
+     * Debug authentication state
+     */
+  debugAuth() {
+    return {
+      isAuthenticated: this.isAuthenticated,
+      actorInitialized: !!this.actor,
+      authClientInitialized: !!this.authClient,
+      canisterId: Id,
+      agentHost: getAgentHost(),
+      identityProvider: getIdentityProvider(),
+      isDevMode: isDevMode(),
+      storageAvailable: this._checkStorageAvailability(),
+    };
+  }
+
+  /**
+    * Get authentication status
+    */
+  async getAuthStatus() {
+    await this.ensureReady();
+    return {
+      isAuthenticated: this.isAuthenticated,
+      canisterId: Id,
+    };
   }
 
   /* ============ SAFE CALL WRAPPER ============ */
@@ -269,25 +353,45 @@ class BackendService {
   /* ============ MEME OPERATIONS ============ */
 
   /**
-   * Generate a new meme
-   */
+    * Generate a new meme
+    */
   async generateMeme(prompt) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to generate memes");
+    }
     const result = await this._safeCall('generate_meme', prompt);
     return this._unwrapResult(result, "generate_meme failed");
   }
 
   /**
-   * Get user's memes
-   */
+    * Get user's memes
+    */
   async getUserMemes() {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to view your memes");
+    }
     return await this._safeCall('get_user_memes');
   }
 
   /**
-   * Get total number of memes
-   */
+    * Get total number of memes
+    */
   async getTotalMemes() {
     return await this._safeCall('get_total_memes');
+  }
+
+  /**
+    * Get all memes for marketplace
+    */
+  async getAllMemes() {
+    return await this._safeCall('get_all_memes');
+  }
+
+  /**
+    * Get only memes that are listed for sale on the marketplace
+    */
+  async getMarketplaceMemes() {
+    return await this._safeCall('get_marketplace_memes');
   }
 
   /**
@@ -299,18 +403,24 @@ class BackendService {
   }
 
   /**
-   * Vote on a meme
-   */
+    * Vote on a meme
+    */
   async voteMeme(memeId, voteType) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to vote on memes");
+    }
     const voteVariant = this._toVoteVariant(voteType);
     const result = await this._safeCall('vote_meme', memeId, voteVariant);
     return this._unwrapResult(result, "vote_meme failed");
   }
 
   /**
-   * Remove vote from a meme
-   */
+    * Remove vote from a meme
+    */
   async removeVote(memeId) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to remove votes");
+    }
     const result = await this._safeCall('remove_vote', memeId);
     return this._unwrapResult(result, "remove_vote failed");
   }
@@ -324,11 +434,73 @@ class BackendService {
   }
 
   /**
-   * Get meme votes
-   */
+     * Get meme votes
+     */
   async getMemeVotes(memeId) {
     const result = await this._safeCall('get_meme_votes', memeId);
     return this._fromOpt(result);
+  }
+
+  /**
+    * Check if a meme has been minted as NFT
+    */
+  async isMemeMinted(memeId) {
+    try {
+      const result = await this._safeCall('is_meme_minted', memeId);
+      return Boolean(result);
+    } catch (error) {
+      console.warn(`isMemeMinted failed for ${memeId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+    * Get user's vote on a specific meme
+    */
+  async getUserVote(memeId) {
+    const result = await this._safeCall('get_user_vote', memeId);
+    return this._fromOpt(result);
+  }
+
+  /**
+     * Publish a meme to marketplace
+     */
+  async publishMeme(memeData) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to publish memes");
+    }
+    const result = await this._safeCall('publish_meme', memeData);
+    return this._unwrapResult(result, "publish_meme failed");
+  }
+
+  /**
+     * List a meme for sale
+     */
+  async listMemeForSale(memeId, priceE8s) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to list memes");
+    }
+    const result = await this._safeCall('list_meme_for_sale', memeId, priceE8s);
+    return this._unwrapResult(result, "list_meme_for_sale failed");
+  }
+
+  /**
+     * Remove meme from marketplace
+     */
+  async removeMemeFromMarket(memeId) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to manage listings");
+    }
+    const result = await this._safeCall('remove_meme_from_market', memeId);
+    return this._unwrapResult(result, "remove_meme_from_market failed");
+  }
+
+  /**
+     * Record a meme sale
+     */
+  async recordMemeSale(memeId, salePriceE8s) {
+    const result = await this._safeCall('record_meme_sale', memeId, salePriceE8s);
+    return this._unwrapResult(result, "record_meme_sale failed");
   }
 
   /* ============ UTILITY METHODS ============ */

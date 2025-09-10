@@ -7,6 +7,10 @@ import {
   CardTitle,
 } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
+
+import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import {
   TrendingUp,
   Coins,
@@ -24,10 +28,7 @@ import {
   EyeOff,
   Send,
   Copy,
-} from "../components/ui/Icon";
-import { useAuth } from "../hooks/useAuth";
-import { useToast } from "../hooks/use-toast";
-import { useNavigate } from "react-router-dom";
+} from "lucide-react";
 
 const Wallet_Page = () => {
   const navigate = useNavigate();
@@ -110,9 +111,12 @@ const Wallet_Page = () => {
                 <ArrowLeft className="w-5 h-5" />
               </Button>
               <div>
-                <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                  My Wallet
-                </h1>
+                <div className="flex items-center gap-3 mb-2">
+                  <Sparkles className="w-8 h-8 text-primary" />
+                  <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                    My Wallet
+                  </h1>
+                </div>
                 <p className="text-muted-foreground">
                   Manage your ICP balance and transactions
                 </p>

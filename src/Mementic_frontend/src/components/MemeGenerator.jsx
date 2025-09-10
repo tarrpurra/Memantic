@@ -19,10 +19,11 @@ import {
 } from "../components/ui/Icon";
 import { useAuth } from "../contexts/AuthContext";
 import { useMemeGeneration } from "../hooks/useMemeGeneration";
+import backendService from "../services/backendService";
 
 
 // Enhanced Image Display Component
-const MemeImageDisplay = ({ generatedMeme, onClear }) => {
+const MemeImageDisplay = ({ generatedMeme, onClear, onPublish }) => {
   
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
@@ -111,13 +112,57 @@ const MemeImageDisplay = ({ generatedMeme, onClear }) => {
     setImageUrl(`${imageUrl}${separator}t=${Date.now()}`);
   };
 
+  const handlePublish = async () => {
+    if (!generatedMeme) return;
+
+    try {
+      // Convert the generated meme data to the format expected by publish_meme
+      const memeData = {
+        prompt: generatedMeme.prompt,
+        image_url: generatedMeme.image_url,
+        image_filename: generatedMeme.image_filename || "generated_meme.jpg",
+        image_format: generatedMeme.image_format || "jpg",
+        metadata: generatedMeme.metadata || {
+          processing_time: 1.0,
+          timestamp: Date.now(),
+          file_size_bytes: 1024000,
+          service: "meme_generator"
+        }
+      };
+
+      // Publish the meme to marketplace
+      const publishedMeme = await backendService.publishMeme(memeData);
+
+      toast({
+        title: "Meme Published! 🎉",
+        description: "Your meme is now live in the marketplace and can receive votes!",
+      });
+
+      // Clear the generated meme after successful publishing
+      onClear();
+
+    } catch (error) {
+      console.error("Failed to publish meme:", error);
+      toast({
+        title: "Publishing Failed",
+        description: error.message || "Failed to publish meme to marketplace",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="mt-6 p-4 border border-primary/20 rounded-lg bg-primary/5">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-lg font-semibold flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-primary" />
-          Generated Meme
-        </h3>
+        <div>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            Meme Preview
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Review your meme before publishing it to the marketplace
+          </p>
+        </div>
         <Button
           variant="outline"
           size="sm"
@@ -221,7 +266,7 @@ const MemeImageDisplay = ({ generatedMeme, onClear }) => {
 
           {/* Action Buttons */}
           {imageUrl && !imageError && (
-            <div className="flex gap-2 mt-3">
+            <div className="flex flex-wrap gap-2 mt-3">
               <Button
                 variant="outline"
                 size="sm"
@@ -253,6 +298,26 @@ const MemeImageDisplay = ({ generatedMeme, onClear }) => {
               </Button>
             </div>
           )}
+
+          {/* Publish/Discard Actions */}
+          <div className="flex gap-3 mt-4 pt-4 border-t border-border">
+            <Button
+              variant="outline"
+              onClick={onClear}
+              className="flex-1"
+            >
+              <span className="mr-2">🗑️</span>
+              Discard
+            </Button>
+            <Button
+              variant="default"
+              onClick={onPublish}
+              className="flex-1 bg-primary hover:bg-primary/90"
+            >
+              <span className="mr-2">🚀</span>
+              Publish to Marketplace
+            </Button>
+          </div>
 
           {/* No Image URL Message */}
           {!imageUrl && !imageLoading && (
@@ -352,7 +417,7 @@ export const MemeGenerator = () => {
     setError(null);
 
     try {
-      await generateMeme(prompt, style);
+      await generateMeme(prompt); // Note: style parameter not supported by current backend API
     } catch (err) {
       console.error("Meme generation error:", err);
       setError(err.message);
@@ -512,6 +577,7 @@ export const MemeGenerator = () => {
           <MemeImageDisplay
             generatedMeme={generatedMeme}
             onClear={clearGeneratedMeme}
+            onPublish={handlePublish}
           />
         )}
       </CardContent>

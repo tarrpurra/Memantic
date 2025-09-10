@@ -16,17 +16,38 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [remainingCalls, setRemainingCalls] = useState(0);
+  const [principal, setPrincipal] = useState(null);
 
   // Initialize authentication on component mount
   useEffect(() => {
     const initAuth = async () => {
       try {
         setIsLoading(true);
+        console.log("Initializing authentication...");
+
+        // Initialize backend service (for API calls only)
         await backendService.initialize();
 
-        if (backendService.isUserAuthenticated()) {
-          setIsAuthenticated(true);
-          await loadUserData();
+        // Check authentication state directly from AuthClient
+        if (backendService.authClient) {
+          const isAuth = await backendService.authClient.isAuthenticated();
+          console.log("AuthClient.isAuthenticated():", isAuth);
+
+          if (isAuth) {
+            const identity = backendService.authClient.getIdentity();
+            const principalText = identity.getPrincipal().toText();
+
+            if (principalText !== "2vxsx-fae") {
+              console.log("User authenticated with principal:", principalText);
+              setIsAuthenticated(true);
+              setPrincipal(principalText);
+              await loadUserData();
+            } else {
+              console.log("Anonymous principal detected");
+            }
+          } else {
+            console.log("User not authenticated");
+          }
         }
       } catch (error) {
         console.error("Failed to initialize authentication:", error);
@@ -56,12 +77,27 @@ export const AuthProvider = ({ children }) => {
   const login = async () => {
     try {
       setIsLoading(true);
+      console.log("Starting login process...");
+
       const success = await backendService.login();
 
-      if (success) {
-        setIsAuthenticated(true);
-        await loadUserData();
-        return true;
+      if (success && backendService.authClient) {
+        console.log("Login successful, setting authenticated state");
+
+        // Get principal directly from AuthClient
+        const identity = backendService.authClient.getIdentity();
+        const principalText = identity.getPrincipal().toText();
+
+        if (principalText !== "2vxsx-fae") {
+          setIsAuthenticated(true);
+          setPrincipal(principalText);
+          console.log("Principal after login:", principalText);
+          await loadUserData();
+          return true;
+        } else {
+          console.log("Login resulted in anonymous principal");
+          return false;
+        }
       }
       return false;
     } catch (error) {
@@ -80,8 +116,11 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(false);
       setUser(null);
       setRemainingCalls(0);
+      setPrincipal(null);
+      return true; // Return success
     } catch (error) {
       console.error("Logout failed:", error);
+      return false; // Return failure
     } finally {
       setIsLoading(false);
     }
@@ -94,14 +133,37 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Debug authentication state
+  const debugAuth = async () => {
+    console.log("=== AUTH CONTEXT DEBUG ===");
+    console.log("Context state:", {
+      isAuthenticated,
+      isLoading,
+      principal,
+      remainingCalls
+    });
+
+    // Debug backend service
+    const backendDebug = backendService.debugAuth();
+    console.log("Backend service debug:", backendDebug);
+
+    console.log("=== END CONTEXT DEBUG ===");
+    return {
+      context: { isAuthenticated, isLoading, principal, remainingCalls },
+      backend: backendDebug
+    };
+  };
+
   const value = {
     isAuthenticated,
     isLoading,
     user,
     remainingCalls,
+    principal,
     login,
     logout,
     refreshUserData,
+    debugAuth,
     backendService,
   };
 

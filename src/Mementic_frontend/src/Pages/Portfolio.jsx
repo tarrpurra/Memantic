@@ -14,25 +14,15 @@ import {
   ArrowDown,
   User,
   Sparkles,
-} from "../components/ui/Icon";
-import { useAuth } from "../hooks/useAuth";
+} from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../hooks/use-toast";
 
-// Import from the correct path
-import {
-  Mementic_backend as AnonBackendActor,
-  createActor as createBackendActor,
-  canisterId as BACKEND_CANISTER_ID,
-} from "../../../declarations/Mementic_backend";
+import backendService from "../services/backendService";
 
-// for authenticated actor
-import { HttpAgent } from "@dfinity/agent";
-import { AuthClient } from "@dfinity/auth-client";
 
-// optional: if you keep a central config file for agent host / dev mode
-// adjust the path if yours differs
-// import { config } from "../config";
+
 
 /**
  * UI NFT shape (for reference)
@@ -91,68 +81,11 @@ const Portfolio = () => {
     isLoading: authLoading,
   } = useAuth();
 
-  // 👇 replace useBackend() with local actor state
-  const [backend, setBackend] = useState(AnonBackendActor);
-  const [backendReady, setBackendReady] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [nfts, setNfts] = useState([]);
   const [error, setError] = useState("");
 
-  // init actor based on auth state
-  useEffect(() => {
-    let mounted = true;
-
-    (async () => {
-      try {
-        setBackendReady(false);
-
-        if (!isAuthenticated) {
-          // anonymous actor (still fine if you immediately redirect to /login)
-          if (mounted) {
-            setBackend(AnonBackendActor);
-            setBackendReady(true);
-          }
-          return;
-        }
-
-        // build an agent from the authenticated identity
-        const authClient = await AuthClient.create();
-        const identity = authClient.getIdentity();
-
-        const agent = new HttpAgent({
-          host: config?.AGENT_HOST || "https://icp-api.io",
-          identity,
-        });
-
-        // dev networks need root key
-        if (config?.DEV_MODE) {
-          try {
-            await agent.fetchRootKey();
-          } catch (e) {
-            console.warn("fetchRootKey failed (ok on mainnet):", e);
-          }
-        }
-
-        const actor = createBackendActor(BACKEND_CANISTER_ID, { agent });
-
-        if (mounted) {
-          setBackend(actor);
-          setBackendReady(true);
-        }
-      } catch (e) {
-        console.error("Failed to initialize backend actor:", e);
-        if (mounted) {
-          setBackend(AnonBackendActor);
-          setBackendReady(true);
-        }
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [isAuthenticated]);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -169,36 +102,88 @@ const Portfolio = () => {
   // Map canister records -> UI
   const mapToUi = (item) => {
     const memeData = unopt(item?.meme_data) || {};
+    const marketData = item?.market_data || {};
     const votes = item?.votes?.upvotes ?? item?.votes ?? 0;
-    const earnedIcpRaw =
-      typeof item?.earned_icp === "number"
-        ? item.earned_icp
-        : Number(unopt(item?.earned_icp) ?? 0);
+
+    // Handle bigint conversion for earned ICP (from market data)
+    let earnedIcp = 0;
+    if (marketData?.total_earned) {
+      if (typeof marketData.total_earned === 'bigint') {
+        earnedIcp = Number(marketData.total_earned) / 100000000; // Convert e8s to ICP
+      } else {
+        earnedIcp = Number(marketData.total_earned) / 100000000;
+      }
+    }
+
+    // Determine status based on market data
+    let status = "earning";
+    if (marketData?.is_listed) {
+      status = "selling";
+    }
 
     return {
       id: String(item?.meme_id ?? item?.id ?? crypto.randomUUID()),
       title: memeData?.prompt || item?.title || "Untitled Meme",
       emoji: "🖼️",
       votes: Number(votes || 0),
-      earnedIcp: Number.isFinite(earnedIcpRaw) ? earnedIcpRaw : 0,
+      earnedIcp: Number.isFinite(earnedIcp) ? earnedIcp : 0,
       views: Number(item?.views || 0),
-      status: item?.status || "unknown",
+      status,
       imageUrl: memeData?.image_url,
+      // Market data
+      isListed: marketData?.is_listed || false,
+      listingPrice: marketData?.listing_price ? Number(marketData.listing_price) / 100000000 : null,
+      totalSales: Number(marketData?.total_sales || 0),
+      lastSalePrice: marketData?.last_sale_price ? Number(marketData.last_sale_price) / 100000000 : null,
+      listedAt: marketData?.listed_at,
+      lastSaleAt: marketData?.last_sale_at,
+      // isMinted will be set in fetchData after checking with backend
+      isMinted: false, // default value, will be overridden
     };
   };
 
   async function fetchData() {
-    if (!backendReady || !backend) return;
+    if (!isAuthenticated) return;
     setLoading(true);
     setError("");
     try {
-      // Expected: get_user_memes() -> [StoredMeme or PublicStoredMeme]
-      const mine = await backend.get_user_memes();
-      const ui = (mine || []).map(mapToUi);
+      // Ensure backend service is ready
+      await backendService.ensureReady();
+
+      // Use centralized backend service
+      const mine = await backendService.getUserMemes();
+
+      if (!mine || !Array.isArray(mine)) {
+        console.warn("Invalid response from getUserMemes:", mine);
+        setNfts([]);
+        return;
+      }
+
+      // Check minting status for each meme
+      const ui = await Promise.all(mine.map(async (item, index) => {
+        const baseUi = mapToUi(item);
+        try {
+          // Add a small delay to avoid overwhelming the backend
+          if (index > 0) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          const isMinted = await backendService.isMemeMinted(BigInt(baseUi.id));
+          return { ...baseUi, isMinted: Boolean(isMinted) };
+        } catch (error) {
+          console.warn(`Failed to check minting status for meme ${baseUi.id}:`, error);
+          return { ...baseUi, isMinted: false };
+        }
+      }));
+
       setNfts(ui);
     } catch (e) {
-      console.error(e);
-      setError("Failed to load your portfolio.");
+      console.error("Error loading portfolio:", e);
+      // Check if it's an authentication/storage error
+      if (e.message && (e.message.includes('anchor_number') || e.message.includes('storage'))) {
+        setError("Authentication issue. Please try logging out and back in.");
+      } else {
+        setError("Failed to load your portfolio. Please try again.");
+      }
       setNfts([]);
     } finally {
       setLoading(false);
@@ -206,11 +191,11 @@ const Portfolio = () => {
   }
 
   useEffect(() => {
-    if (backendReady && isAuthenticated) {
+    if (isAuthenticated) {
       fetchData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backendReady, isAuthenticated]);
+  }, [isAuthenticated]);
 
   const totalEarnings = useMemo(
     () => nfts.reduce((sum, x) => sum + (x.earnedIcp || 0), 0),
@@ -222,6 +207,32 @@ const Portfolio = () => {
   );
   const totalViews = useMemo(
     () => nfts.reduce((sum, x) => sum + (x.views || 0), 0),
+    [nfts]
+  );
+  const totalSales = useMemo(
+    () => nfts.reduce((sum, x) => sum + (x.totalSales || 0), 0),
+    [nfts]
+  );
+  const listedCount = useMemo(
+    () => nfts.filter(x => x.isListed).length,
+    [nfts]
+  );
+  const mintedCount = useMemo(
+    () => nfts.filter(x => x.isMinted).length,
+    [nfts]
+  );
+  const generatedCount = useMemo(
+    () => nfts.filter(x => !x.isMinted).length,
+    [nfts]
+  );
+
+  // Separate memes into categories
+  const generatedMemes = useMemo(
+    () => nfts.filter(nft => !nft.isMinted),
+    [nfts]
+  );
+  const mintedNFTs = useMemo(
+    () => nfts.filter(nft => nft.isMinted),
     [nfts]
   );
 
@@ -251,18 +262,25 @@ const Portfolio = () => {
     }
   };
 
-  // Listing actions (wire to NFT module if available)
+  // Listing actions
   const handleSell = async (nftId) => {
     try {
-      // Example: await backend.list_nft_for_sale(BigInt(nftId), priceE8s);
+      // For now, use a default price. In a real app, you'd show a price input dialog
+      const defaultPriceE8s = 100000000; // 1 ICP in e8s
+      await backendService.listMemeForSale(BigInt(nftId), defaultPriceE8s);
+
       toast({
-        title: "NFT listed for sale! 📈",
+        title: "Meme listed for sale! 📈",
         description: "Your meme is now available on the marketplace.",
       });
+
+      // Refresh data
+      await fetchData();
     } catch (e) {
+      console.error("Sell error:", e);
       toast({
         title: "Listing failed",
-        description: e?.message || "Could not list this NFT.",
+        description: e?.message || "Could not list this meme for sale.",
         variant: "destructive",
       });
     }
@@ -270,15 +288,20 @@ const Portfolio = () => {
 
   const handleKeep = async (nftId) => {
     try {
-      // Example: await backend.cancel_listing(BigInt(nftId));
+      await backendService.removeMemeFromMarket(BigInt(nftId));
+
       toast({
-        title: "NFT kept in portfolio 💎",
+        title: "Meme kept in portfolio 💎",
         description: "Your meme will continue earning from votes.",
       });
+
+      // Refresh data
+      await fetchData();
     } catch (e) {
+      console.error("Keep error:", e);
       toast({
         title: "Action failed",
-        description: e?.message || "Please try again.",
+        description: e?.message || "Could not remove from marketplace.",
         variant: "destructive",
       });
     }
@@ -313,9 +336,12 @@ const Portfolio = () => {
                 <ArrowUp className="w-5 h-5" />
               </Button>
               <div>
-                <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                  My Portfolio
-                </h1>
+                <div className="flex items-center gap-3 mb-2">
+                  <Sparkles className="w-8 h-8 text-primary" />
+                  <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                    My Portfolio
+                  </h1>
+                </div>
                 <p className="text-muted-foreground">
                   Manage your meme NFTs and earnings
                 </p>
@@ -387,56 +413,74 @@ const Portfolio = () => {
         )}
 
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           {loading ? (
-            <>
-              <SkeletonStat />
-              <SkeletonStat />
-              <SkeletonStat />
-              <SkeletonStat />
-            </>
+            Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonStat key={i} />
+            ))
           ) : (
             <>
               <Card>
-                <CardContent className="p-6 text-center">
-                  <Coins className="w-8 h-8 mx-auto mb-2 text-primary" />
-                  <div className="text-2xl font-bold">
+                <CardContent className="p-4 text-center">
+                  <Coins className="w-6 h-6 mx-auto mb-2 text-primary" />
+                  <div className="text-lg font-bold">
                     {totalEarnings.toFixed(2)} ICP
                   </div>
-                  <p className="text-sm text-muted-foreground">Total Earned</p>
+                  <p className="text-xs text-muted-foreground">Total Earned</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="p-6 text-center">
-                  <Crown className="w-8 h-8 mx-auto mb-2 text-red-500" />
-                  <div className="text-2xl font-bold">{totalVotes}</div>
-                  <p className="text-sm text-muted-foreground">Total Votes</p>
+                <CardContent className="p-4 text-center">
+                  <Crown className="w-6 h-6 mx-auto mb-2 text-red-500" />
+                  <div className="text-lg font-bold">{totalVotes}</div>
+                  <p className="text-xs text-muted-foreground">Total Votes</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="p-6 text-center">
-                  <Sparkles className="w-8 h-8 mx-auto mb-2 text-blue-500" />
-                  <div className="text-2xl font-bold">
+                <CardContent className="p-4 text-center">
+                  <Sparkles className="w-6 h-6 mx-auto mb-2 text-blue-500" />
+                  <div className="text-lg font-bold">
                     {totalViews.toLocaleString()}
                   </div>
-                  <p className="text-sm text-muted-foreground">Total Views</p>
+                  <p className="text-xs text-muted-foreground">Total Views</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="p-6 text-center">
-                  <TrendingUp className="w-8 h-8 mx-auto mb-2 text-green-500" />
-                  <div className="text-2xl font-bold">{nfts.length}</div>
-                  <p className="text-sm text-muted-foreground">Active NFTs</p>
+                <CardContent className="p-4 text-center">
+                  <Sparkles className="w-6 h-6 mx-auto mb-2 text-blue-500" />
+                  <div className="text-lg font-bold">{generatedCount}</div>
+                  <p className="text-xs text-muted-foreground">Generated Memes</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <Crown className="w-6 h-6 mx-auto mb-2 text-purple-500" />
+                  <div className="text-lg font-bold">{mintedCount}</div>
+                  <p className="text-xs text-muted-foreground">Minted NFTs</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <ArrowUp className="w-6 h-6 mx-auto mb-2 text-orange-500" />
+                  <div className="text-lg font-bold">{totalSales}</div>
+                  <p className="text-xs text-muted-foreground">Total Sales</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <User className="w-6 h-6 mx-auto mb-2 text-green-500" />
+                  <div className="text-lg font-bold">{listedCount}</div>
+                  <p className="text-xs text-muted-foreground">Listed for Sale</p>
                 </CardContent>
               </Card>
             </>
           )}
         </div>
 
-        {/* My NFTs */}
+        {/* Generated Memes & Marketplace Section */}
         <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold">My Meme NFTs</h2>
+            <h2 className="text-2xl font-bold">My Generated Memes</h2>
             <Button onClick={() => navigate("/myplace")}>
               Create New Meme
             </Button>
@@ -448,12 +492,12 @@ const Portfolio = () => {
                 <SkeletonTile key={i} />
               ))}
             </div>
-          ) : nfts.length === 0 ? (
+          ) : generatedMemes.length === 0 ? (
             <Card className="py-12 text-center">
               <CardContent>
-                <CardTitle className="mb-2">No NFTs yet</CardTitle>
+                <CardTitle className="mb-2">No Generated Memes yet</CardTitle>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Create your first meme and start earning from votes.
+                  Create your first meme and start earning from votes or list it for sale.
                 </p>
                 <Button onClick={() => navigate("/myplace")}>
                   Create Meme
@@ -462,63 +506,224 @@ const Portfolio = () => {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {nfts.map((nft) => (
+              {generatedMemes.map((nft) => (
                 <Card key={nft.id} className="group">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <div className="text-6xl mb-4 group-hover:animate-float">
-                        {nft.emoji}
+                      {nft.imageUrl ? (
+                        <img
+                          src={nft.imageUrl}
+                          alt={nft.title}
+                          className="w-16 h-16 object-cover rounded-lg group-hover:scale-105 transition-transform"
+                        />
+                      ) : (
+                        <div className="text-4xl mb-4 group-hover:animate-float">
+                          {nft.emoji}
+                        </div>
+                      )}
+                      <div className="flex-1 ml-4">
+                        <h3 className="font-bold text-lg mb-1 line-clamp-2">
+                          {nft.title}
+                        </h3>
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Crown className="w-4 h-4" />
+                          <span>{nft.votes} likes</span>
+                        </div>
                       </div>
-                      <h3 className="font-bold text-lg mb-2 line-clamp-2">
-                        {nft.title}
-                      </h3>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {/* (Optional) image preview */}
-                    {/* {nft.imageUrl && (
-                      <img
-                        src={nft.imageUrl}
-                        alt={nft.title}
-                        className="w-full h-48 object-cover rounded-xl"
-                      />
-                    )} */}
-
                     <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Votes:</span>
-                        <span className="font-medium">{nft.votes}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Views:</span>
-                        <span className="font-medium">
-                          {nft.views.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Earned:</span>
-                        <span className="font-bold text-primary">
-                          {nft.earnedIcp.toFixed(2)} ICP
-                        </span>
-                      </div>
-                    </div>
+                       <div className="flex justify-between">
+                         <span className="text-muted-foreground">❤️ Likes:</span>
+                         <span className="font-medium">{nft.votes}</span>
+                       </div>
+                       <div className="flex justify-between">
+                         <span className="text-muted-foreground">Views:</span>
+                         <span className="font-medium">
+                           {nft.views.toLocaleString()}
+                         </span>
+                       </div>
+                       <div className="flex justify-between">
+                         <span className="text-muted-foreground">Earned:</span>
+                         <span className="font-bold text-primary">
+                           {nft.earnedIcp.toFixed(4)} ICP
+                         </span>
+                       </div>
+
+                       {/* Market Information */}
+                       {nft.isListed && (
+                         <div className="flex justify-between">
+                           <span className="text-muted-foreground">Listed Price:</span>
+                           <span className="font-medium text-green-600">
+                             {nft.listingPrice?.toFixed(2)} ICP
+                           </span>
+                         </div>
+                       )}
+
+                       {nft.totalSales > 0 && (
+                         <>
+                           <div className="flex justify-between">
+                             <span className="text-muted-foreground">Total Sales:</span>
+                             <span className="font-medium">{nft.totalSales}</span>
+                           </div>
+                           {nft.lastSalePrice && (
+                             <div className="flex justify-between">
+                               <span className="text-muted-foreground">Last Sale:</span>
+                               <span className="font-medium text-blue-600">
+                                 {nft.lastSalePrice.toFixed(2)} ICP
+                               </span>
+                             </div>
+                           )}
+                         </>
+                       )}
+
+                       <div className="flex justify-between">
+                         <span className="text-muted-foreground">Status:</span>
+                         <span className={`font-medium ${nft.isListed ? 'text-green-600' : 'text-blue-600'}`}>
+                           {nft.isListed ? 'Listed for Sale' : 'Earning from Votes'}
+                         </span>
+                       </div>
+                     </div>
 
                     <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => handleSell(nft.id)}
-                      >
-                        Sell
-                      </Button>
+                      {nft.isListed ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleKeep(nft.id)}
+                          >
+                            Remove from Market
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => navigate("/marketplace")}
+                          >
+                            View in Market
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleSell(nft.id)}
+                          >
+                            List for Sale
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => navigate("/marketplace")}
+                          >
+                            View Market
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Minted NFTs Section */}
+        <div className="space-y-6 mt-12">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold">My Minted NFTs</h2>
+            <div className="text-sm text-muted-foreground">
+              NFTs that have been minted as collectibles
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <SkeletonTile key={i} />
+              ))}
+            </div>
+          ) : mintedNFTs.length === 0 ? (
+            <Card className="py-12 text-center">
+              <CardContent>
+                <CardTitle className="mb-2">No Minted NFTs yet</CardTitle>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Your top-performing memes will be minted as NFTs automatically.
+                </p>
+                <Button variant="outline" onClick={() => navigate("/marketplace")}>
+                  View Marketplace
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {mintedNFTs.map((nft) => (
+                <Card key={nft.id} className="group border-purple-200">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      {nft.imageUrl ? (
+                        <img
+                          src={nft.imageUrl}
+                          alt={nft.title}
+                          className="w-16 h-16 object-cover rounded-lg group-hover:scale-105 transition-transform"
+                        />
+                      ) : (
+                        <div className="text-4xl mb-4 group-hover:animate-float">
+                          {nft.emoji}
+                        </div>
+                      )}
+                      <div className="flex-1 ml-4">
+                        <h3 className="font-bold text-lg mb-1 line-clamp-2">
+                          {nft.title}
+                        </h3>
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Crown className="w-4 h-4" />
+                          <span>{nft.votes} likes</span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2 text-sm">
+                       <div className="flex justify-between">
+                         <span className="text-muted-foreground">❤️ Likes:</span>
+                         <span className="font-medium">{nft.votes}</span>
+                       </div>
+                       <div className="flex justify-between">
+                         <span className="text-muted-foreground">Views:</span>
+                         <span className="font-medium">
+                           {nft.views.toLocaleString()}
+                         </span>
+                       </div>
+                       <div className="flex justify-between">
+                         <span className="text-muted-foreground">Earned:</span>
+                         <span className="font-bold text-primary">
+                           {nft.earnedIcp.toFixed(4)} ICP
+                         </span>
+                       </div>
+
+                       <div className="flex justify-between">
+                         <span className="text-muted-foreground">Status:</span>
+                         <span className="font-medium text-purple-600">
+                           🏆 Minted NFT
+                         </span>
+                       </div>
+                     </div>
+
+                    <div className="flex gap-2">
                       <Button
                         variant="default"
                         size="sm"
                         className="flex-1"
-                        onClick={() => handleKeep(nft.id)}
+                        onClick={() => navigate("/marketplace")}
                       >
-                        Keep
+                        View NFT
                       </Button>
                     </div>
                   </CardContent>

@@ -2,10 +2,11 @@ import { Button } from "../components/ui/Button";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useEffect, useState } from "react";
+import { Sparkles } from "lucide-react";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login, logout, isLoading, isAuthenticated } = useAuth();
+  const { login, logout, isLoading, isAuthenticated, principal, debugAuth } = useAuth();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Redirect if already logged in
@@ -73,9 +74,12 @@ const Login = () => {
       <div className="relative z-10 max-w-md w-full text-center">
         {/* Logo/Brand Section */}
         <div className="mb-12">
-          <h1 className="text-6xl font-black bg-gradient-hero bg-clip-text text-transparent mb-4">
-            MEMENTIC
-          </h1>
+          <div className="flex items-center justify-center mb-4">
+            <Sparkles className="w-16 h-16 text-primary mr-4" />
+            <h1 className="text-6xl font-black bg-gradient-hero bg-clip-text text-transparent">
+              MEMENTIC
+            </h1>
+          </div>
           <p className="text-xl text-muted-foreground">
             Enter the Decentralized Meme Economy
           </p>
@@ -167,7 +171,13 @@ const Login = () => {
         {process.env.NODE_ENV === "development" && (
           <div className="mt-4 p-2 bg-black/20 rounded text-xs text-muted-foreground">
             Debug: isLoading={isLoading.toString()}, isAuthenticated=
-            {isAuthenticated.toString()}
+            {isAuthenticated.toString()}, principal={principal || "null"}
+            <button
+              onClick={() => debugAuth()}
+              className="ml-2 px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+            >
+              Debug Auth
+            </button>
           </div>
         )}
       </div>

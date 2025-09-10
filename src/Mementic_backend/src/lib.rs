@@ -10,8 +10,11 @@ use ic_cdk_macros::{query, update};
 use serde::{Deserialize, Serialize};
 
 pub use http_outcall::{
-    MemeData, PythonMetadata, StoredMeme, PublicStoredMeme,
-    get_meme, get_user_memes, get_total_memes, get_user_meme_count, generate_meme, health, check_remaining_calls,
+    MemeData, PythonMetadata, StoredMeme, PublicStoredMeme, MarketData,
+    // queries
+    get_meme, get_user_memes, get_all_memes, get_marketplace_memes, get_total_memes, get_user_meme_count, health, check_remaining_calls, is_meme_minted,
+    // updates
+    generate_meme, publish_meme, list_meme_for_sale, remove_meme_from_market, record_meme_sale,
 };
 
 pub use voting::{
@@ -24,6 +27,11 @@ pub use voting::{
 pub use nft_module::{
     SupportedStandard, TokenRecord, TokenMetadataEntry, MetadataValue, MintedPair
 };
+
+#[query]
+pub fn whoami() -> Principal {
+    ic_cdk::caller()
+}
 
 #[update]
 pub async fn mint_week_top3_here(week_id: u64) -> Result<Vec<MintedPair>, String> {

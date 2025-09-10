@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "../components/ui/Button";
 import {
   Card,
@@ -14,35 +14,50 @@ import {
   Upload,
   User,
   Sparkles,
-  Image,
+  Image as ImageIcon,
   ArrowLeft,
   Send,
-} from "../components/ui/Icon";
+  Loader2,
+  X
+} from "lucide-react";
 import { useToast } from "../hooks/use-toast";
+import { useMemeGeneration } from "../hooks/useMemeGeneration";
 import { BackendTest } from "../components/BackendTest";
+import backendService from "../services/backendService";
 
 const MyPlace = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const fileInputRef = useRef(null);
   const [prompt, setPrompt] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState(0);
-  const [generatedMeme, setGeneratedMeme] = useState(false);
   const [uploadedImage, setUploadedImage] = useState(null);
 
-  const templates = [
-    { id: 0, name: "Drake Pointing", emoji: "👉" },
-    { id: 1, name: "Distracted Boyfriend", emoji: "😍" },
-    { id: 2, name: "Woman Yelling at Cat", emoji: "😾" },
-    { id: 3, name: "This is Fine", emoji: "🔥" },
-    { id: 4, name: "Expanding Brain", emoji: "🧠" },
-    { id: 5, name: "Change My Mind", emoji: "💭" },
-  ];
+  // used to force img re-mount on each new URL (avoids stale cache/render)
+  const [imgKey, setImgKey] = useState(0);
+
+  // lightbox for enlarged preview + details
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  const {
+    isGenerating,
+    generatedMeme,
+    canGenerate,
+    generateMeme,
+    clearGeneratedMeme,
+    remainingCalls,
+  } = useMemeGeneration();
+
+  // bump key whenever a new image_url appears
+  useEffect(() => {
+    if (generatedMeme?.image_url) {
+      setImgKey((k) => k + 1);
+    }
+  }, [generatedMeme?.image_url]);
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
-      if (file.type.startsWith('image/')) {
+      if (file.type.startsWith("image/")) {
         const reader = new FileReader();
         reader.onload = (e) => {
           setUploadedImage(e.target.result);
@@ -66,7 +81,7 @@ const MyPlace = () => {
     fileInputRef.current?.click();
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!prompt.trim()) {
       toast({
         title: "Missing Prompt",
@@ -76,27 +91,122 @@ const MyPlace = () => {
       return;
     }
 
-    setGeneratedMeme(true);
-    toast({
-      title: "Meme Generated! 🎉",
-      description: "Your viral content is ready to share with the world.",
-    });
+    try {
+      const result = await generateMeme(prompt);
+      console.log("Meme generation result:", result);
+    } catch (error) {
+      console.error("Meme generation failed:", error);
+      toast({
+        title: "Generation Failed",
+        description: error.message || "Failed to generate meme",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handlePostToMarketplace = () => {
-    toast({
-      title: "Posted to Marketplace! 🚀",
-      description: "Your meme is now live and ready for votes.",
-    });
-    navigate("/marketplace");
+  const handlePostToMarketplace = async () => {
+    try {
+      if (!generatedMeme || !generatedMeme.image_url) {
+        toast({
+          title: "No Meme to Post",
+          description: "Generate a meme first before posting to marketplace.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Build MemeData expected by canister
+      const url = generatedMeme.image_url;
+      const deriveFilename = (u) => {
+        try {
+          const parsed = new URL(u);
+          const last = parsed.pathname.split("/").filter(Boolean).pop();
+          return last || "meme.jpg";
+        } catch {
+          return "meme.jpg";
+        }
+      };
+      const filename =
+        generatedMeme.image_filename || deriveFilename(url);
+      const ext = (filename.split(".").pop() || "jpg").toLowerCase();
+
+      const md = generatedMeme.metadata || {};
+      const memeData = {
+        prompt: generatedMeme.prompt || prompt || "",
+        image_url: url,
+        image_filename: filename,
+        image_format: ext,
+        metadata: {
+          processing_time: Number(md.processing_time ?? 0),
+          // Backend expects ns (u64). If missing, approximate from now (ms -> ns).
+          timestamp:
+            typeof md.timestamp === "bigint"
+              ? md.timestamp
+              : BigInt(md.timestamp ?? Date.now() * 1_000_000),
+          file_size_bytes:
+            typeof md.file_size_bytes === "bigint"
+              ? md.file_size_bytes
+              : BigInt(md.file_size_bytes ?? 0),
+          service: String(md.service ?? "mementic-worker"),
+        },
+      };
+
+      const created = await backendService.publishMeme(memeData);
+
+      toast({
+        title: "Posted to Marketplace! 🚀",
+        description: `Meme #${created?.id ?? ""} is now live for votes.`,
+      });
+      navigate("/marketplace");
+    } catch (error) {
+      console.error("Failed to publish meme:", error);
+      toast({
+        title: "Publish Failed",
+        description: error?.message || "Could not post meme to marketplace",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleTagClick = (tag) => {
     const tagText = `#${tag.toLowerCase()} `;
     if (!prompt.includes(tagText)) {
-      setPrompt(prev => prev + tagText);
+      setPrompt((prev) => prev + tagText);
     }
   };
+
+  const testWorkerConnection = async () => {
+    try {
+      const testUrl = "https://plain-night-ff62.h28177922.workers.dev/generate_meme?prompt=test";
+      console.log("Testing worker connection:", testUrl);
+      const response = await fetch(testUrl);
+      const text = await response.text();
+      console.log("Worker test response:", text);
+      toast({
+        title: "Worker Test",
+        description: `Response: ${text.substring(0, 100)}...`,
+      });
+    } catch (error) {
+      console.error("Worker test failed:", error);
+      toast({
+        title: "Worker Test Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Prepare a cache-busted src so new images always show fresh
+  const imageSrc = (() => {
+    const url = generatedMeme?.image_url;
+    if (!url) return null;
+    const stamp =
+      generatedMeme?.metadata?.timestamp || Date.now(); // server timestamp if available
+    const finalUrl = url + (url.includes("?") ? "&" : "?") + "t=" + stamp;
+    console.log("Generated image URL:", finalUrl);
+    console.log("Original image URL:", url);
+    return finalUrl;
+  })();
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,9 +223,17 @@ const MyPlace = () => {
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div>
-              <h1 className="text-2xl font-bold">My Creative Space</h1>
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="w-6 h-6 text-primary" />
+                <h1 className="text-2xl font-bold">My Creative Space</h1>
+              </div>
               <p className="text-sm text-muted-foreground">
                 AI-Powered Meme Generation
+                {remainingCalls !== undefined && (
+                  <span className="ml-2 text-primary font-medium">
+                    • {remainingCalls} calls remaining
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -133,60 +251,7 @@ const MyPlace = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           {/* Creation Panel */}
           <div className="space-y-8">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Image className="w-5 h-5" />
-                  Choose Your Template
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {/* Upload Option */}
-                <div 
-                  className="border-2 border-dashed border-border rounded-lg p-6 text-center mb-6 hover:border-primary transition-colors cursor-pointer"
-                  onClick={handleUploadClick}
-                >
-                  <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    {uploadedImage ? "Change uploaded image" : "Upload your own image or drag & drop"}
-                  </p>
-                  {uploadedImage && (
-                    <div className="mt-2 text-xs text-primary">
-                      ✓ Custom image uploaded
-                    </div>
-                  )}
-                  <Input 
-                    ref={fileInputRef}
-                    type="file" 
-                    className="hidden" 
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                  />
-                </div>
-
-                {/* Template Grid */}
-                <div className="grid grid-cols-3 gap-3">
-                  {templates.map((template) => (
-                    <div
-                      key={template.id}
-                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${
-                        selectedTemplate === template.id
-                          ? "border-primary bg-primary/10 shadow-md"
-                          : "border-border hover:border-primary/50"
-                      }`}
-                      onClick={() => setSelectedTemplate(template.id)}
-                    >
-                      <div className="text-xl text-center mb-2">
-                        {template.emoji}
-                      </div>
-                      <p className="text-xs text-center font-medium">
-                        {template.name}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            {/* ⬇️ Removed the entire “Choose Your Template” card */}
 
             <Card>
               <CardHeader>
@@ -196,6 +261,31 @@ const MyPlace = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Inline upload (moved here since template card is gone) */}
+                <div
+                  className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary transition-colors cursor-pointer"
+                  onClick={handleUploadClick}
+                >
+                  <ImageIcon className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    {uploadedImage
+                      ? "Change uploaded image"
+                      : "Upload your own image or drag & drop"}
+                  </p>
+                  {uploadedImage && (
+                    <div className="mt-2 text-xs text-primary">
+                      ✓ Custom image uploaded
+                    </div>
+                  )}
+                  <Input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                  />
+                </div>
+
                 <Textarea
                   placeholder="Describe your meme idea... (e.g., 'A cat explaining crypto to confused humans')"
                   value={prompt}
@@ -203,32 +293,47 @@ const MyPlace = () => {
                   className="min-h-[120px] resize-none"
                 />
                 <div className="flex flex-wrap gap-2">
-                  {[
-                    "Funny",
-                    "Crypto",
-                    "Relatable",
-                    "Trending",
-                    "Sarcastic",
-                  ].map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="outline"
-                      className="cursor-pointer hover:bg-primary/10 transition-colors"
-                      onClick={() => handleTagClick(tag)}
-                    >
-                      #{tag}
-                    </Badge>
-                  ))}
+                  {["Funny", "Crypto", "Relatable", "Trending", "Sarcastic"].map(
+                    (tag) => (
+                      <Badge
+                        key={tag}
+                        variant="outline"
+                        className="cursor-pointer hover:bg-primary/10 transition-colors"
+                        onClick={() => handleTagClick(tag)}
+                      >
+                        #{tag}
+                      </Badge>
+                    )
+                  )}
                 </div>
-                <Button
-                  className="w-full"
-                  size="lg"
-                  onClick={handleGenerate}
-                  disabled={!prompt.trim()}
-                >
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Generate Meme with AI
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1"
+                    size="lg"
+                    onClick={handleGenerate}
+                    disabled={!canGenerate || !prompt.trim()}
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Generate Meme with AI
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={testWorkerConnection}
+                    title="Test connection to the meme generation worker"
+                  >
+                    Test Worker
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -242,25 +347,78 @@ const MyPlace = () => {
               <CardContent>
                 {generatedMeme ? (
                   <div className="space-y-4">
-                    <div className="aspect-square bg-gradient-glow rounded-lg p-8 flex items-center justify-center">
+                    <div className="aspect-square bg-gradient-glow rounded-lg p-8 flex items-center justify-center relative">
                       <div className="text-center w-full">
-                        {uploadedImage ? (
-                          <div className="relative w-full h-32 mb-4 bg-cover bg-center rounded-lg" style={{backgroundImage: `url(${uploadedImage})`}}>
-                            <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center">
-                              <div className="bg-background/90 p-2 rounded">
-                                <p className="font-bold text-sm">{prompt}</p>
+                        {imageSrc ? (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <img
+                              key={imgKey}
+                              src={imageSrc}
+                              alt={`Generated meme: ${prompt}`}
+                              className="max-w-full max-h-full object-contain rounded-lg cursor-zoom-in"
+                              loading="eager"
+                              decoding="async"
+                              onClick={() => setIsPreviewOpen(true)}
+                              onLoad={() => {
+                                console.log("Image loaded successfully");
+                              }}
+                              onError={(e) => {
+                                console.error("Failed to load generated image:", imageSrc);
+                                const img = e.currentTarget;
+                                const now = Date.now();
+                                const base = generatedMeme.image_url || imageSrc;
+
+                                // Try with cache busting first
+                                if (!img.src.includes("t=")) {
+                                  img.src = base + (base.includes("?") ? "&" : "?") + "t=" + now;
+                                  return;
+                                }
+
+                                // If that also fails, try alternative approaches
+                                console.warn("Image failed to load even with cache busting, trying alternatives...");
+
+                                // Try without protocol if it's HTTPS
+                                if (base.startsWith('https://')) {
+                                  img.src = base.replace('https://', 'http://');
+                                  return;
+                                }
+
+                                // Try with different extension if possible
+                                if (base.includes('.jpg')) {
+                                  img.src = base.replace('.jpg', '.png');
+                                  return;
+                                }
+
+                                // Final fallback - show error state
+                                console.error("All image loading attempts failed");
+                              }}
+                            />
+                          </div>
+                        ) : generatedMeme.raw_response ? (
+                          <div className="w-full h-full flex items-center justify-center p-4">
+                            <div className="text-center">
+                              <div className="text-sm text-muted-foreground mb-2">
+                                Raw Response from Backend:
+                              </div>
+                              <div className="text-xs bg-muted p-3 rounded max-h-40 overflow-auto font-mono">
+                                {generatedMeme.raw_response.length > 500
+                                  ? `${generatedMeme.raw_response.substring(0, 500)}...`
+                                  : generatedMeme.raw_response}
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-2">
+                                Image URL: {generatedMeme.image_url || "Not found"}
                               </div>
                             </div>
                           </div>
                         ) : (
-                          <>
-                            <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-full flex items-center justify-center text-3xl">
-                              {templates[selectedTemplate].emoji}
+                          <div className="w-full h-full flex items-center justify-center">
+                            <div className="text-center text-muted-foreground">
+                              <Sparkles className="w-8 h-8 mx-auto mb-2" />
+                              <p className="text-sm">
+                                Meme generated but no image URL provided
+                              </p>
                             </div>
-                            <div className="bg-background/90 p-4 rounded-lg">
-                              <p className="font-bold text-lg">{prompt}</p>
-                            </div>
-                          </>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -275,10 +433,17 @@ const MyPlace = () => {
                         <Send className="w-4 h-4 mr-2" />
                         Post to Marketplace
                       </Button>
-                      <Button variant="outline" size="lg" className="w-full">
-                        Save as Draft
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        className="w-full"
+                        onClick={clearGeneratedMeme}
+                      >
+                        Generate Another
                       </Button>
                     </div>
+
+                    {/* ⬇️ Removed inline details block; details now live in lightbox */}
                   </div>
                 ) : (
                   <div className="aspect-square bg-muted/20 rounded-lg flex items-center justify-center">
@@ -326,6 +491,91 @@ const MyPlace = () => {
           <BackendTest />
         </div>
       </div>
+
+      {/* Lightbox / Enlarged Preview with Details */}
+      {isPreviewOpen && generatedMeme?.image_url && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setIsPreviewOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-5xl bg-card rounded-xl shadow-xl border border-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="absolute top-3 right-3 p-2 rounded-full bg-black/60 text-white hover:bg-black/80"
+              onClick={() => setIsPreviewOpen(false)}
+              aria-label="Close preview"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="grid md:grid-cols-5 gap-0 rounded-xl overflow-hidden">
+              <div className="md:col-span-3 bg-black flex items-center justify-center p-3">
+                <img
+                  src={imageSrc}
+                  alt="Enlarged generated meme"
+                  className="max-h-[80vh] w-auto object-contain rounded"
+                />
+              </div>
+              <div className="md:col-span-2 bg-card p-4 space-y-3 max-h-[80vh] overflow-auto">
+                <h3 className="text-lg font-semibold">Image Details</h3>
+                {generatedMeme.image_url && (
+                  <div className="text-sm">
+                    <span className="font-medium">Image URL: </span>
+                    <a
+                      href={generatedMeme.image_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary hover:underline break-all"
+                    >
+                      {generatedMeme.image_url}
+                    </a>
+                  </div>
+                )}
+                {generatedMeme.metadata?.processing_time != null && (
+                  <div className="text-sm">
+                    <span className="font-medium">Processing Time: </span>
+                    {Number.isFinite(generatedMeme.metadata.processing_time)
+                      ? `${generatedMeme.metadata.processing_time.toFixed(2)}s`
+                      : "N/A"}
+                  </div>
+                )}
+                {prompt && (
+                  <div className="text-sm">
+                    <span className="font-medium">Prompt: </span>
+                    <span className="text-muted-foreground">{prompt}</span>
+                  </div>
+                )}
+                {uploadedImage && (
+                  <div className="text-sm">
+                    <span className="font-medium">Custom Image: </span>
+                    <span className="text-muted-foreground">Provided</span>
+                  </div>
+                )}
+                {generatedMeme.raw_response && (
+                  <div>
+                    <div className="text-sm font-medium mb-1">Raw Response</div>
+                    <pre className="text-xs bg-muted p-2 rounded max-h-48 overflow-auto">
+                      {generatedMeme.raw_response}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-2 p-3 border-t border-border justify-end">
+              <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
+                Close
+              </Button>
+              <Button variant="hero" onClick={handlePostToMarketplace}>
+                <Send className="w-4 h-4 mr-2" />
+                Post to Marketplace
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

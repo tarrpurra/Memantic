@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../hooks/use-toast";
 import backendService from "../services/backendService";
-import { testConnection } from "../services/backendService";
+import { testConnection } from "../services/backendService.js";
 
 export const BackendTest = () => {
   const [testResults, setTestResults] = useState([]);
