@@ -694,7 +694,15 @@ const Marketplace = () => {
                   )}
                   <CardContent className="p-6">
                     <div className="text-center">
-                      <div className="text-6xl mb-4">{meme.emoji}</div>
+                      {meme.image_url ? (
+                        <img
+                          src={meme.image_url}
+                          alt={meme.title}
+                          className="w-full h-32 object-cover rounded-lg mb-4"
+                        />
+                      ) : (
+                        <div className="text-6xl mb-4">{meme.emoji}</div>
+                      )}
                       <h3 className="font-bold text-lg mb-2">{meme.title}</h3>
                       <p className="text-sm text-muted-foreground mb-4">
                         by {meme.creator}
@@ -774,7 +782,7 @@ const Marketplace = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {ensureArray(filteredMemes).map((meme) => (
               <MemeCard
                 key={meme.id}
