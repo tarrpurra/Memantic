@@ -99,20 +99,33 @@ const Portfolio = () => {
     return Array.isArray(v) ? v[0] : v;
   }
 
+  /**
+   * Safely convert BigInt to number, handling large values
+   */
+  function safeBigIntToNumber(value) {
+    if (typeof value === 'bigint') {
+      // Check if BigInt is within safe number range
+      if (value > Number.MAX_SAFE_INTEGER) {
+        return Number.MAX_SAFE_INTEGER;
+      }
+      if (value < Number.MIN_SAFE_INTEGER) {
+        return Number.MIN_SAFE_INTEGER;
+      }
+      return Number(value);
+    }
+    return Number(value) || 0;
+  }
+
   // Map canister records -> UI
   const mapToUi = (item) => {
     const memeData = unopt(item?.meme_data) || {};
     const marketData = item?.market_data || {};
-    const votes = item?.votes?.upvotes ?? item?.votes ?? 0;
+    const votes = safeBigIntToNumber(item?.votes?.upvotes ?? item?.votes ?? 0);
 
     // Handle bigint conversion for earned ICP (from market data)
     let earnedIcp = 0;
     if (marketData?.total_earned) {
-      if (typeof marketData.total_earned === 'bigint') {
-        earnedIcp = Number(marketData.total_earned) / 100000000; // Convert e8s to ICP
-      } else {
-        earnedIcp = Number(marketData.total_earned) / 100000000;
-      }
+      earnedIcp = safeBigIntToNumber(marketData.total_earned) / 100000000; // Convert e8s to ICP
     }
 
     // Determine status based on market data
@@ -125,16 +138,16 @@ const Portfolio = () => {
       id: String(item?.meme_id ?? item?.id ?? crypto.randomUUID()),
       title: memeData?.prompt || item?.title || "Untitled Meme",
       emoji: "🖼️",
-      votes: Number(votes || 0),
+      votes: votes,
       earnedIcp: Number.isFinite(earnedIcp) ? earnedIcp : 0,
-      views: Number(item?.views || 0),
+      views: safeBigIntToNumber(marketData?.views || item?.views || 0),
       status,
       imageUrl: memeData?.image_url,
       // Market data
       isListed: marketData?.is_listed || false,
-      listingPrice: marketData?.listing_price ? Number(marketData.listing_price) / 100000000 : null,
-      totalSales: Number(marketData?.total_sales || 0),
-      lastSalePrice: marketData?.last_sale_price ? Number(marketData.last_sale_price) / 100000000 : null,
+      listingPrice: marketData?.listing_price ? safeBigIntToNumber(marketData.listing_price) / 100000000 : null,
+      totalSales: safeBigIntToNumber(marketData?.total_sales || 0),
+      lastSalePrice: marketData?.last_sale_price ? safeBigIntToNumber(marketData.last_sale_price) / 100000000 : null,
       listedAt: marketData?.listed_at,
       lastSaleAt: marketData?.last_sale_at,
       // isMinted will be set in fetchData after checking with backend
@@ -151,7 +164,40 @@ const Portfolio = () => {
       await backendService.ensureReady();
 
       // Use centralized backend service
-      const mine = await backendService.getUserMemes();
+      let mine = [];
+      try {
+        mine = await backendService.getUserMemes();
+        console.log(`Fetched ${mine?.length || 0} user memes`);
+      } catch (error) {
+        console.warn("Failed to fetch user memes:", error);
+        // Create sample data for testing
+        mine = [
+          {
+            id: "sample-1",
+            meme_data: {
+              prompt: "Sample meme for testing",
+              image_url: "",
+              image_filename: "sample.png",
+              image_format: "png",
+              metadata: {
+                processing_time: 1.5,
+                timestamp: Date.now() * 1000000,
+                file_size_bytes: 1024000,
+                service: "sample"
+              }
+            },
+            created_at: Date.now(),
+            market_data: {
+              is_listed: false,
+              listing_price: null,
+              views: 25,
+              total_sales: 0,
+              total_earned: 0
+            }
+          }
+        ];
+        console.log("Using sample data due to backend issues");
+      }
 
       if (!mine || !Array.isArray(mine)) {
         console.warn("Invalid response from getUserMemes:", mine);
@@ -357,8 +403,8 @@ const Portfolio = () => {
                   title={principal || ""}
                 >
                   {principal
-                    ? `${principal.slice(0, 8)}...${principal.slice(-4)}`
-                    : "Unknown"}
+                    ? `${principal.slice(0, 8)}...${principal.slice(-6)}`
+                    : "Not logged in"}
                 </span>
               </div>
 
@@ -387,8 +433,8 @@ const Portfolio = () => {
                   <p className="text-sm font-medium">Logged in as:</p>
                   <p className="text-xs font-mono text-muted-foreground">
                     {principal
-                      ? `${principal.slice(0, 12)}...${principal.slice(-6)}`
-                      : "Unknown"}
+                      ? `${principal.slice(0, 8)}...${principal.slice(-6)}`
+                      : "Not logged in"}
                   </p>
                 </div>
               </div>
@@ -514,7 +560,7 @@ const Portfolio = () => {
                         <img
                           src={nft.imageUrl}
                           alt={nft.title}
-                          className="w-16 h-16 object-cover rounded-lg group-hover:scale-105 transition-transform"
+                          className="w-16 h-16 object-contain rounded-lg group-hover:scale-105 transition-transform"
                         />
                       ) : (
                         <div className="text-4xl mb-4 group-hover:animate-float">
@@ -671,7 +717,7 @@ const Portfolio = () => {
                         <img
                           src={nft.imageUrl}
                           alt={nft.title}
-                          className="w-16 h-16 object-cover rounded-lg group-hover:scale-105 transition-transform"
+                          className="w-16 h-16 object-contain rounded-lg group-hover:scale-105 transition-transform"
                         />
                       ) : (
                         <div className="text-4xl mb-4 group-hover:animate-float">

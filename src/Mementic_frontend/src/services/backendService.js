@@ -503,6 +503,20 @@ class BackendService {
     return this._unwrapResult(result, "record_meme_sale failed");
   }
 
+  /**
+   * Increment view count for a meme
+   */
+  async incrementMemeViews(memeId) {
+    try {
+      const result = await this._safeCall('increment_meme_views', memeId);
+      return this._unwrapResult(result, "increment_meme_views failed");
+    } catch (error) {
+      // Silently fail for view increments - not critical
+      console.warn(`Failed to increment views for meme ${memeId}:`, error);
+      return null;
+    }
+  }
+
   /* ============ UTILITY METHODS ============ */
 
   /**

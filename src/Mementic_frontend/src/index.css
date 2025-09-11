@@ -5,35 +5,39 @@
 /* 1) Remove @theme - use :root instead */
 :root {
   /* Color tokens */
-  --background: 222 25% 8%;
-  --foreground: 280 20% 95%;
+  --background: 237 19% 13%;
+  --foreground: 41 100% 95%;
 
-  --card: 222 30% 12%;
-  --card-foreground: 280 15% 90%;
+  --card: 237 19% 13% / 0.85;
+  --card-foreground: 41 100% 90%;
 
-  --popover: 222 35% 10%;
-  --popover-foreground: 280 20% 95%;
+  --popover: 237 19% 13% / 0.9;
+  --popover-foreground: 41 100% 95%;
 
-  --primary: 280 100% 65%;
-  --primary-foreground: 222 25% 8%;
-  --primary-glow: 280 100% 75%;
+  --primary: 273 68% 59%;
+  --primary-foreground: 237 19% 13%;
+  --primary-glow: 273 68% 69%;
 
-  --secondary: 145 100% 50%;
-  --secondary-foreground: 222 25% 8%;
-  --secondary-glow: 145 100% 60%;
+  --secondary: 86 87% 54%;
+  --secondary-foreground: 237 19% 13%;
+  --secondary-glow: 86 87% 64%;
 
-  --accent: 320 100% 70%;
-  --accent-foreground: 222 25% 8%;
+  --accent: 331 100% 59%;
+  --accent-foreground: 237 19% 13%;
 
-  --muted: 222 20% 18%;
-  --muted-foreground: 280 10% 65%;
+  --muted: 237 15% 20%;
+  --muted-foreground: 41 50% 70%;
 
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 40% 98%;
 
-  --border: 222 30% 20%;
-  --input: 222 30% 15%;
-  --ring: 280 100% 65%;
+  --border: 237 25% 22%;
+  --input: 237 25% 17%;
+  --ring: 273 68% 59%;
+
+  /* Optional meme colors */
+  --meme-yellow: 50 96% 52%;
+  --meme-cyan: 106 100% 50%;
 
   /* Custom color variables */
   --color-background: hsl(var(--background));
@@ -67,23 +71,24 @@
   --color-ring: hsl(var(--ring));
 
   /* Gradients */
-  --gradient-primary: linear-gradient(135deg, hsl(280 100% 65%), hsl(320 100% 70%));
-  --gradient-secondary: linear-gradient(135deg, hsl(145 100% 50%), hsl(175 100% 55%));
+  --gradient-primary: linear-gradient(135deg, hsl(273 68% 59%), hsl(331 100% 59%));
+  --gradient-secondary: linear-gradient(135deg, hsl(86 87% 54%), hsl(106 87% 64%));
+  --gradient-background: linear-gradient(135deg, hsl(273 68% 59%) 0%, hsl(331 100% 59%) 50%, hsl(86 87% 54%) 100%);
   --gradient-hero: linear-gradient(
     135deg,
-    hsl(210 100% 25%) 0%,   
-    hsl(200 100% 45%) 40%,  
-    hsl(320 100% 70%) 75%,  
-    hsl(190 100% 70%) 100%
+    hsl(237 19% 13%) 0%,
+    hsl(273 68% 59%) 40%,
+    hsl(331 100% 59%) 75%,
+    hsl(86 87% 54%) 100%
   );
-  --gradient-card: linear-gradient(145deg, hsl(222 30% 12%) 0%, hsl(222 35% 15%) 100%);
-  --gradient-glow: radial-gradient(ellipse at center, hsl(280 100% 65% / 0.3) 0%, transparent 70%);
+  --gradient-card: linear-gradient(145deg, hsl(237 19% 13% / 0.85) 0%, hsl(237 19% 13% / 0.9) 100%);
+  --gradient-glow: radial-gradient(ellipse at center, hsl(273 68% 59% / 0.3) 0%, transparent 70%);
 
   /* Shadows & Effects */
-  --shadow-glow: 0 0 30px hsl(280 100% 65% / 0.3);
-  --shadow-glow-secondary: 0 0 30px hsl(145 100% 50% / 0.3);
-  --shadow-card: 0 8px 32px hsl(222 50% 4% / 0.8);
-  --shadow-elevation: 0 4px 16px hsl(222 50% 4% / 0.6);
+  --shadow-glow: 0 0 30px hsl(273 68% 59% / 0.3);
+  --shadow-glow-secondary: 0 0 30px hsl(86 87% 54% / 0.3);
+  --shadow-card: 0 8px 32px hsl(237 50% 4% / 0.8);
+  --shadow-elevation: 0 4px 16px hsl(237 50% 4% / 0.6);
 
   /* Animations */
   --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -94,20 +99,23 @@
 
 /* 2) Add custom utilities using @layer utilities */
 @layer utilities {
-  .bg-gradient-hero { 
-    background-image: var(--gradient-hero); 
+  .bg-gradient-hero {
+    background-image: var(--gradient-hero);
   }
-  .bg-gradient-primary { 
-    background-image: var(--gradient-primary); 
+  .bg-gradient-primary {
+    background-image: var(--gradient-primary);
   }
-  .bg-gradient-secondary { 
-    background-image: var(--gradient-secondary); 
+  .bg-gradient-secondary {
+    background-image: var(--gradient-secondary);
   }
-  .bg-gradient-card { 
-    background-image: var(--gradient-card); 
+  .bg-gradient-background {
+    background-image: var(--gradient-background);
   }
-  .bg-gradient-glow { 
-    background-image: var(--gradient-glow); 
+  .bg-gradient-card {
+    background-image: var(--gradient-card);
+  }
+  .bg-gradient-glow {
+    background-image: var(--gradient-glow);
   }
 
   .shadow-glow {
@@ -138,7 +146,7 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-gradient-background text-foreground;
   }
 }
 

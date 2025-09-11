@@ -10,35 +10,17 @@ import { TrendingUp, Zap, Users } from "../components/ui/Icon";
 import { useAuth } from "../contexts/AuthContext";
 import { Sparkles } from "lucide-react";
 
-
 const Landing = () => {
   const navigate = useNavigate();
   const { principal, isLoading, isAuthenticated } = useAuth();
 
   const handleCreateClick = () => {
-    console.log("Create button clicked");
-    console.log("isAuthenticated:", isAuthenticated);
-    console.log("principal:", principal);
-
     if (!isAuthenticated) {
-      console.log("User not authenticated, navigating to login");
       navigate("/login");
     } else {
-      console.log("User authenticated, navigating to myplace");
       navigate("/myplace");
     }
   };
-
-  const trendingMemes = [
-    {
-      id: 1,
-      title: "Diamond Hands Doge",
-      votes: 1250,
-      creator: "CryptoMemer42",
-    },
-    { id: 2, title: "To The Moon Cat", votes: 980, creator: "MemeQueen" },
-    { id: 3, title: "HODL Strong", votes: 875, creator: "DiamondHands" },
-  ];
 
   return (
     <div className="min-h-screen bg-background">
@@ -51,13 +33,14 @@ const Landing = () => {
           <div className="flex items-center justify-center mb-8">
             <Sparkles className="w-12 h-12 md:w-16 md:h-16 text-primary mr-4" />
             <h1 className="text-5xl md:text-7xl font-black bg-gradient-hero bg-clip-text text-transparent leading-tight">
-              Create and Share Memes That Make the Internet Laugh
+              Mementic – The Future of Meme Culture
             </h1>
           </div>
 
           <p className="text-xl md:text-2xl text-muted-foreground mb-12 max-w-2xl mx-auto">
-            Join the revolution where AI meets meme culture in a decentralized
-            economy. Create, share, and earn from viral content.
+            A decentralized platform where AI meets memes. Create, share, and
+            earn from viral content while the community decides what deserves to
+            become a collectible NFT.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-16">
@@ -86,74 +69,181 @@ const Landing = () => {
               Marketplace
             </Button>
           </div>
-
-          {/* Show authentication status for debugging */}
-          {process.env.NODE_ENV === "development" && (
-            <div className="text-sm text-muted-foreground mb-4">
-              Debug:{" "}
-              {isLoading
-                ? "Loading..."
-                : isAuthenticated
-                ? `Logged in as ${principal}`
-                : "Not logged in"}
-            </div>
-          )}
         </div>
       </section>
+      <section className="py-16 px-6 bg-muted/20">
+        <div className="max-w-6xl mx-auto grid gap-8 md:grid-cols-3">
+          <div className="md:col-span-2">
+            <h2 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+              Memes, owned.
+            </h2>
+            <p className="mt-4 text-muted-foreground">
+              Mementic turns viral jokes into ownable, tradable digital
+              assets—built on ICP. Create with AI, battle for upvotes, and mint
+              winners as NFTs. Welcome to the meme economy.
+            </p>
+            <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="rounded-xl bg-card/60 p-4 border border-border">
+                <div className="text-sm text-muted-foreground">Create</div>
+                <div className="mt-1 font-semibold">AI Meme Studio</div>
+              </div>
+              <div className="rounded-xl bg-card/60 p-4 border border-border">
+                <div className="text-sm text-muted-foreground">Compete</div>
+                <div className="mt-1 font-semibold">Weekly Battles</div>
+              </div>
+              <div className="rounded-xl bg-card/60 p-4 border border-border">
+                <div className="text-sm text-muted-foreground">Own</div>
+                <div className="mt-1 font-semibold">NFT Minting & Auctions</div>
+              </div>
+            </div>
+          </div>
 
-      {/* Trending Memes Section */}
+          <div className="rounded-2xl bg-card p-6 border border-border">
+            <h3 className="text-xl font-bold">Business Model</h3>
+            <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
+              <li>• NFT auction fees (small %)</li>
+              <li>• Sponsored meme contests (brands/DAOs)</li>
+              <li>• Premium tools (boosts, analytics)</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+      <section className="py-16 px-6">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl font-bold">Traction</h2>
+          <div className="mt-6 grid gap-6 sm:grid-cols-3">
+            <div className="rounded-xl bg-card p-6 border border-border">
+              <div className="text-3xl font-black">15</div>
+              <div className="text-sm text-muted-foreground mt-1">
+                Active creators in beta
+              </div>
+            </div>
+            <div className="rounded-xl bg-card p-6 border border-border">
+              <div className="text-3xl font-black">40</div>
+              <div className="text-sm text-muted-foreground mt-1">
+                Memes created (avg 2.7/user)
+              </div>
+            </div>
+            <div className="rounded-xl bg-card p-6 border border-border">
+              <div className="text-3xl font-black">53%</div>
+              <div className="text-sm text-muted-foreground mt-1">
+                Next-day retention
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8 grid gap-6 sm:grid-cols-2">
+            <div className="rounded-2xl bg-card p-6 border border-border">
+              <p className="text-sm italic">
+                “This made my friends’ group chat go wild.”
+              </p>
+              <div className="mt-2 text-xs text-muted-foreground">
+                — Beta User
+              </div>
+            </div>
+            <div className="rounded-2xl bg-card p-6 border border-border">
+              <p className="text-sm italic">
+                “I’d happily mint the weekly winner.”
+              </p>
+              <div className="mt-2 text-xs text-muted-foreground">
+                — Beta Creator
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section className="py-16 px-6 bg-muted/20">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl font-bold">Roadmap</h2>
+          <div className="mt-6 grid gap-6 md:grid-cols-3">
+            <div className="rounded-2xl bg-card p-6 border border-border">
+              <div className="text-sm uppercase tracking-wide text-muted-foreground">
+                Short-term
+              </div>
+              <h3 className="mt-2 font-semibold">Ship & Smooth</h3>
+              <ul className="mt-3 text-sm text-muted-foreground space-y-2">
+                <li>• Auction & leaderboard polish</li>
+                <li>• Faster image delivery</li>
+                <li>• Anti-spam & rate limits</li>
+              </ul>
+            </div>
+            <div className="rounded-2xl bg-card p-6 border border-border">
+              <div className="text-sm uppercase tracking-wide text-muted-foreground">
+                Mid-term
+              </div>
+              <h3 className="mt-2 font-semibold">Grow Communities</h3>
+              <ul className="mt-3 text-sm text-muted-foreground space-y-2">
+                <li>• Hosted meme challenges (DAOs/brands)</li>
+                <li>• Creator profiles & badges</li>
+                <li>• Advanced AI tools (remix, presets)</li>
+              </ul>
+            </div>
+            <div className="rounded-2xl bg-card p-6 border border-border">
+              <div className="text-sm uppercase tracking-wide text-muted-foreground">
+                Long-term
+              </div>
+              <h3 className="mt-2 font-semibold">Meme Layer of Web3</h3>
+              <ul className="mt-3 text-sm text-muted-foreground space-y-2">
+                <li>• ICP dApp/marketplace integrations</li>
+                <li>• Portable meme identity</li>
+                <li>• Culture primitives for Web3</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+      {/* Roadmap Section */}
       <section className="py-16 px-6 bg-muted/20">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <div className="inline-flex items-center px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-sm mb-4">
               <TrendingUp className="w-4 h-4 mr-2" />
-              Trending Now
+              Roadmap
             </div>
             <h2 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              Viral Memes This Week
+              Our Journey Ahead
             </h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {trendingMemes.map((meme, index) => (
-              <Card key={meme.id} className="group cursor-pointer">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="inline-flex items-center px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-sm">
-                      #{index + 1}
-                    </div>
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <Users className="w-4 h-4 mr-1" />
-                      {meme.votes}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="aspect-square bg-gradient-glow rounded-lg mb-4 flex items-center justify-center">
-                    <div className="text-6xl">🚀</div>
-                  </div>
-                  <CardTitle className="text-lg mb-2">{meme.title}</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    by {meme.creator}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>🚀 Beta Launch</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  AI-powered meme generator is live. Users can authenticate with
+                  Internet Identity and start creating memes today.
+                </p>
+              </CardContent>
+            </Card>
 
-          <div className="text-center mt-12">
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => navigate("/marketplace")}
-              className="text-white hover:ease-in hover:text-amber-50"
-            >
-              View All Trending Memes
-            </Button>
+            <Card>
+              <CardHeader>
+                <CardTitle>🎭 Community Voting</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Upvote your favorite memes. Top 3 winners in each round will
+                  be immortalized as NFTs on the Internet Computer.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>🌐 Future Plans</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Meme staking, creator rewards, and integration with major NFT
+                  marketplaces. Building the world’s first meme economy.
+                </p>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>
-
       {/* CTA Section */}
       <section className="py-20 px-6 text-center">
         <div className="max-w-3xl mx-auto">
@@ -161,8 +251,8 @@ const Landing = () => {
             Ready to Create Your First Viral Meme?
           </h2>
           <p className="text-xl text-muted-foreground mb-8">
-            Join thousands of creators earning from their creativity in the
-            world's first decentralized meme economy.
+            Be part of the decentralized meme revolution. Your creativity could
+            be the next viral NFT.
           </p>
           <Button
             variant="hero"

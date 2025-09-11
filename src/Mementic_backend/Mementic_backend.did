@@ -21,6 +21,7 @@ type MarketData = record {
   listing_price : opt nat64;
   total_sales : nat64;
   last_sale_price : opt nat64;
+  views : nat64;
   is_listed : bool;
   last_sale_at : opt nat64;
   total_earned : nat64;
@@ -153,6 +154,8 @@ service : (opt InitArgs) -> {
   icrc7_symbol : () -> (text) query;
   icrc7_tokens_of : (principal) -> (vec nat) query;
   icrc7_total_supply : () -> (nat) query;
+  // Increment view count for a meme
+  increment_meme_views : (nat64) -> (Result);
   // Check if a meme has been minted as an NFT
   is_meme_minted : (nat64) -> (bool) query;
   // List a meme for sale on the marketplace

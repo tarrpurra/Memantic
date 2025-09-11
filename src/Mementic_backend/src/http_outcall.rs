@@ -151,6 +151,7 @@ pub struct MarketData {
     pub total_earned: u64, // Total earned from sales in e8s
     pub last_sale_price: Option<u64>,
     pub last_sale_at: Option<u64>,
+    pub views: u64, // Number of times this meme has been viewed
 }
 #[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
 pub struct StoredMeme {
@@ -186,6 +187,7 @@ impl Storable for StoredMeme {
                 total_earned: 0,
                 last_sale_price: None,
                 last_sale_at: None,
+                views: 0,
             },
         })
     }
@@ -566,6 +568,21 @@ pub fn record_meme_sale(meme_id: u64, sale_price_e8s: u64) -> Result<(), String>
     })
 }
 
+/// Increment view count for a meme
+#[update]
+pub fn increment_meme_views(meme_id: u64) -> Result<(), String> {
+    MEMES.with(|m| {
+        let mut map = m.borrow_mut();
+        if let Some(mut stored) = map.get(&meme_id) {
+            stored.market_data.views += 1;
+            map.insert(meme_id, stored);
+            Ok(())
+        } else {
+            Err("Meme not found".to_string())
+        }
+    })
+}
+
 /// Store a generated meme into marketplace (associated to caller)
 #[update]
 pub fn publish_meme(meme: MemeData) -> Result<PublicStoredMeme, String> {
@@ -598,6 +615,7 @@ pub fn publish_meme(meme: MemeData) -> Result<PublicStoredMeme, String> {
             total_earned: 0,
             last_sale_price: None,
             last_sale_at: None,
+            views: 0,
         },
     };
 
@@ -667,7 +685,17 @@ pub fn get_marketplace_memes() -> Vec<PublicStoredMeme> {
 // ---------- Queries ----------
 #[query]
 pub fn get_meme(meme_id: u64) -> Option<PublicStoredMeme> {
-    MEMES.with(|m| m.borrow().get(&meme_id).map(|sm| sm.into()))
+    MEMES.with(|m| {
+        let mut map = m.borrow_mut();
+        if let Some(mut stored) = map.get(&meme_id) {
+            // Increment view count
+            stored.market_data.views += 1;
+            map.insert(meme_id, stored.clone());
+            Some(stored.into())
+        } else {
+            None
+        }
+    })
 }
 
 #[query]

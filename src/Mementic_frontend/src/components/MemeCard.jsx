@@ -10,11 +10,12 @@ import {
 import { Badge } from "../components/ui/Badge";
 import {
   Heart,
-  Share2,
   TrendingUp,
   Coins,
   Crown,
   Zap,
+  Eye,
+  User,
 } from "../components/ui/Icon";
 import { useToast } from "../hooks/use-toast";
 import backendService from "../services/backendService";
@@ -26,19 +27,73 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
   const [loadingVoteStatus, setLoadingVoteStatus] = useState(false);
   const [isVoting, setIsVoting] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [views, setViews] = useState(meme?.views || 0);
   const { toast } = useToast();
 
   // Support both snake_case (backend) and camelCase (legacy)
   const {
     title = "Untitled Meme",
     creator = "Anonymous",
-    votes = 0,
+    votes: rawVotes = 0,
     stakeAmount = 0,
     isViral = false,
     isNFT = false,
   } = meme || {};
+
+  // Safely convert BigInt votes to number
+  const votes = typeof rawVotes === 'bigint'
+    ? (rawVotes > Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER :
+       rawVotes < Number.MIN_SAFE_INTEGER ? Number.MIN_SAFE_INTEGER :
+       Number(rawVotes))
+    : Number(rawVotes) || 0;
   const image = meme?.image_url || meme?.imageUrl || "";
   const memeId = meme?.id || meme?.meme_id;
+
+  // Enhanced ownership detection with multiple fallback methods
+  const checkOwnership = () => {
+    if (!currentUserPrincipal || !meme) return false;
+
+    // Method 1: Check meme.owner (primary method)
+    if (meme.owner) {
+      const ownerText = typeof meme.owner === 'object' && meme.owner.toText
+        ? meme.owner.toText()
+        : String(meme.owner).trim();
+      if (ownerText && currentUserPrincipal === ownerText) {
+        return true;
+      }
+    }
+
+    // Method 2: Check meme.creator (fallback)
+    if (meme.creator) {
+      const creatorText = String(meme.creator).trim();
+      if (creatorText && currentUserPrincipal === creatorText) {
+        return true;
+      }
+    }
+
+    // Method 3: Check raw meme data for additional owner fields
+    if (meme.__raw) {
+      const raw = meme.__raw;
+      if (raw.owner) {
+        const rawOwnerText = typeof raw.owner === 'object' && raw.owner.toText
+          ? raw.owner.toText()
+          : String(raw.owner).trim();
+        if (rawOwnerText && currentUserPrincipal === rawOwnerText) {
+          return true;
+        }
+      }
+      if (raw.meme_data?.owner) {
+        const memeDataOwnerText = typeof raw.meme_data.owner === 'object' && raw.meme_data.owner.toText
+          ? raw.meme_data.owner.toText()
+          : String(raw.meme_data.owner).trim();
+        if (memeDataOwnerText && currentUserPrincipal === memeDataOwnerText) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  };
 
   // Check user's vote status and ownership on component mount
   useEffect(() => {
@@ -47,20 +102,12 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
 
       setLoadingVoteStatus(true);
       try {
-        // Check if this is the user's own meme first (this is faster)
-        if (currentUserPrincipal && meme?.owner) {
-          // Handle both Principal objects and string representations
-          const ownerText = typeof meme.owner === 'object' && meme.owner.toText
-            ? meme.owner.toText()
-            : String(meme.owner);
-          setIsOwnMeme(currentUserPrincipal === ownerText);
-        } else if (currentUserPrincipal && meme?.creator) {
-          // Fallback to creator field if owner is not available
-          setIsOwnMeme(currentUserPrincipal === String(meme.creator));
-        }
+        // Check ownership using enhanced method
+        const ownershipResult = checkOwnership();
+        setIsOwnMeme(ownershipResult);
 
         // Only check vote status if it's not the user's own meme
-        if (!isOwnMeme) {
+        if (!ownershipResult) {
           // Convert string ID to BigInt for backend call
           const memeIdBigInt = BigInt(memeId);
           const userVote = await backendService.getUserVote(memeIdBigInt);
@@ -70,16 +117,37 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
         }
       } catch (error) {
         console.error("Failed to check vote status:", error);
-        // Don't show error toast for vote status check failures
+        // Still check ownership even if vote check fails
+        const ownershipResult = checkOwnership();
+        setIsOwnMeme(ownershipResult);
       } finally {
         setLoadingVoteStatus(false);
       }
     };
 
     checkVoteStatus();
-  }, [isAuthenticated, memeId, currentUserPrincipal, meme?.owner, meme?.creator]);
+  }, [isAuthenticated, memeId, currentUserPrincipal, meme]);
+
+  // Increment view count when component mounts
+  useEffect(() => {
+    const incrementViews = async () => {
+      if (memeId) {
+        try {
+          await backendService.incrementMemeViews(BigInt(memeId));
+          // Update local view count
+          setViews(prev => prev + 1);
+        } catch (error) {
+          // Silently fail - view tracking is not critical
+          console.warn(`Failed to increment views for meme ${memeId}:`, error);
+        }
+      }
+    };
+
+    incrementViews();
+  }, [memeId]);
 
   const handleVote = async () => {
+    // Authentication check
     if (!isAuthenticated) {
       toast({
         title: "Authentication Required",
@@ -89,15 +157,18 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
       return;
     }
 
-    if (isOwnMeme) {
+    // Double-check ownership to prevent any bypass attempts
+    const currentOwnership = checkOwnership();
+    if (currentOwnership || isOwnMeme) {
       toast({
-        title: "Cannot Vote",
-        description: "You cannot vote on your own memes",
+        title: "Cannot Vote on Own Meme",
+        description: "You cannot vote on your own memes to maintain fair competition",
         variant: "destructive",
       });
       return;
     }
 
+    // Check if already voted
     if (hasVoted) {
       toast({
         title: "Already Voted",
@@ -107,24 +178,43 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
       return;
     }
 
-    if (onVote && memeId != null) {
+    // Validate meme ID
+    if (!memeId) {
+      toast({
+        title: "Invalid Meme",
+        description: "Cannot vote on this meme - invalid meme ID",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Execute vote
+    if (onVote) {
       setIsVoting(true);
       try {
-        // Pass owner information for self-voting prevention
+        // Get owner information for additional backend validation
         const owner = meme?.owner || meme?.creator;
         await onVote(memeId, votes || 0, owner);
         setHasVoted(true);
         // Success toast is handled by parent component (Marketplace)
       } catch (error) {
-        // Error handling is done in the parent component
         console.error("Vote failed:", error);
+        // Re-check ownership in case of error
+        const recheckOwnership = checkOwnership();
+        if (recheckOwnership) {
+          toast({
+            title: "Cannot Vote on Own Meme",
+            description: "You cannot vote on your own memes",
+            variant: "destructive",
+          });
+        }
       } finally {
         setIsVoting(false);
       }
     } else {
       toast({
-        title: "Action unavailable",
-        description: "Voting is not enabled for this card",
+        title: "Voting Unavailable",
+        description: "Voting functionality is not available for this meme",
         variant: "destructive",
       });
     }
@@ -135,6 +225,16 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
       toast({
         title: "Authentication Required",
         description: "Please login to stake ICP on memes",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Prevent staking on own memes
+    if (isOwnMeme) {
+      toast({
+        title: "Cannot Stake on Own Meme",
+        description: "You cannot stake ICP on your own memes",
         variant: "destructive",
       });
       return;
@@ -164,13 +264,19 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
 
   return (
     <Card
-      className={`group overflow-hidden transition-all duration-200 cursor-pointer ${hasVoted ? 'ring-2 ring-primary/20 bg-primary/5' : ''} ${isExpanded ? 'ring-2 ring-primary/50' : ''}`}
+      className={`group overflow-hidden transition-all duration-200 cursor-pointer ${hasVoted ? 'ring-2 ring-primary/20 bg-primary/5' : ''} ${isExpanded ? 'ring-2 ring-primary/50' : ''} ${isOwnMeme ? 'ring-2 ring-orange-500/30 bg-orange-500/5' : ''}`}
       onClick={handleCardClick}
     >
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
           <CardTitle className="text-lg line-clamp-2">{title}</CardTitle>
           <div className="flex gap-1">
+            {isOwnMeme && (
+              <Badge variant="outline" className="text-xs border-orange-500 text-orange-600">
+                <User className="h-3 w-3 mr-1" />
+                Your Meme
+              </Badge>
+            )}
             {hasVoted && (
               <Badge variant="default" className="text-xs bg-primary">
                 <Heart className="h-3 w-3 mr-1 fill-current" />
@@ -195,11 +301,11 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
       </CardHeader>
 
       <CardContent className="pb-4">
-        <div className="aspect-square bg-muted rounded-lg overflow-hidden mb-4 relative group-hover:scale-[1.02] transition-transform duration-300">
+        <div className="bg-muted rounded-lg overflow-hidden mb-4 relative group-hover:scale-[1.02] transition-transform duration-300">
           <img
             src={image}
             alt={title}
-            className="w-full h-full object-cover"
+            className="w-full h-auto object-contain max-h-96"
           />
           <div className="absolute inset-0 bg-gradient-glow opacity-0 group-hover:opacity-30 transition-opacity duration-300" />
         </div>
@@ -211,13 +317,14 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
               {votes}
             </span>
             <span className="flex items-center gap-1">
+              <Eye className="h-4 w-4" />
+              {views}
+            </span>
+            <span className="flex items-center gap-1">
               <Coins className="h-4 w-4" />
               {stakeAmount} ICP
             </span>
           </div>
-          <Button variant="ghost" size="sm">
-            <Share2 className="h-4 w-4" />
-          </Button>
         </div>
 
         {/* Expanded Content */}
@@ -274,11 +381,11 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
           size="sm"
           onClick={handleStake}
           className="flex-1"
-          disabled={!isAuthenticated}
-          title="Stake ICP to support this meme and earn rewards as it gains popularity"
+          disabled={!isAuthenticated || isOwnMeme}
+          title={isOwnMeme ? "Cannot stake on your own meme" : "Stake ICP to support this meme and earn rewards as it gains popularity"}
         >
           <Zap className="h-4 w-4 mr-1" />
-          {hasStaked ? "Staked (10 ICP)" : "Stake 10 ICP"}
+          {isOwnMeme ? "Your Meme" : hasStaked ? "Staked (10 ICP)" : "Stake 10 ICP"}
         </Button>
       </CardFooter>
     </Card>

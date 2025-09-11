@@ -1,4 +1,4 @@
- import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../components/ui/Button";
 import {
   Card,
@@ -31,29 +31,107 @@ const PAGE_SIZE = 12;
 
 const ensureArray = (v) => (Array.isArray(v) ? v : v ? Object.values(v) : []);
 
-const normalizeMeme = (m, extra = {}) => {
+/** Safely convert BigInt-ish values to number */
+const safeBigIntToNumber = (value) => {
+  if (typeof value === "bigint") {
+    const MAX = BigInt(Number.MAX_SAFE_INTEGER);
+    const MIN = BigInt(Number.MIN_SAFE_INTEGER);
+    if (value > MAX) return Number.MAX_SAFE_INTEGER;
+    if (value < MIN) return Number.MIN_SAFE_INTEGER;
+    return Number(value);
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string" && value.trim() !== "") {
+    try {
+      // handle "123n" style
+      if (/^-?\d+n$/.test(value)) {
+        const bi = BigInt(value.slice(0, -1));
+        return safeBigIntToNumber(bi);
+      }
+      const n = Number(value);
+      return Number.isFinite(n) ? n : 0;
+    } catch {
+      return 0;
+    }
+  }
+  return 0;
+};
+
+/** Safe id string (never React key or URL param with raw BigInt) */
+const toSafeIdString = (v)=> {
+  if (typeof v === "bigint") return v.toString(10);
+  if (typeof v === "number") return Number.isFinite(v) ? String(v) : `${Date.now()}`;
+  if (typeof v === "string") return v || `${Date.now()}`;
+  return `${Date.now()}`;
+};
+
+/** Only create BigInt if id is strictly numeric */
+const toOptionalBigInt = (id) => (/^\d+$/.test(id) ? BigInt(id) : null);
+
+/** Optional: strip BigInts before logging (avoids console implicit conversions) */
+const stripBigInts = (obj)=> {
+  if (typeof obj === "bigint") return obj.toString();
+  if (Array.isArray(obj)) return obj.map(stripBigInts);
+  if (obj && typeof obj === "object") {
+    return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, stripBigInts(v)]));
+  }
+  return obj;
+};
+
+const normalizeMeme = (m, extra= {}) => {
   // Supports PublicStoredMeme { id, owner, meme_data{...}, created_at, ... }
   const md = m?.meme_data || m;
-  const owner = m?.owner || md?.owner || m?.creator;
-  const up = Number(extra?.votes?.upvotes ?? md?.upvotes ?? m?.upvotes ?? 0);
-  const down = Number(
+  const owner = m?.owner ?? md?.owner ?? m?.creator;
+
+  // Handle different vote structures
+  const up = safeBigIntToNumber(
+    extra?.votes?.upvotes ?? md?.upvotes ?? m?.upvotes ?? m?.votes ?? 0
+  );
+  const down = safeBigIntToNumber(
     extra?.votes?.downvotes ?? md?.downvotes ?? m?.downvotes ?? 0
   );
-  const score = Number(m?.votes ?? m?.score ?? up - down);
+  const score = safeBigIntToNumber(m?.votes ?? m?.score ?? (up - down));
+
+  // Extract image URL from various possible locations
+  let image_url =
+    md?.image_url || m?.image_url || m?.url || m?.image || md?.url || "";
+
+  // Ensure we have a likely-valid URL
+  if (image_url && !/^https?:\/\//i.test(image_url)) {
+    image_url = "";
+  }
+
+  // Handle owner/principal conversion
+  let creator = "Anonymous";
+  if (owner) {
+    if (typeof owner === "string") {
+      creator = owner;
+    } else if (typeof owner === "object" && (owner).toText) {
+      // Handle Principal objects
+      creator = (owner).toText();
+    } else {
+      creator = String(owner);
+    }
+    // Truncate long principal IDs for display
+    if (creator.length > 20) {
+      creator = creator.slice(0, 8) + "..." + creator.slice(-6);
+    }
+  }
 
   return {
-    id: String(m?.id ?? m?.meme_id ?? m?._id ?? m?.uuid ?? Date.now()),
+    id: toSafeIdString(m?.id ?? m?.meme_id ?? m?._id ?? m?.uuid ?? Date.now()),
     title: md?.title || md?.prompt || m?.title || m?.prompt || "Untitled Meme",
     prompt: md?.prompt || m?.prompt || "",
-    creator:
-      typeof owner === "string" ? owner : owner ? String(owner) : "anonymous",
-    image_url: md?.image_url || m?.image_url || m?.url || m?.image || "",
+    creator,
+    image_url,
     votes: score,
-    created_at: Number(
+    views: safeBigIntToNumber(m?.market_data?.views ?? m?.views ?? 0),
+    created_at: safeBigIntToNumber(
       m?.created_at ?? md?.created_at ?? m?.timestamp ?? Date.now()
     ),
-    rank: extra?.rank ?? m?.rank,
-    emoji: m?.emoji,
+    rank: safeBigIntToNumber(extra?.rank ?? m?.rank ?? 0),
+    emoji: m?.emoji || "🖼️",
+    market_data: m?.market_data,
     __raw: m,
   };
 };
@@ -113,7 +191,6 @@ const Marketplace = () => {
   const [loadingList, setLoadingList] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
-
   // Week countdown
   const [now, setNow] = useState(new Date());
   const weekEnd = useMemo(() => getWeekEndIST(now), [now]);
@@ -133,46 +210,43 @@ const Marketplace = () => {
         const leaderboardRes = await backendService.getCurrentLeaderboard(3);
         const entries = ensureArray(leaderboardRes?.top_memes);
         const updatedTopMemes = entries.map((e) => {
-          const pm = Array.isArray(e?.meme_data)
-            ? e.meme_data[0]
-            : e?.meme_data;
+          const pm = Array.isArray(e?.meme_data) ? e.meme_data[0] : e?.meme_data;
           if (pm) {
             return normalizeMeme(pm, { rank: e?.rank, votes: e?.votes });
           }
-          return {
-            id: String(e?.meme_id ?? Date.now()),
-            title: `Meme #${e?.meme_id ?? "?"}`,
-            prompt: "",
-            creator: "anonymous",
-            image_url: "",
-            votes: Number(e?.votes?.upvotes ?? 0) - Number(e?.votes?.downvotes ?? 0),
-            created_at: Date.now(),
-            rank: e?.rank,
-            __raw: e,
-          };
+          return normalizeMeme(
+            {
+              id: e?.meme_id,
+              title: `Meme #${e?.meme_id ?? "?"}`,
+              owner: e?.owner,
+              meme_data: e?.meme_data,
+            },
+            { rank: e?.rank, votes: e?.votes }
+          );
         });
         setTopMemes(updatedTopMemes);
 
         // Refresh current page memes with updated vote counts
-        // Only if we have memes loaded
         if (memes.length > 0) {
-          const currentMemeIds = memes.map(m => m.id);
+          const currentMemeIds = memes.map((m) => m.id);
           const updatedMemes = await Promise.all(
             currentMemeIds.map(async (memeId) => {
               try {
-                // Convert string ID to BigInt for backend call
-                const memeIdBigInt = BigInt(memeId);
-                const voteData = await backendService.getMemeVotes(memeIdBigInt);
+                const bid = toOptionalBigInt(String(memeId));
+                if (!bid) return memes.find((m) => m.id === memeId);
+                const voteData = await backendService.getMemeVotes(bid);
                 if (voteData) {
                   return {
-                    ...memes.find(m => m.id === memeId),
-                    votes: voteData.upvotes - voteData.downvotes
+                    ...(memes.find((m) => m.id === memeId) ),
+                    votes:
+                      safeBigIntToNumber(voteData.upvotes) -
+                      safeBigIntToNumber(voteData.downvotes),
                   };
                 }
-                return memes.find(m => m.id === memeId);
+                return memes.find((m) => m.id === memeId) ;
               } catch (error) {
                 console.warn(`Failed to get votes for meme ${memeId}:`, error);
-                return memes.find(m => m.id === memeId);
+                return memes.find((m) => m.id === memeId) ;
               }
             })
           );
@@ -192,16 +266,15 @@ const Marketplace = () => {
     // Also refresh when user returns to the tab/window
     const handleVisibilityChange = () => {
       if (!document.hidden && isAuthenticated) {
-        console.log("User returned to marketplace, refreshing votes...");
         refreshVotes();
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       clearInterval(refreshInterval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [isAuthenticated, memes]);
 
@@ -236,26 +309,14 @@ const Marketplace = () => {
         const res = await backendService.getCurrentLeaderboard(3);
         const entries = ensureArray(res?.top_memes);
         const arr = entries.map((e) => {
-          // Candid Option<T> often comes as [] or [T]
-          const pm = Array.isArray(e?.meme_data)
-            ? e.meme_data[0]
-            : e?.meme_data;
+          const pm = Array.isArray(e?.meme_data) ? e.meme_data[0] : e?.meme_data;
           if (pm) {
             return normalizeMeme(pm, { rank: e?.rank, votes: e?.votes });
           }
-          // Fallback when meme_data missing
-          return {
-            id: String(e?.meme_id ?? Date.now()),
-            title: `Meme #${e?.meme_id ?? "?"}`,
-            prompt: "",
-            creator: "anonymous",
-            image_url: "",
-            votes:
-              Number(e?.votes?.upvotes ?? 0) - Number(e?.votes?.downvotes ?? 0),
-            created_at: Date.now(),
-            rank: e?.rank,
-            __raw: e,
-          };
+          return normalizeMeme(
+            { id: e?.meme_id, owner: e?.owner, meme_data: e?.meme_data },
+            { rank: e?.rank, votes: e?.votes }
+          );
         });
         if (!cancelled) setTopMemes(arr);
       } catch (e) {
@@ -274,34 +335,64 @@ const Marketplace = () => {
     setLoadingList(true);
     setErrorMsg("");
     try {
-      // Fetch all memes to ensure complete display
       let arr = [];
+      let fetchSource = "";
+
       try {
-        // First try to get all memes (this ensures we get everything)
+        // Try to get all memes first
         const rawAll = await backendService.getAllMemes();
         arr = ensureArray(rawAll).map((m) => normalizeMeme(m));
-        console.log(`Fetched ${arr.length} memes from getAllMemes`);
+        fetchSource = "getAllMemes";
+        // console.log(`Fetched ${arr.length} memes from getAllMemes`, stripBigInts(rawAll));
       } catch (err) {
         console.warn("getAllMemes failed, trying getMarketplaceMemes:", err);
         try {
           const rawMarketplace = await backendService.getMarketplaceMemes();
           arr = ensureArray(rawMarketplace).map((m) => normalizeMeme(m));
-          console.log(`Fetched ${arr.length} memes from getMarketplaceMemes`);
+          fetchSource = "getMarketplaceMemes";
         } catch (err2) {
-          console.warn("getMarketplaceMemes also failed, trying getUserMemes:", err2);
-          const rawUser = await backendService.getUserMemes();
-          arr = ensureArray(rawUser).map((m) => normalizeMeme(m));
-          console.log(`Fetched ${arr.length} memes from getUserMemes`);
+          console.warn("getMarketplaceMemes failed, trying getUserMemes:", err2);
+          try {
+            const rawUser = await backendService.getUserMemes();
+            arr = ensureArray(rawUser).map((m) => normalizeMeme(m));
+            fetchSource = "getUserMemes";
+          } catch (err3) {
+            console.warn("All meme fetching methods failed:", err3);
+            // Sample data fallback
+            arr = [
+              normalizeMeme({
+                id: "sample-1",
+                title: "Sample Meme 1",
+                prompt: "A funny sample meme",
+                owner: "SampleUser",
+                image_url: "",
+                votes: 5,
+                views: 10,
+                created_at: Date.now(),
+                emoji: "😂",
+              }),
+              normalizeMeme({
+                id: "sample-2",
+                title: "Sample Meme 2",
+                prompt: "Another sample meme",
+                owner: "SampleUser2",
+                image_url: "",
+                votes: 3,
+                views: 8,
+                created_at: Date.now() - 86400000,
+                emoji: "🤣",
+              }),
+            ];
+            fetchSource = "sample-data";
+          }
         }
       }
 
-      // Sort by creation date (newest first) and then by votes
+      // Sort: newest first, tie-breaker by votes (both numeric now)
       arr.sort((a, b) => {
-        // Primary sort: newest first
-        const dateDiff = b.created_at - a.created_at;
+        const dateDiff = a.created_at === b.created_at ? 0 : b.created_at - a.created_at;
         if (dateDiff !== 0) return dateDiff;
-        // Secondary sort: highest votes first
-        return b.votes - a.votes;
+        return (b.votes || 0) - (a.votes || 0);
       });
 
       // Client-side paging
@@ -309,42 +400,43 @@ const Marketplace = () => {
       const slice = arr.slice(start, start + PAGE_SIZE);
 
       setTotal(arr.length);
-      setMemes((prev) =>
-        page === 1 || reset ? slice : [...ensureArray(prev), ...slice]
-      );
+      setMemes((prev) => (page === 1 || reset ? slice : [...ensureArray(prev), ...slice]));
 
-      console.log(`Displaying ${slice.length} memes (page ${page}/${Math.ceil(arr.length / PAGE_SIZE)})`);
-
-      // Immediately refresh vote counts for newly loaded memes
+      // Refresh vote counts for newly loaded memes
       if (slice.length > 0) {
         setTimeout(async () => {
           try {
-            const currentMemeIds = slice.map(m => m.id);
+            const currentMemeIds = slice.map((m) => m.id);
             const updatedMemes = await Promise.all(
               currentMemeIds.map(async (memeId) => {
                 try {
-                  const memeIdBigInt = BigInt(memeId);
-                  const voteData = await backendService.getMemeVotes(memeIdBigInt);
+                  const bid = toOptionalBigInt(String(memeId));
+                  if (!bid) return slice.find((m) => m.id === memeId) ;
+                  const voteData = await backendService.getMemeVotes(bid);
                   if (voteData) {
                     return {
-                      ...slice.find(m => m.id === memeId),
-                      votes: voteData.upvotes - voteData.downvotes
+                      ...(slice.find((m) => m.id === memeId)),
+                      votes:
+                        safeBigIntToNumber(voteData.upvotes) -
+                        safeBigIntToNumber(voteData.downvotes),
                     };
                   }
-                  return slice.find(m => m.id === memeId);
+                  return slice.find((m) => m.id === memeId);
                 } catch (error) {
                   console.warn(`Failed to get initial votes for meme ${memeId}:`, error);
-                  return slice.find(m => m.id === memeId);
+                  return slice.find((m) => m.id === memeId) ;
                 }
               })
             );
             setMemes((prev) =>
-              page === 1 || reset ? updatedMemes : [...ensureArray(prev).slice(0, -slice.length), ...updatedMemes]
+              page === 1 || reset
+                ? updatedMemes
+                : [...ensureArray(prev).slice(0, -slice.length), ...updatedMemes]
             );
           } catch (error) {
             console.warn("Failed to refresh initial vote counts:", error);
           }
-        }, 500); // Small delay to ensure state is updated
+        }, 500);
       }
     } catch (e) {
       console.error("Failed to load memes:", e);
@@ -355,13 +447,54 @@ const Marketplace = () => {
   }
 
   useEffect(() => {
-    fetchList({ reset: page === 1 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchList({ reset: page === 1 });
   }, [page, searchQuery, sort]);
+
+  // Enhanced ownership detection helper
+  const checkMemeOwnership = (meme) => {
+    if (!principal || !meme) return false;
+
+    // Method 1: Check meme.owner
+    if (meme.owner) {
+      const ownerText =
+        typeof meme.owner === "object" && meme.owner.toText
+          ? meme.owner.toText()
+          : String(meme.owner).trim();
+      if (ownerText && principal === ownerText) return true;
+    }
+
+    // Method 2: Check meme.creator (already string-shortened in normalizeMeme)
+    if (meme.creator) {
+      const creatorText = String(meme.creator).trim();
+      if (creatorText && principal === creatorText) return true;
+    }
+
+    // Method 3: Check raw meme data
+    if (meme.__raw) {
+      const raw = meme.__raw;
+      if (raw.owner) {
+        const rawOwnerText =
+          typeof raw.owner === "object" && raw.owner.toText
+            ? raw.owner.toText()
+            : String(raw.owner).trim();
+        if (rawOwnerText && principal === rawOwnerText) return true;
+      }
+      if (raw.meme_data?.owner) {
+        const memeDataOwnerText =
+          typeof raw.meme_data.owner === "object" && raw.meme_data.owner.toText
+            ? raw.meme_data.owner.toText()
+            : String(raw.meme_data.owner).trim();
+        if (memeDataOwnerText && principal === memeDataOwnerText) return true;
+      }
+    }
+
+    return false;
+  };
 
   // Vote
   const votingLock = useRef(false);
-  const handleVote = async (memeId, currentVotes = 0, memeOwner = null) => {
+  const handleVote = async (memeId, currentVotes = 0, memeOwner= null) => {
     if (!isAuthenticated) {
       toast({
         title: "Authentication Required",
@@ -372,30 +505,26 @@ const Marketplace = () => {
       return;
     }
 
-    // Prevent self-voting: check if current user is the owner
-    if (memeOwner && principal) {
-      // Handle both Principal objects and string representations
-      const ownerText = typeof memeOwner === 'object' && memeOwner.toText
-        ? memeOwner.toText()
-        : String(memeOwner);
-      if (ownerText === principal) {
-        toast({
-          title: "Cannot Vote",
-          description: "You cannot vote on your own memes",
-          variant: "destructive",
-        });
-        return;
-      }
+    // Enhanced self-voting prevention
+    const isOwnMeme = checkMemeOwnership({ owner: memeOwner, creator: memeOwner });
+    if (isOwnMeme) {
+      toast({
+        title: "Cannot Vote on Own Meme",
+        description:
+          "You cannot vote on your own memes to maintain fair competition",
+        variant: "destructive",
+      });
+      return;
     }
 
     if (votingLock.current) return;
     votingLock.current = true;
 
-    // optimistic update (use normalized id everywhere)
+    // optimistic update
     setMemes((prev) =>
       ensureArray(prev).map((m) =>
         String(m.id) === String(memeId)
-          ? { ...m, votes: Number(m.votes || 0) + 1 }
+          ? { ...m, votes: safeBigIntToNumber(m.votes || 0) + 1 }
           : m
       )
     );
@@ -404,13 +533,19 @@ const Marketplace = () => {
     setTopMemes((prev) =>
       ensureArray(prev).map((m) =>
         String(m.id) === String(memeId)
-          ? { ...m, votes: Number(m.votes || 0) + 1 }
+          ? { ...m, votes: safeBigIntToNumber(m.votes || 0) + 1 }
           : m
       )
     );
 
     try {
-      await backendService.voteMeme(BigInt(memeId), "Upvote");
+      const bid = toOptionalBigInt(String(memeId));
+      if (!bid) {
+        // Non-numeric/sample ids cannot be voted via backend
+        throw new Error("Invalid meme id (non-numeric) for voting");
+      }
+
+      await backendService.voteMeme(bid, "Upvote");
       toast({
         title: "Voted! 🚀",
         description: "Your vote has been recorded successfully",
@@ -418,32 +553,24 @@ const Marketplace = () => {
 
       // Refresh the leaderboard after successful vote
       setTimeout(() => {
-        // Refresh top memes
-        backendService.getCurrentLeaderboard(3).then((res) => {
-          const entries = ensureArray(res?.top_memes);
-          const arr = entries.map((e) => {
-            const pm = Array.isArray(e?.meme_data)
-              ? e.meme_data[0]
-              : e?.meme_data;
-            if (pm) {
-              return normalizeMeme(pm, { rank: e?.rank, votes: e?.votes });
-            }
-            return {
-              id: String(e?.meme_id ?? Date.now()),
-              title: `Meme #${e?.meme_id ?? "?"}`,
-              prompt: "",
-              creator: "anonymous",
-              image_url: "",
-              votes: Number(e?.votes?.upvotes ?? 0) - Number(e?.votes?.downvotes ?? 0),
-              created_at: Date.now(),
-              rank: e?.rank,
-              __raw: e,
-            };
-          });
-          setTopMemes(arr);
-        }).catch((err) => console.warn("Failed to refresh leaderboard:", err));
+        backendService
+          .getCurrentLeaderboard(3)
+          .then((res) => {
+            const entries = ensureArray(res?.top_memes);
+            const arr = entries.map((e) => {
+              const pm = Array.isArray(e?.meme_data) ? e.meme_data[0] : e?.meme_data;
+              if (pm) {
+                return normalizeMeme(pm, { rank: e?.rank, votes: e?.votes });
+              }
+              return normalizeMeme(
+                { id: e?.meme_id, owner: e?.owner, meme_data: e?.meme_data },
+                { rank: e?.rank, votes: e?.votes }
+              );
+            });
+            setTopMemes(arr);
+          })
+          .catch((err) => console.warn("Failed to refresh leaderboard:", err));
       }, 1000);
-
     } catch (error) {
       console.error("Voting failed:", error);
 
@@ -454,18 +581,17 @@ const Marketplace = () => {
         )
       );
 
-      // Also revert top memes update
       setTopMemes((prev) =>
         ensureArray(prev).map((m) =>
           String(m.id) === String(memeId) ? { ...m, votes: currentVotes } : m
         )
       );
 
-      // Provide user-friendly error messages based on backend response
+      // Provide user-friendly error messages
       let errorTitle = "Voting Failed";
       let errorDescription = "Failed to vote on meme";
 
-      if (error.message) {
+      if (error?.message) {
         if (error.message.includes("Cannot vote on your own meme")) {
           errorTitle = "Cannot Vote";
           errorDescription = "You cannot vote on your own memes";
@@ -506,44 +632,38 @@ const Marketplace = () => {
       const leaderboardRes = await backendService.getCurrentLeaderboard(3);
       const entries = ensureArray(leaderboardRes?.top_memes);
       const updatedTopMemes = entries.map((e) => {
-        const pm = Array.isArray(e?.meme_data)
-          ? e.meme_data[0]
-          : e?.meme_data;
+        const pm = Array.isArray(e?.meme_data) ? e.meme_data[0] : e?.meme_data;
         if (pm) {
           return normalizeMeme(pm, { rank: e?.rank, votes: e?.votes });
         }
-        return {
-          id: String(e?.meme_id ?? Date.now()),
-          title: `Meme #${e?.meme_id ?? "?"}`,
-          prompt: "",
-          creator: "anonymous",
-          image_url: "",
-          votes: Number(e?.votes?.upvotes ?? 0) - Number(e?.votes?.downvotes ?? 0),
-          created_at: Date.now(),
-          rank: e?.rank,
-          __raw: e,
-        };
+        return normalizeMeme(
+          { id: e?.meme_id, owner: e?.owner, meme_data: e?.meme_data },
+          { rank: e?.rank, votes: e?.votes }
+        );
       });
       setTopMemes(updatedTopMemes);
 
       // Refresh all current memes with updated vote counts
       if (memes.length > 0) {
-        const currentMemeIds = memes.map(m => m.id);
+        const currentMemeIds = memes.map((m) => m.id);
         const updatedMemes = await Promise.all(
           currentMemeIds.map(async (memeId) => {
             try {
-              const memeIdBigInt = BigInt(memeId);
-              const voteData = await backendService.getMemeVotes(memeIdBigInt);
+              const bid = toOptionalBigInt(String(memeId));
+              if (!bid) return memes.find((m) => m.id === memeId) ;
+              const voteData = await backendService.getMemeVotes(bid);
               if (voteData) {
                 return {
-                  ...memes.find(m => m.id === memeId),
-                  votes: voteData.upvotes - voteData.downvotes
+                  ...(memes.find((m) => m.id === memeId) ),
+                  votes:
+                    safeBigIntToNumber(voteData.upvotes) -
+                    safeBigIntToNumber(voteData.downvotes),
                 };
               }
-              return memes.find(m => m.id === memeId);
+              return memes.find((m) => m.id === memeId);
             } catch (error) {
               console.warn(`Failed to refresh votes for meme ${memeId}:`, error);
-              return memes.find(m => m.id === memeId);
+              return memes.find((m) => m.id === memeId) ;
             }
           })
         );
@@ -563,8 +683,6 @@ const Marketplace = () => {
       });
     }
   };
-
-
 
   const canLoadMore = ensureArray(memes).length < total;
 
@@ -604,10 +722,7 @@ const Marketplace = () => {
                     <ArrowUp className="w-4 h-4 mr-2" />
                     Refresh Votes
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate("/portfolio")}
-                  >
+                  <Button variant="outline" onClick={() => navigate("/portfolio")}>
                     <User className="w-4 h-4 mr-2" />
                     My Portfolio
                   </Button>
@@ -616,7 +731,7 @@ const Marketplace = () => {
                     Create Meme
                   </Button>
                   <div className="text-sm text-muted-foreground hidden sm:block">
-                    {principal?.slice(0, 8)}...
+                    {principal ? `${principal.slice(0, 8)}...` : "Not logged in"}
                   </div>
                 </>
               ) : (
@@ -668,7 +783,6 @@ const Marketplace = () => {
           </Button>
         </div>
 
-
         {/* Top 3 Memes Section */}
         <Card className="mb-8 bg-gradient-glow border-primary/30">
           <CardHeader>
@@ -698,38 +812,40 @@ const Marketplace = () => {
                         <img
                           src={meme.image_url}
                           alt={meme.title}
-                          className="w-full h-32 object-cover rounded-lg mb-4"
+                          className="w-full h-auto object-contain max-h-32 rounded-lg mb-4"
+                          loading="lazy"
                         />
                       ) : (
-                        <div className="text-6xl mb-4">{meme.emoji}</div>
+                        <div className="text-6xl mb-4">{meme.emoji || "🖼️"}</div>
                       )}
                       <h3 className="font-bold text-lg mb-2">{meme.title}</h3>
                       <p className="text-sm text-muted-foreground mb-4">
                         by {meme.creator}
+                        {checkMemeOwnership(meme) && (
+                          <span className="ml-2 text-xs text-orange-600 font-medium">
+                            (You)
+                          </span>
+                        )}
                       </p>
                       <div className="flex items-center justify-center gap-2">
                         <Button
                           size="sm"
                           variant={isAuthenticated ? "outline" : "ghost"}
                           onClick={() => handleVote(meme.id, meme.votes, meme.creator)}
-                          disabled={!isAuthenticated || (meme.creator && principal && String(meme.creator) === principal)}
+                          disabled={!isAuthenticated || checkMemeOwnership(meme)}
                           className={
-                            !isAuthenticated || (meme.creator && principal && String(meme.creator) === principal)
+                            !isAuthenticated || checkMemeOwnership(meme)
                               ? "opacity-50 cursor-not-allowed"
                               : ""
                           }
                         >
                           <ArrowUp className="w-4 h-4 mr-1" />
-                          {meme.creator && principal && String(meme.creator) === principal ? "Your Meme" : meme.votes}
+                          {checkMemeOwnership(meme) ? "Your Meme" : meme.votes}
                           {!isAuthenticated && (
-                            <span className="ml-1 text-xs">
-                              (Login to vote)
-                            </span>
+                            <span className="ml-1 text-xs">(Login to vote)</span>
                           )}
-                          {meme.creator && principal && String(meme.creator) === principal && (
-                            <span className="ml-1 text-xs">
-                              (Cannot vote)
-                            </span>
+                          {checkMemeOwnership(meme) && (
+                            <span className="ml-1 text-xs">(Cannot vote)</span>
                           )}
                         </Button>
                       </div>
@@ -749,13 +865,12 @@ const Marketplace = () => {
               All Memes
             </h2>
             <div className="flex items-center gap-4">
-              {searchQuery && (
+              {searchQuery ? (
                 <p className="text-sm text-muted-foreground">
                   Found {ensureArray(filteredMemes).length} of {total} meme
                   {ensureArray(filteredMemes).length !== 1 ? "s" : ""}
                 </p>
-              )}
-              {!searchQuery && (
+              ) : (
                 <p className="text-sm text-muted-foreground">
                   {total} meme{total !== 1 ? "s" : ""} available
                 </p>
@@ -770,9 +885,7 @@ const Marketplace = () => {
               <Search className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
               <h3 className="text-lg font-medium mb-2">No memes found</h3>
               <p className="text-muted-foreground mb-4">
-                {searchQuery
-                  ? `No results for "${searchQuery}"`
-                  : "No memes available"}
+                {searchQuery ? `No results for "${searchQuery}"` : "No memes available"}
               </p>
               {searchQuery && (
                 <Button variant="outline" onClick={() => setSearchQuery("")}>
@@ -787,7 +900,9 @@ const Marketplace = () => {
               <MemeCard
                 key={meme.id}
                 meme={meme}
-                onVote={(id, votes) => handleVote(id, votes, meme.creator)}
+                onVote={(id, votes) =>
+                  handleVote(id, votes, meme.creator)
+                }
                 isAuthenticated={isAuthenticated}
                 currentUserPrincipal={principal}
               />
@@ -798,11 +913,7 @@ const Marketplace = () => {
         {/* Load More */}
         {ensureArray(filteredMemes).length > 0 && canLoadMore && (
           <div className="text-center mt-12">
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => setPage((p) => p + 1)}
-            >
+            <Button variant="outline" size="lg" onClick={() => setPage((p) => p + 1)}>
               <Sparkles className="w-4 h-4 mr-2" />
               Load More Memes
             </Button>
@@ -813,9 +924,7 @@ const Marketplace = () => {
         <Card className="mt-12 bg-gradient-card border-primary/30">
           <CardContent className="text-center py-8">
             <Zap className="w-12 h-12 mx-auto mb-4 text-primary" />
-            <h3 className="text-2xl font-bold mb-2">
-              Ready to Create Your Own?
-            </h3>
+            <h3 className="text-2xl font-bold mb-2">Ready to Create Your Own?</h3>
             <p className="text-muted-foreground mb-6">
               Join the community and start creating viral memes that earn votes
             </p>

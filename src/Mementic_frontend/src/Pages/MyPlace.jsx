@@ -22,7 +22,6 @@ import {
 } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { useMemeGeneration } from "../hooks/useMemeGeneration";
-import { BackendTest } from "../components/BackendTest";
 import backendService from "../services/backendService";
 
 const MyPlace = () => {
@@ -175,26 +174,6 @@ const MyPlace = () => {
     }
   };
 
-  const testWorkerConnection = async () => {
-    try {
-      const testUrl = "https://plain-night-ff62.h28177922.workers.dev/generate_meme?prompt=test";
-      console.log("Testing worker connection:", testUrl);
-      const response = await fetch(testUrl);
-      const text = await response.text();
-      console.log("Worker test response:", text);
-      toast({
-        title: "Worker Test",
-        description: `Response: ${text.substring(0, 100)}...`,
-      });
-    } catch (error) {
-      console.error("Worker test failed:", error);
-      toast({
-        title: "Worker Test Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
 
   // Prepare a cache-busted src so new images always show fresh
   const imageSrc = (() => {
@@ -306,34 +285,24 @@ const MyPlace = () => {
                     )
                   )}
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    className="flex-1"
-                    size="lg"
-                    onClick={handleGenerate}
-                    disabled={!canGenerate || !prompt.trim()}
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        Generate Meme with AI
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={testWorkerConnection}
-                    title="Test connection to the meme generation worker"
-                  >
-                    Test Worker
-                  </Button>
-                </div>
+                <Button
+                  className="w-full"
+                  size="lg"
+                  onClick={handleGenerate}
+                  disabled={!canGenerate || !prompt.trim()}
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Generate Meme with AI
+                    </>
+                  )}
+                </Button>
               </CardContent>
             </Card>
           </div>
@@ -486,10 +455,6 @@ const MyPlace = () => {
           </div>
         </div>
 
-        {/* Backend Integration Test */}
-        <div className="mt-8">
-          <BackendTest />
-        </div>
       </div>
 
       {/* Lightbox / Enlarged Preview with Details */}
@@ -520,19 +485,6 @@ const MyPlace = () => {
               </div>
               <div className="md:col-span-2 bg-card p-4 space-y-3 max-h-[80vh] overflow-auto">
                 <h3 className="text-lg font-semibold">Image Details</h3>
-                {generatedMeme.image_url && (
-                  <div className="text-sm">
-                    <span className="font-medium">Image URL: </span>
-                    <a
-                      href={generatedMeme.image_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary hover:underline break-all"
-                    >
-                      {generatedMeme.image_url}
-                    </a>
-                  </div>
-                )}
                 {generatedMeme.metadata?.processing_time != null && (
                   <div className="text-sm">
                     <span className="font-medium">Processing Time: </span>
