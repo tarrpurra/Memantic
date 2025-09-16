@@ -47,18 +47,30 @@ class BackendService {
           getIdentity: () => ({ getPrincipal: () => ({ toText: () => "2vxsx-fae" }) }),
         };
       } else {
-        // Create auth client normally
+        // Create auth client normally - allow it to restore identity from storage
         this.authClient = await AuthClient.create({
-          idleOptions: { disableDefaultIdleCallback: true },
+          idleOptions: {
+            disableIdle: true,
+            disableDefaultIdleCallback: true
+          },
         });
       }
 
-      // Setup anonymous agent first
-      await this._setupAnonymousAgent();
+      // Check if user is already authenticated (restored from storage)
+      if (isStorageAvailable) {
+        const isAlreadyAuth = await this.authClient.isAuthenticated();
+        console.log("Checking for stored authentication:", isAlreadyAuth);
 
-      // Upgrade to authenticated if user is logged in (only if storage is available)
-      if (isStorageAvailable && await this.authClient.isAuthenticated()) {
-        await this._setupAuthenticatedAgent();
+        if (isAlreadyAuth) {
+          console.log("Found stored authentication, setting up authenticated agent");
+          await this._setupAuthenticatedAgent();
+        } else {
+          console.log("No stored authentication found, setting up anonymous agent");
+          await this._setupAnonymousAgent();
+        }
+      } else {
+        console.log("Storage not available, setting up anonymous agent");
+        await this._setupAnonymousAgent();
       }
 
       this.initialized = true;
@@ -173,7 +185,15 @@ class BackendService {
 
     console.log("Setting up authenticated agent");
     const identity = this.authClient.getIdentity();
-    console.log("Identity principal:", identity.getPrincipal().toString());
+    const principalText = identity.getPrincipal().toText();
+    console.log("Identity principal:", principalText);
+
+    // Verify this is not an anonymous identity
+    if (principalText === "2vxsx-fae") {
+      console.log("Anonymous identity detected, not setting up authenticated agent");
+      await this._setupAnonymousAgent();
+      return;
+    }
 
     this.agent = await this._createAgent(identity);
 
@@ -213,14 +233,30 @@ class BackendService {
   /* ============ AUTHENTICATION METHODS ============ */
 
   /**
-    * Login with Internet Identity
-    */
+     * Login with Internet Identity
+     */
   async login() {
     await this.ensureReady();
 
     // Check if storage is available
     if (!this._checkStorageAvailability()) {
       throw new Error("Storage not available. Please disable incognito/private browsing mode to login.");
+    }
+
+    // Use existing AuthClient or create new one for login
+    if (!this.authClient) {
+      try {
+        this.authClient = await AuthClient.create({
+          idleOptions: {
+            disableIdle: true,
+            disableDefaultIdleCallback: true
+          },
+        });
+        console.log("Created AuthClient for login");
+      } catch (error) {
+        console.error("Failed to create AuthClient:", error);
+        throw error;
+      }
     }
 
     return new Promise((resolve, reject) => {
@@ -251,11 +287,41 @@ class BackendService {
   }
 
   /**
-   * Logout user
-   */
+    * Logout user
+    */
   async logout() {
     await this.ensureReady();
-    await this.authClient.logout();
+
+    // Clear the stored identity and invalidate the current session
+    if (this.authClient) {
+      await this.authClient.logout();
+
+      // Force clear any stored identity data
+      try {
+        // Clear localStorage entries related to Internet Identity
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.includes('internet_identity') || key.includes('authClient') || key.includes('delegation'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+
+        // Clear sessionStorage as well
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          if (key && (key.includes('internet_identity') || key.includes('authClient') || key.includes('delegation'))) {
+            sessionStorage.removeItem(key);
+          }
+        }
+
+        console.log("Cleared stored authentication data");
+      } catch (error) {
+        console.warn("Failed to clear stored auth data:", error);
+      }
+    }
+
     await this._setupAnonymousAgent();
     this.isAuthenticated = false;
     return true;

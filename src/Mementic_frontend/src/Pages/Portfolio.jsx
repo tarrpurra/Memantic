@@ -85,6 +85,7 @@ const Portfolio = () => {
   const [loading, setLoading] = useState(true);
   const [nfts, setNfts] = useState([]);
   const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
 
   // Redirect if not authenticated
@@ -242,6 +243,55 @@ const Portfolio = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
+
+  // Periodic refresh of vote counts and stats
+  useEffect(() => {
+    if (!isAuthenticated || loading) return;
+
+    const refreshPortfolio = async () => {
+      if (refreshing) return; // Prevent multiple simultaneous refreshes
+
+      setRefreshing(true);
+      try {
+        // Refresh vote counts for existing memes
+        if (nfts.length > 0) {
+          const updatedNfts = await Promise.all(
+            nfts.map(async (nft) => {
+              try {
+                const memeIdBigInt = BigInt(nft.id);
+                const voteData = await backendService.getMemeVotes(memeIdBigInt);
+
+                if (voteData) {
+                  const newVotes = safeBigIntToNumber(voteData.upvotes) - safeBigIntToNumber(voteData.downvotes);
+                  return { ...nft, votes: newVotes };
+                }
+                return nft;
+              } catch (error) {
+                console.warn(`Failed to refresh votes for meme ${nft.id}:`, error);
+                return nft;
+              }
+            })
+          );
+          setNfts(updatedNfts);
+        }
+      } catch (error) {
+        console.warn("Failed to refresh portfolio data:", error);
+      } finally {
+        setRefreshing(false);
+      }
+    };
+
+    // Initial refresh after loading
+    const initialRefreshTimer = setTimeout(refreshPortfolio, 2000);
+
+    // Set up periodic refresh every 30 seconds
+    const refreshInterval = setInterval(refreshPortfolio, 30000);
+
+    return () => {
+      clearTimeout(initialRefreshTimer);
+      clearInterval(refreshInterval);
+    };
+  }, [isAuthenticated, loading, nfts.length, refreshing]);
 
   const totalEarnings = useMemo(
     () => nfts.reduce((sum, x) => sum + (x.earnedIcp || 0), 0),
@@ -411,6 +461,38 @@ const Portfolio = () => {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={async () => {
+                  setRefreshing(true);
+                  try {
+                    await fetchData();
+                    toast({
+                      title: "Portfolio Refreshed! 🔄",
+                      description: "Your vote counts and stats have been updated.",
+                    });
+                  } catch (error) {
+                    toast({
+                      title: "Refresh Failed",
+                      description: "Could not refresh portfolio data.",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setRefreshing(false);
+                  }
+                }}
+                disabled={refreshing || loading}
+                title="Refresh vote counts and stats"
+              >
+                {refreshing ? (
+                  <div className="w-4 h-4 border border-current border-t-transparent rounded-full animate-spin mr-2" />
+                ) : (
+                  <ArrowUp className="w-4 h-4 mr-2" />
+                )}
+                <span className="hidden sm:inline">Refresh</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleLogout}
                 className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 hover:border-red-300"
               >
@@ -572,8 +654,8 @@ const Portfolio = () => {
                           {nft.title}
                         </h3>
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Crown className="w-4 h-4" />
-                          <span>{nft.votes} likes</span>
+                          <Crown className="w-4 h-4 text-red-500" />
+                          <span className="font-medium text-red-600">{nft.votes} likes</span>
                         </div>
                       </div>
                     </div>
@@ -582,7 +664,10 @@ const Portfolio = () => {
                     <div className="space-y-2 text-sm">
                        <div className="flex justify-between">
                          <span className="text-muted-foreground">❤️ Likes:</span>
-                         <span className="font-medium">{nft.votes}</span>
+                         <span className="font-bold text-red-600 flex items-center gap-1">
+                           <Crown className="w-3 h-3" />
+                           {nft.votes.toLocaleString()}
+                         </span>
                        </div>
                        <div className="flex justify-between">
                          <span className="text-muted-foreground">Views:</span>
@@ -729,8 +814,8 @@ const Portfolio = () => {
                           {nft.title}
                         </h3>
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Crown className="w-4 h-4" />
-                          <span>{nft.votes} likes</span>
+                          <Crown className="w-4 h-4 text-red-500" />
+                          <span className="font-medium text-red-600">{nft.votes} likes</span>
                         </div>
                       </div>
                     </div>
@@ -739,7 +824,10 @@ const Portfolio = () => {
                     <div className="space-y-2 text-sm">
                        <div className="flex justify-between">
                          <span className="text-muted-foreground">❤️ Likes:</span>
-                         <span className="font-medium">{nft.votes}</span>
+                         <span className="font-bold text-red-600 flex items-center gap-1">
+                           <Crown className="w-3 h-3" />
+                           {nft.votes.toLocaleString()}
+                         </span>
                        </div>
                        <div className="flex justify-between">
                          <span className="text-muted-foreground">Views:</span>

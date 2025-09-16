@@ -21,7 +21,7 @@ use std::cell::RefCell;
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 // ---------- Constants ----------
-const OUTCALL_CYCLES: u128 = 10_000_000_000; // cycles per outcall
+const OUTCALL_CYCLES: u128 = 6_000_000_000; // cycles per outcall
 const MEME_WORKER_URL: &str = "https://plain-night-ff62.h28177922.workers.dev/generate_meme";
 
 // ---------- Storable wrapper for Principal ----------

@@ -24,7 +24,12 @@ export const getIdentityProvider = () => {
     return import.meta.env.VITE_INTERNET_IDENTITY_HOST;
   }
 
-  // Use mainnet II for local development (recommended)
+  // For local development, use local Internet Identity canister
+  if (isDevMode()) {
+    return "http://127.0.0.1:4943/?canisterId=rdmx6-jaaaa-aaaaa-aaadq-cai";
+  }
+
+  // Use mainnet II for production
   return "https://identity.ic0.app";
 };
 

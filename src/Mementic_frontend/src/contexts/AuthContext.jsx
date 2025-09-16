@@ -25,32 +25,36 @@ export const AuthProvider = ({ children }) => {
         setIsLoading(true);
         console.log("Initializing authentication...");
 
-        // Initialize backend service (for API calls only)
+        // Initialize backend service (this will create AuthClient and check for stored identity)
         await backendService.initialize();
 
-        // Check authentication state directly from AuthClient
-        if (backendService.authClient) {
-          const isAuth = await backendService.authClient.isAuthenticated();
-          console.log("AuthClient.isAuthenticated():", isAuth);
+        // Check authentication state from backend service
+        const isAuth = backendService.isUserAuthenticated();
+        console.log("Backend service authentication status:", isAuth);
 
-          if (isAuth) {
-            const identity = backendService.authClient.getIdentity();
-            const principalText = identity.getPrincipal().toText();
+        if (isAuth && backendService.authClient) {
+          const identity = backendService.authClient.getIdentity();
+          const principalText = identity.getPrincipal().toText();
 
-            if (principalText !== "2vxsx-fae") {
-              console.log("User authenticated with principal:", principalText);
-              setIsAuthenticated(true);
-              setPrincipal(principalText);
-              await loadUserData();
-            } else {
-              console.log("Anonymous principal detected");
-            }
+          if (principalText !== "2vxsx-fae") {
+            console.log("User authenticated with principal:", principalText);
+            setIsAuthenticated(true);
+            setPrincipal(principalText);
+            await loadUserData();
           } else {
-            console.log("User not authenticated");
+            console.log("Anonymous principal detected, clearing authentication state");
+            setIsAuthenticated(false);
+            setPrincipal(null);
           }
+        } else {
+          console.log("User not authenticated or AuthClient not ready");
+          setIsAuthenticated(false);
+          setPrincipal(null);
         }
       } catch (error) {
         console.error("Failed to initialize authentication:", error);
+        setIsAuthenticated(false);
+        setPrincipal(null);
       } finally {
         setIsLoading(false);
       }
@@ -84,24 +88,38 @@ export const AuthProvider = ({ children }) => {
       if (success && backendService.authClient) {
         console.log("Login successful, setting authenticated state");
 
+        // Small delay to ensure authentication state is fully updated
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         // Get principal directly from AuthClient
         const identity = backendService.authClient.getIdentity();
         const principalText = identity.getPrincipal().toText();
 
-        if (principalText !== "2vxsx-fae") {
+        console.log("Identity retrieved:", identity);
+        console.log("Principal text:", principalText);
+
+        if (principalText && principalText !== "2vxsx-fae") {
           setIsAuthenticated(true);
           setPrincipal(principalText);
           console.log("Principal after login:", principalText);
           await loadUserData();
           return true;
         } else {
-          console.log("Login resulted in anonymous principal");
+          console.log("Login resulted in anonymous or invalid principal:", principalText);
+          setIsAuthenticated(false);
+          setPrincipal(null);
           return false;
         }
+      } else {
+        console.log("Login failed or AuthClient not available");
+        setIsAuthenticated(false);
+        setPrincipal(null);
+        return false;
       }
-      return false;
     } catch (error) {
       console.error("Login failed:", error);
+      setIsAuthenticated(false);
+      setPrincipal(null);
       throw error;
     } finally {
       setIsLoading(false);
@@ -112,14 +130,25 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       setIsLoading(true);
+      console.log("Starting logout process...");
+
       await backendService.logout();
+
+      // Force clear all authentication state
       setIsAuthenticated(false);
       setUser(null);
       setRemainingCalls(0);
       setPrincipal(null);
+
+      console.log("Logout completed successfully");
       return true; // Return success
     } catch (error) {
       console.error("Logout failed:", error);
+      // Even if logout fails, clear the local state
+      setIsAuthenticated(false);
+      setUser(null);
+      setRemainingCalls(0);
+      setPrincipal(null);
       return false; // Return failure
     } finally {
       setIsLoading(false);
@@ -154,6 +183,41 @@ export const AuthProvider = ({ children }) => {
     };
   };
 
+  // Force clear authentication data (for debugging/testing)
+  const forceClearAuth = async () => {
+    try {
+      console.log("Force clearing authentication data...");
+
+      // Clear localStorage
+      const localKeys = Object.keys(localStorage);
+      localKeys.forEach(key => {
+        if (key.includes('internet_identity') || key.includes('authClient') || key.includes('delegation')) {
+          localStorage.removeItem(key);
+        }
+      });
+
+      // Clear sessionStorage
+      const sessionKeys = Object.keys(sessionStorage);
+      sessionKeys.forEach(key => {
+        if (key.includes('internet_identity') || key.includes('authClient') || key.includes('delegation')) {
+          sessionStorage.removeItem(key);
+        }
+      });
+
+      // Reset state
+      setIsAuthenticated(false);
+      setUser(null);
+      setRemainingCalls(0);
+      setPrincipal(null);
+
+      console.log("Authentication data cleared");
+      return true;
+    } catch (error) {
+      console.error("Failed to clear auth data:", error);
+      return false;
+    }
+  };
+
   const value = {
     isAuthenticated,
     isLoading,
@@ -164,6 +228,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     refreshUserData,
     debugAuth,
+    forceClearAuth,
     backendService,
   };
 

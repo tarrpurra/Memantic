@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "../components/ui/Button";
 import {
   Card,
@@ -20,7 +20,7 @@ import {
 import { useToast } from "../hooks/use-toast";
 import backendService from "../services/backendService";
 
-export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPrincipal }) => {
+export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPrincipal, onVoteSuccess }) => {
   const [hasVoted, setHasVoted] = useState(false);
   const [hasStaked, setHasStaked] = useState(false);
   const [isOwnMeme, setIsOwnMeme] = useState(false);
@@ -95,38 +95,66 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
     return false;
   };
 
+  // Function to check and update vote status
+  const checkAndUpdateVoteStatus = useCallback(async () => {
+    if (!isAuthenticated || !memeId) {
+      setLoadingVoteStatus(false);
+      setHasVoted(false);
+      setIsOwnMeme(false);
+      return;
+    }
+
+    // Prevent multiple simultaneous calls
+    if (loadingVoteStatus) {
+      console.log("Vote status check already in progress, skipping");
+      return;
+    }
+
+    setLoadingVoteStatus(true);
+
+    try {
+      // Check ownership using enhanced method
+      const ownershipResult = checkOwnership();
+      setIsOwnMeme(ownershipResult);
+
+      // Only check vote status if it's not the user's own meme
+      if (!ownershipResult) {
+        // Convert string ID to BigInt for backend call
+        const memeIdBigInt = BigInt(memeId);
+
+        // Create a timeout promise
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Vote status check timed out')), 10000);
+        });
+
+        // Race the backend call against the timeout
+        const userVote = await Promise.race([
+          backendService.getUserVote(memeIdBigInt),
+          timeoutPromise
+        ]);
+
+        // userVote will be null/undefined if user hasn't voted, or a VoteRecord if they have
+        setHasVoted(!!userVote);
+        console.log(`Vote status for meme ${memeId}:`, !!userVote ? "voted" : "not voted");
+      } else {
+        setHasVoted(false);
+        console.log(`Meme ${memeId} is owned by user, cannot vote`);
+      }
+    } catch (error) {
+      console.error("Failed to check vote status:", error);
+      // Still check ownership even if vote check fails
+      const ownershipResult = checkOwnership();
+      setIsOwnMeme(ownershipResult);
+      setHasVoted(false);
+    } finally {
+      setLoadingVoteStatus(false);
+    }
+  }, [isAuthenticated, memeId, currentUserPrincipal]);
+
   // Check user's vote status and ownership on component mount
   useEffect(() => {
-    const checkVoteStatus = async () => {
-      if (!isAuthenticated || !memeId) return;
-
-      setLoadingVoteStatus(true);
-      try {
-        // Check ownership using enhanced method
-        const ownershipResult = checkOwnership();
-        setIsOwnMeme(ownershipResult);
-
-        // Only check vote status if it's not the user's own meme
-        if (!ownershipResult) {
-          // Convert string ID to BigInt for backend call
-          const memeIdBigInt = BigInt(memeId);
-          const userVote = await backendService.getUserVote(memeIdBigInt);
-          if (userVote) {
-            setHasVoted(true);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to check vote status:", error);
-        // Still check ownership even if vote check fails
-        const ownershipResult = checkOwnership();
-        setIsOwnMeme(ownershipResult);
-      } finally {
-        setLoadingVoteStatus(false);
-      }
-    };
-
-    checkVoteStatus();
-  }, [isAuthenticated, memeId, currentUserPrincipal, meme]);
+    checkAndUpdateVoteStatus();
+  }, [checkAndUpdateVoteStatus]);
 
   // Increment view count when component mounts
   useEffect(() => {
@@ -180,6 +208,7 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
 
     // Validate meme ID
     if (!memeId) {
+      console.log("Invalid meme ID:", memeId);
       toast({
         title: "Invalid Meme",
         description: "Cannot vote on this meme - invalid meme ID",
@@ -188,14 +217,29 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
       return;
     }
 
+    console.log("All checks passed, proceeding with vote");
+
     // Execute vote
     if (onVote) {
+      console.log("Calling onVote function");
       setIsVoting(true);
       try {
         // Get owner information for additional backend validation
         const owner = meme?.owner || meme?.creator;
+        console.log("Voting with params:", { memeId, votes, owner });
+
         await onVote(memeId, votes || 0, owner);
-        setHasVoted(true);
+        console.log("Vote successful, updating state");
+
+        // Re-check vote status after successful vote to update hasVoted state
+        await checkAndUpdateVoteStatus();
+
+        // Call optional success callback if provided
+        if (onVoteSuccess) {
+          onVoteSuccess(memeId);
+        }
+
+        console.log("Vote process completed successfully");
         // Success toast is handled by parent component (Marketplace)
       } catch (error) {
         console.error("Vote failed:", error);
@@ -207,11 +251,19 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
             description: "You cannot vote on your own memes",
             variant: "destructive",
           });
+        } else {
+          // Show generic error for other failures
+          toast({
+            title: "Vote Failed",
+            description: error?.message || "An error occurred while voting",
+            variant: "destructive",
+          });
         }
       } finally {
         setIsVoting(false);
       }
     } else {
+      console.log("onVote function not provided");
       toast({
         title: "Voting Unavailable",
         description: "Voting functionality is not available for this meme",
@@ -357,6 +409,17 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
           onClick={handleVote}
           className="flex-1"
           disabled={isOwnMeme || hasVoted || loadingVoteStatus || isVoting}
+          title={
+            isOwnMeme
+              ? "You cannot vote on your own memes"
+              : hasVoted
+              ? "You have already voted on this meme"
+              : loadingVoteStatus
+              ? "Checking vote status..."
+              : isVoting
+              ? "Voting in progress..."
+              : "Click to vote on this meme"
+          }
         >
           <Heart className={`h-4 w-4 mr-1 ${hasVoted ? "fill-current" : ""}`} />
           {isVoting ? (
@@ -365,15 +428,36 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
               Voting...
             </>
           ) : loadingVoteStatus ? (
-            "Loading..."
+            <>
+              <div className="animate-spin h-3 w-3 border border-current border-t-transparent rounded-full mr-1" />
+              Loading...
+            </>
           ) : isOwnMeme ? (
             "Your Meme"
           ) : hasVoted ? (
-            "Voted"
+            "Voted ✓"
           ) : (
             "Vote"
           )}
         </Button>
+
+        {/* Refresh Vote Status Button (only show if there might be an issue) */}
+        {(loadingVoteStatus || (!isOwnMeme && !hasVoted && isAuthenticated)) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              console.log("Manually refreshing vote status");
+              checkAndUpdateVoteStatus();
+            }}
+            className="px-2"
+            title="Refresh vote status"
+            disabled={loadingVoteStatus}
+          >
+            <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+          </Button>
+        )}
 
         {/* ICP Staking Button - Locks 10 ICP to support this meme and earn rewards */}
         <Button
