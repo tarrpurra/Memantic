@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Button } from "../components/ui/Button";
 import {
   Card,
@@ -6,13 +7,23 @@ import {
   CardTitle,
 } from "../components/ui/Card";
 import { useNavigate } from "react-router-dom";
-import { TrendingUp, Zap, Users } from "../components/ui/Icon";
 import { useAuth } from "../contexts/AuthContext";
-import { Sparkles } from "lucide-react";
+import { Sparkles, MessageSquare, Heart, RefreshCw, TrendingUp,Zap } from "lucide-react";
+import backendService from "../services/backendService";
 
 const Landing = () => {
   const navigate = useNavigate();
   const { principal, isLoading, isAuthenticated } = useAuth();
+
+  const [feedback, setFeedback] = useState([]);
+  const [feedbackStats, setFeedbackStats] = useState({ total: 0, approved: 0, returnRate: 0 });
+  const [loadingFeedback, setLoadingFeedback] = useState(true);
+  const [stats, setStats] = useState({
+    users: 0,
+    memes: 0,
+    reviews: 0
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
 
   const handleCreateClick = () => {
     if (!isAuthenticated) {
@@ -21,6 +32,144 @@ const Landing = () => {
       navigate("/myplace");
     }
   };
+
+  // Fetch feedback data
+  useEffect(() => {
+    const fetchFeedback = async () => {
+      try {
+        setLoadingFeedback(true);
+        console.log("Fetching real feedback data from backend...");
+
+        const [feedbackData, statsData] = await Promise.all([
+          backendService.getApprovedFeedback(50), // Get all approved feedback
+          backendService.getFeedbackStats()
+        ]);
+
+        console.log("Feedback data received:", {
+          feedbackCount: feedbackData?.length || 0,
+          feedbackStats: statsData
+        });
+
+        setFeedback(feedbackData || []);
+        setFeedbackStats({
+          total: statsData?.[0] || 0,
+          approved: statsData?.[1] || 0,
+          returnRate: Math.round(statsData?.[2] || 0)
+        });
+
+        console.log("Feedback state updated successfully");
+      } catch (error) {
+        console.error("Failed to fetch real feedback from backend:", error);
+        // Use fallback data
+        setFeedback([]);
+        setFeedbackStats({ total: 0, approved: 0, returnRate: 0 });
+      } finally {
+        setLoadingFeedback(false);
+      }
+    };
+
+    fetchFeedback();
+  }, []);
+
+  // Check for feedback submission trigger and refresh data
+  useEffect(() => {
+    const checkForFeedbackUpdate = () => {
+      const feedbackSubmitted = localStorage.getItem('feedbackSubmitted');
+      if (feedbackSubmitted) {
+        console.log("Feedback was submitted, refreshing landing page data...");
+        // Clear the flag
+        localStorage.removeItem('feedbackSubmitted');
+
+        // Refresh feedback data
+        const refreshData = async () => {
+          try {
+            setLoadingFeedback(true);
+            setLoadingStats(true);
+
+            const [feedbackData, statsData, totalUsers, totalMemes] = await Promise.all([
+              backendService.getApprovedFeedback(50),
+              backendService.getFeedbackStats(),
+              backendService.getTotalUsers(),
+              backendService.getTotalMemes()
+            ]);
+
+            setFeedback(feedbackData || []);
+            setFeedbackStats({
+              total: statsData?.[0] || 0,
+              approved: statsData?.[1] || 0,
+              returnRate: Math.round(statsData?.[2] || 0)
+            });
+
+            setStats({
+              users: Number(totalUsers) || 0,
+              memes: Number(totalMemes) || 0,
+              reviews: statsData?.[1] || 0
+            });
+
+            console.log("Landing page data refreshed after feedback submission");
+          } catch (error) {
+            console.error("Failed to refresh data after feedback submission:", error);
+          } finally {
+            setLoadingFeedback(false);
+            setLoadingStats(false);
+          }
+        };
+
+        refreshData();
+      }
+    };
+
+    // Check immediately and also listen for storage changes
+    checkForFeedbackUpdate();
+
+    const handleStorageChange = (e) => {
+      if (e.key === 'feedbackSubmitted') {
+        checkForFeedbackUpdate();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Fetch real statistics
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoadingStats(true);
+        console.log("Fetching real statistics from backend...");
+
+        const [totalUsers, totalMemes, feedbackStats] = await Promise.all([
+          backendService.getTotalUsers(),
+          backendService.getTotalMemes(),
+          backendService.getFeedbackStats()
+        ]);
+
+        console.log("Backend data received:", {
+          totalUsers: Number(totalUsers),
+          totalMemes: Number(totalMemes),
+          feedbackStats: feedbackStats
+        });
+
+        const newStats = {
+          users: Number(totalUsers) || 0,
+          memes: Number(totalMemes) || 0,
+          reviews: feedbackStats?.[1] || 0,
+          returnRate: Math.round(feedbackStats?.[2] || 0)
+        };
+
+        console.log("Setting stats to:", newStats);
+        setStats(newStats);
+      } catch (error) {
+        console.error("Failed to fetch real stats from backend:", error);
+        // Keep default values
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -110,46 +259,171 @@ const Landing = () => {
       </section>
       <section className="py-16 px-6">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold">Traction</h2>
-          <div className="mt-6 grid gap-6 sm:grid-cols-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-3xl font-bold">Traction</h2>
+            <button
+              onClick={async () => {
+                console.log("Manually refreshing real data...");
+                try {
+                  setLoadingStats(true);
+                  const [totalUsers, totalMemes, feedbackStats] = await Promise.all([
+                    backendService.getTotalUsers(),
+                    backendService.getTotalMemes(),
+                    backendService.getFeedbackStats()
+                  ]);
+
+                  console.log("Manual refresh - Backend data:", {
+                    totalUsers: Number(totalUsers),
+                    totalMemes: Number(totalMemes),
+                    feedbackStats: feedbackStats
+                  });
+
+                  setStats({
+                    users: Number(totalUsers) || 0,
+                    memes: Number(totalMemes) || 0,
+                    reviews: feedbackStats?.[1] || 0
+                  });
+
+                  console.log("Real data refreshed successfully");
+                } catch (error) {
+                  console.error("Manual refresh failed:", error);
+                } finally {
+                  setLoadingStats(false);
+                }
+              }}
+              className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+              disabled={loadingStats}
+            >
+              {loadingStats ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              Refresh Data
+            </button>
+          </div>
+          <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
             <div className="rounded-xl bg-card p-6 border border-border">
-              <div className="text-3xl font-black">15</div>
+              <div className="text-3xl font-black">
+                {loadingStats ? "..." : stats.memes}
+              </div>
               <div className="text-sm text-muted-foreground mt-1">
-                Active creators in beta
+                Memes created
               </div>
             </div>
-            <div className="rounded-xl bg-card p-6 border border-border">
-              <div className="text-3xl font-black">40</div>
-              <div className="text-sm text-muted-foreground mt-1">
-                Memes created (avg 2.7/user)
+            <div className="rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 p-6 border border-blue-200">
+              <div className="text-3xl font-black text-blue-700 dark:text-blue-300">
+                {loadingStats ? "..." : stats.reviews}
               </div>
-            </div>
-            <div className="rounded-xl bg-card p-6 border border-border">
-              <div className="text-3xl font-black">53%</div>
-              <div className="text-sm text-muted-foreground mt-1">
-                Next-day retention
+              <div className="text-sm text-blue-600 dark:text-blue-400 mt-1 font-medium">
+                User reviews
               </div>
             </div>
           </div>
 
-          <div className="mt-8 grid gap-6 sm:grid-cols-2">
-            <div className="rounded-2xl bg-card p-6 border border-border">
-              <p className="text-sm italic">
-                “This made my friends’ group chat go wild.”
-              </p>
-              <div className="mt-2 text-xs text-muted-foreground">
-                — Beta User
+          {/* What Users Love About Mementic - Only show if real feedback exists */}
+          {feedback.filter(item => item.likes && item.likes.trim() !== '').length > 0 && (
+            <div className="mt-8">
+              <div className="flex items-center gap-2 mb-6">
+                <Heart className="w-5 h-5 text-red-500" />
+                <h3 className="text-xl font-semibold">What Users Love About Mementic</h3>
+                {loadingFeedback && (
+                  <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
+                )}
+              </div>
+
+              {loadingFeedback ? (
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="rounded-2xl bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 p-6 border border-green-200 animate-pulse">
+                      <div className="h-4 bg-green-200 rounded mb-2"></div>
+                      <div className="h-4 bg-green-200 rounded mb-2 w-3/4"></div>
+                      <div className="h-3 bg-green-200 rounded w-1/3"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {feedback
+                    .filter(item => item.likes && item.likes.trim() !== '') // Only show feedback with positive comments
+                    .map((item) => (
+                    <div key={item.id} className="rounded-2xl bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 p-6 border border-green-200">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Heart className="w-4 h-4 text-red-500 fill-current" />
+                        <span className="text-sm font-semibold text-green-700 dark:text-green-300">What they love</span>
+                      </div>
+                      <p className="text-base italic text-gray-700 dark:text-gray-300 mb-4 leading-relaxed">
+                        "{item.likes}"
+                      </p>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-medium text-gray-600 dark:text-gray-400">— {item.name}</span>
+                        {item.will_return && (
+                          <span className="text-green-600 font-medium flex items-center gap-1">
+                            <span className="text-xs">Will return</span>
+                            <span className="text-green-600">✅</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Complete User Feedback - Only show if real feedback exists */}
+          {feedback.length > 0 && (
+            <div className="mt-12">
+              <div className="flex items-center gap-2 mb-6">
+                <MessageSquare className="w-5 h-5 text-primary" />
+                <h3 className="text-xl font-semibold">Complete User Feedback</h3>
+              </div>
+
+              <div className="grid gap-6 sm:grid-cols-1 lg:grid-cols-2">
+                {feedback.slice(0, 4).map((item) => (
+                  <div key={item.id} className="rounded-2xl bg-card p-6 border border-border">
+                    <div className="space-y-3">
+                      {item.likes && (
+                        <div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <Heart className="w-3 h-3 text-green-500" />
+                            <span className="text-xs font-medium text-green-600">What they love</span>
+                          </div>
+                          <p className="text-sm italic text-muted-foreground ml-4">"{item.likes}"</p>
+                        </div>
+                      )}
+                      {item.dislikes && (
+                        <div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <TrendingUp className="w-3 h-3 text-orange-500" />
+                            <span className="text-xs font-medium text-orange-600">Could improve</span>
+                          </div>
+                          <p className="text-sm italic text-muted-foreground ml-4">"{item.dislikes}"</p>
+                        </div>
+                      )}
+                      {item.suggestions && (
+                        <div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <Sparkles className="w-3 h-3 text-blue-500" />
+                            <span className="text-xs font-medium text-blue-600">Suggestions</span>
+                          </div>
+                          <p className="text-sm italic text-muted-foreground ml-4">"{item.suggestions}"</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-border text-xs text-muted-foreground flex items-center justify-between">
+                      <span>— {item.name}</span>
+                      {item.will_return ? (
+                        <span className="text-green-600 font-medium">Will return! ✅</span>
+                      ) : (
+                        <span className="text-red-600 font-medium">Won't return ❌</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="rounded-2xl bg-card p-6 border border-border">
-              <p className="text-sm italic">
-                “I’d happily mint the weekly winner.”
-              </p>
-              <div className="mt-2 text-xs text-muted-foreground">
-                — Beta Creator
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </section>
       <section className="py-16 px-6 bg-muted/20">

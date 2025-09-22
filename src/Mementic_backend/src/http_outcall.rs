@@ -99,6 +99,10 @@ thread_local! {
 
     static MEME_COUNTER: RefCell<StableBTreeMap<u8, u64, Memory>> =
         RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(23)))));
+
+    // Track unique users who have created memes
+    static UNIQUE_USERS: RefCell<StableBTreeMap<StorablePrincipal, bool, Memory>> =
+        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(24)))));
 }
 
 // ---------- Data structures ----------
@@ -633,6 +637,11 @@ pub fn publish_meme(meme: MemeData) -> Result<PublicStoredMeme, String> {
         map.insert(key, StorableVecU64::from(list));
     });
 
+    // Track unique user
+    UNIQUE_USERS.with(|uu| {
+        uu.borrow_mut().insert(StorablePrincipal::from(user), true);
+    });
+
     Ok(stored.into())
 }
 
@@ -753,6 +762,10 @@ pub fn get_user_meme_count() -> u32 {
     let user = caller();
     let storable_user = StorablePrincipal::from(user);
     USER_MEMES.with(|um| um.borrow().get(&storable_user).map(|list| { let v: Vec<u64> = list.into(); v.len() as u32 }).unwrap_or(0))
+}
+#[query]
+pub fn get_total_users() -> u64 {
+    UNIQUE_USERS.with(|uu| uu.borrow().len() as u64)
 }
 #[query]
 pub fn health() -> String {

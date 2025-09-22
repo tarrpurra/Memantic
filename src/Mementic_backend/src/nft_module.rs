@@ -189,6 +189,9 @@ fn init(args: Option<InitArgs>) {
         st.total_supply = Nat::from(0u32);
         st.created_at = time();
     });
+
+    // Initialize sample feedback data
+    crate::init_feedback_data();
 }
 
 fn assert_admin() {

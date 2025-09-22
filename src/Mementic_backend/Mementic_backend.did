@@ -1,3 +1,14 @@
+type Feedback = record {
+  id : nat64;
+  user_principal : principal;
+  is_approved : bool;
+  suggestions : text;
+  name : text;
+  will_return : bool;
+  likes : text;
+  timestamp : nat64;
+  dislikes : text;
+};
 type HttpHeader = record { value : text; name : text };
 type HttpResponse = record {
   status : nat;
@@ -64,8 +75,8 @@ type PythonMetadata = record {
   timestamp : nat64;
   file_size_bytes : nat64;
 };
-type Result = variant { Ok; Err : text };
-type Result_1 = variant { Ok : text; Err : text };
+type Result = variant { Ok : text; Err : text };
+type Result_1 = variant { Ok; Err : text };
 type Result_2 = variant { Ok : vec TopEntry; Err : text };
 type Result_3 = variant { Ok : vec MintedPair; Err : text };
 type Result_4 = variant { Ok : PublicStoredMeme; Err : text };
@@ -113,23 +124,33 @@ type WeeklyPeriod = record {
   start_time : nat64;
 };
 service : (opt InitArgs) -> {
+  // Approve feedback for public display (admin function)
+  approve_feedback : (nat64) -> (Result);
   check_remaining_calls : () -> (nat8) query;
   // Mark any past weeks complete if their end_time has passed
   close_finished_weeks : () -> ();
+  // Delete feedback (admin function)
+  delete_feedback : (nat64) -> (Result);
   // Manually finalize any weeks that have ended.
   // Useful to ensure `is_completed = true` even if no votes happen at boundary.
   finalize_finished_weeks : () -> (text);
   // Force-complete a specific week_id (admin/ops hook).
-  finalize_week : (nat64) -> (Result);
-  generate_meme : (text) -> (Result_1);
+  finalize_week : (nat64) -> (Result_1);
+  generate_meme : (text) -> (Result);
+  // Get all feedback (admin function)
+  get_all_feedback : () -> (vec Feedback) query;
   // List all memes for marketplace (newest first)
   get_all_memes : () -> (vec PublicStoredMeme) query;
+  // Get all approved feedback for public display
+  get_approved_feedback : (opt nat32) -> (vec Feedback) query;
   // Completed weeks
   get_completed_weeks : () -> (vec WeeklyPeriod) query;
   // Current weekly leaderboard (active week). Limit max 50.
   get_current_leaderboard : (opt nat32) -> (WeeklyLeaderboard) query;
   // Status for current week
   get_current_week_status : () -> (nat64, nat64, nat64, bool) query;
+  // Get feedback statistics
+  get_feedback_stats : () -> (nat32, nat32, float64) query;
   // Get only memes that are listed for sale on the marketplace
   get_marketplace_memes : () -> (vec PublicStoredMeme) query;
   get_meme : (nat64) -> (opt PublicStoredMeme) query;
@@ -141,6 +162,7 @@ service : (opt InitArgs) -> {
   // Fails if the week is not completed yet.
   get_top3_for_week : (nat64) -> (Result_2) query;
   get_total_memes : () -> (nat64) query;
+  get_total_users : () -> (nat64) query;
   get_user_meme_count : () -> (nat32) query;
   get_user_memes : () -> (vec PublicStoredMeme) query;
   // Did caller vote on meme?
@@ -155,21 +177,23 @@ service : (opt InitArgs) -> {
   icrc7_tokens_of : (principal) -> (vec nat) query;
   icrc7_total_supply : () -> (nat) query;
   // Increment view count for a meme
-  increment_meme_views : (nat64) -> (Result);
+  increment_meme_views : (nat64) -> (Result_1);
   // Check if a meme has been minted as an NFT
   is_meme_minted : (nat64) -> (bool) query;
   // List a meme for sale on the marketplace
-  list_meme_for_sale : (nat64, nat64) -> (Result);
+  list_meme_for_sale : (nat64, nat64) -> (Result_1);
   mint_week_top3_from_voting : (principal, nat64) -> (Result_3);
   mint_week_top3_here : (nat64) -> (Result_3);
   // Store a generated meme into marketplace (associated to caller)
   publish_meme : (MemeData) -> (Result_4);
   // Record a sale (called internally or by marketplace canister)
-  record_meme_sale : (nat64, nat64) -> (Result);
+  record_meme_sale : (nat64, nat64) -> (Result_1);
   // Remove a meme from the marketplace
-  remove_meme_from_market : (nat64) -> (Result);
+  remove_meme_from_market : (nat64) -> (Result_1);
   // Remove your vote (works only for current active week)
   remove_vote : (nat64) -> (Result_5);
+  // Submit feedback from a user
+  submit_feedback : (text, text, text, text, bool) -> (Result);
   transform : (TransformArgs) -> (HttpResponse) query;
   // Cast or change a vote on a meme in the **current active week**.
   // Rejects if meme is not from current week or if the week is completed/expired.

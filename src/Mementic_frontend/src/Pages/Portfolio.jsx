@@ -14,10 +14,12 @@ import {
   ArrowDown,
   User,
   Sparkles,
+  MessageSquare,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../hooks/use-toast";
+import { FeedbackForm } from "../components/FeedbackForm";
 
 import backendService from "../services/backendService";
 
@@ -934,10 +936,27 @@ const Portfolio = () => {
               ))}
             </div>
           )}
-        </div>
-      </div>
-    </div>
-  );
-};
+         </div>
+
+         {/* Feedback Section */}
+         <div className="space-y-8 mt-16">
+           <div className="flex items-center justify-between">
+             <div className="flex items-center gap-4">
+               <div className="p-2 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 rounded-lg">
+                 <MessageSquare className="w-6 h-6 text-blue-600" />
+               </div>
+               <div>
+                 <h2 className="text-3xl font-bold text-blue-700 dark:text-blue-300">Share Your Feedback</h2>
+                 <p className="text-muted-foreground">Help us improve Mementic with your thoughts</p>
+               </div>
+             </div>
+           </div>
+
+           <FeedbackForm />
+         </div>
+       </div>
+     </div>
+   );
+ };
 
 export default Portfolio;

@@ -437,6 +437,13 @@ class BackendService {
   }
 
   /**
+    * Get total number of users
+    */
+  async getTotalUsers() {
+    return await this._safeCall('get_total_users');
+  }
+
+  /**
     * Get all memes for marketplace
     */
   async getAllMemes() {
@@ -560,8 +567,8 @@ class BackendService {
   }
 
   /**
-   * Increment view count for a meme
-   */
+    * Increment view count for a meme
+    */
   async incrementMemeViews(memeId) {
     try {
       const result = await this._safeCall('increment_meme_views', memeId);
@@ -571,6 +578,33 @@ class BackendService {
       console.warn(`Failed to increment views for meme ${memeId}:`, error);
       return null;
     }
+  }
+
+  /* ============ FEEDBACK METHODS ============ */
+
+  /**
+    * Submit feedback
+    */
+  async submitFeedback(name, likes, dislikes, suggestions, willReturn) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required to submit feedback");
+    }
+    const result = await this._safeCall('submit_feedback', name, likes, dislikes, suggestions, willReturn);
+    return this._unwrapResult(result, "submit_feedback failed");
+  }
+
+  /**
+    * Get approved feedback for display
+    */
+  async getApprovedFeedback(limit = 10) {
+    return await this._safeCall('get_approved_feedback', [limit]);
+  }
+
+  /**
+    * Get feedback statistics
+    */
+  async getFeedbackStats() {
+    return await this._safeCall('get_feedback_stats');
   }
 
   /* ============ UTILITY METHODS ============ */

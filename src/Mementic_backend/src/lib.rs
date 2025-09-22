@@ -1,6 +1,7 @@
 mod http_outcall;
 mod voting;
 mod nft_module;
+mod feedback;
 
 use candid::{CandidType, Nat, Principal, Decode, Encode};
 use ic_cdk::api::management_canister::http_request::TransformArgs;
@@ -12,7 +13,7 @@ use serde::{Deserialize, Serialize};
 pub use http_outcall::{
     MemeData, PythonMetadata, StoredMeme, PublicStoredMeme, MarketData,
     // queries
-    get_meme, get_user_memes, get_all_memes, get_marketplace_memes, get_total_memes, get_user_meme_count, health, check_remaining_calls, is_meme_minted,
+    get_meme, get_user_memes, get_all_memes, get_marketplace_memes, get_total_memes, get_user_meme_count, get_total_users, health, check_remaining_calls, is_meme_minted,
     // updates
     generate_meme, publish_meme, list_meme_for_sale, remove_meme_from_market, record_meme_sale,
 };
@@ -26,6 +27,11 @@ pub use voting::{
 
 pub use nft_module::{
     SupportedStandard, TokenRecord, TokenMetadataEntry, MetadataValue, MintedPair
+};
+
+pub use feedback::{
+    Feedback, submit_feedback, get_approved_feedback, get_all_feedback,
+    approve_feedback, delete_feedback, get_feedback_stats, init_feedback_data,
 };
 
 #[query]
