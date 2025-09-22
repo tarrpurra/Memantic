@@ -366,6 +366,11 @@ pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, Stri
     let key = UserMemeKey(user, meme_id);
     let previous_vote = USER_VOTES.with(|uv| uv.borrow().get(&key));
 
+    // Prevent multiple votes per user per meme
+    if previous_vote.is_some() {
+        return Err("You have already voted on this meme".into());
+    }
+
     // Update user's vote record
     USER_VOTES.with(|uv| {
         uv.borrow_mut().insert(key, VoteRecord { vote_type: vote_type.clone(), timestamp: now });

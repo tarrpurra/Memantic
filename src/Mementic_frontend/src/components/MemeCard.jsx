@@ -1,13 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { Button } from "../components/ui/Button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/Card";
-import { Badge } from "../components/ui/Badge";
 import {
   Heart,
   TrendingUp,
@@ -16,19 +7,28 @@ import {
   Zap,
   Eye,
   User,
-} from "../components/ui/Icon";
-import { useToast } from "../hooks/use-toast";
-import backendService from "../services/backendService";
+  X,
+  Play,
+} from "lucide-react";
+import backendService from "../services/backendService.js";
 
-export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPrincipal, onVoteSuccess }) => {
+export const MemeCard = ({
+  meme,
+  onVote,
+  onShare,
+  isAuthenticated,
+  currentUserPrincipal,
+  onVoteSuccess,
+}) => {
   const [hasVoted, setHasVoted] = useState(false);
   const [hasStaked, setHasStaked] = useState(false);
   const [isOwnMeme, setIsOwnMeme] = useState(false);
   const [loadingVoteStatus, setLoadingVoteStatus] = useState(false);
   const [isVoting, setIsVoting] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [views, setViews] = useState(meme?.views || 0);
-  const { toast } = useToast();
+  const [hasViewed, setHasViewed] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   // Support both snake_case (backend) and camelCase (legacy)
   const {
@@ -41,11 +41,14 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
   } = meme || {};
 
   // Safely convert BigInt votes to number
-  const votes = typeof rawVotes === 'bigint'
-    ? (rawVotes > Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER :
-       rawVotes < Number.MIN_SAFE_INTEGER ? Number.MIN_SAFE_INTEGER :
-       Number(rawVotes))
-    : Number(rawVotes) || 0;
+  const votes =
+    typeof rawVotes === "bigint"
+      ? rawVotes > Number.MAX_SAFE_INTEGER
+        ? Number.MAX_SAFE_INTEGER
+        : rawVotes < Number.MIN_SAFE_INTEGER
+        ? Number.MIN_SAFE_INTEGER
+        : Number(rawVotes)
+      : Number(rawVotes) || 0;
   const image = meme?.image_url || meme?.imageUrl || "";
   const memeId = meme?.id || meme?.meme_id;
 
@@ -55,9 +58,10 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
 
     // Method 1: Check meme.owner (primary method)
     if (meme.owner) {
-      const ownerText = typeof meme.owner === 'object' && meme.owner.toText
-        ? meme.owner.toText()
-        : String(meme.owner).trim();
+      const ownerText =
+        typeof meme.owner === "object" && meme.owner.toText
+          ? meme.owner.toText()
+          : String(meme.owner).trim();
       if (ownerText && currentUserPrincipal === ownerText) {
         return true;
       }
@@ -75,17 +79,19 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
     if (meme.__raw) {
       const raw = meme.__raw;
       if (raw.owner) {
-        const rawOwnerText = typeof raw.owner === 'object' && raw.owner.toText
-          ? raw.owner.toText()
-          : String(raw.owner).trim();
+        const rawOwnerText =
+          typeof raw.owner === "object" && raw.owner.toText
+            ? raw.owner.toText()
+            : String(raw.owner).trim();
         if (rawOwnerText && currentUserPrincipal === rawOwnerText) {
           return true;
         }
       }
       if (raw.meme_data?.owner) {
-        const memeDataOwnerText = typeof raw.meme_data.owner === 'object' && raw.meme_data.owner.toText
-          ? raw.meme_data.owner.toText()
-          : String(raw.meme_data.owner).trim();
+        const memeDataOwnerText =
+          typeof raw.meme_data.owner === "object" && raw.meme_data.owner.toText
+            ? raw.meme_data.owner.toText()
+            : String(raw.meme_data.owner).trim();
         if (memeDataOwnerText && currentUserPrincipal === memeDataOwnerText) {
           return true;
         }
@@ -93,6 +99,11 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
     }
 
     return false;
+  };
+
+  // Mock functions for demonstration (replace with actual implementations)
+  const showToast = (title, description, variant = "default") => {
+    console.log(`Toast: ${title} - ${description} (${variant})`);
   };
 
   // Function to check and update vote status
@@ -104,7 +115,6 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
       return;
     }
 
-    // Prevent multiple simultaneous calls
     if (loadingVoteStatus) {
       console.log("Vote status check already in progress, skipping");
       return;
@@ -113,36 +123,34 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
     setLoadingVoteStatus(true);
 
     try {
-      // Check ownership using enhanced method
       const ownershipResult = checkOwnership();
       setIsOwnMeme(ownershipResult);
 
-      // Only check vote status if it's not the user's own meme
-      if (!ownershipResult) {
-        // Convert string ID to BigInt for backend call
+      if (!ownershipResult && isAuthenticated) {
         const memeIdBigInt = BigInt(memeId);
-
-        // Create a timeout promise
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Vote status check timed out')), 10000);
+          setTimeout(
+            () => reject(new Error("Vote status check timed out")),
+            10000
+          );
         });
 
-        // Race the backend call against the timeout
         const userVote = await Promise.race([
           backendService.getUserVote(memeIdBigInt),
-          timeoutPromise
+          timeoutPromise,
         ]);
 
-        // userVote will be null/undefined if user hasn't voted, or a VoteRecord if they have
         setHasVoted(!!userVote);
-        console.log(`Vote status for meme ${memeId}:`, !!userVote ? "voted" : "not voted");
+        console.log(
+          `Vote status for meme ${memeId}:`,
+          !!userVote ? "voted" : "not voted"
+        );
       } else {
         setHasVoted(false);
-        console.log(`Meme ${memeId} is owned by user, cannot vote`);
+        console.log(`Meme ${memeId} is owned by user or user not authenticated, cannot vote`);
       }
     } catch (error) {
       console.error("Failed to check vote status:", error);
-      // Still check ownership even if vote check fails
       const ownershipResult = checkOwnership();
       setIsOwnMeme(ownershipResult);
       setHasVoted(false);
@@ -151,327 +159,497 @@ export const MemeCard = ({ meme, onVote, onShare, isAuthenticated, currentUserPr
     }
   }, [isAuthenticated, memeId, currentUserPrincipal]);
 
-  // Check user's vote status and ownership on component mount
   useEffect(() => {
     checkAndUpdateVoteStatus();
   }, [checkAndUpdateVoteStatus]);
 
-  // Increment view count when component mounts
-  useEffect(() => {
-    const incrementViews = async () => {
-      if (memeId) {
-        try {
-          await backendService.incrementMemeViews(BigInt(memeId));
-          // Update local view count
-          setViews(prev => prev + 1);
-        } catch (error) {
-          // Silently fail - view tracking is not critical
-          console.warn(`Failed to increment views for meme ${memeId}:`, error);
-        }
+  const incrementViews = async () => {
+    if (memeId && !hasViewed) {
+      try {
+        await backendService.incrementMemeViews(BigInt(memeId));
+        setViews((prev) => prev + 1);
+        setHasViewed(true);
+      } catch (error) {
+        console.warn(`Failed to increment views for meme ${memeId}:`, error);
       }
-    };
-
-    incrementViews();
-  }, [memeId]);
+    }
+  };
 
   const handleVote = async () => {
-    // Authentication check
     if (!isAuthenticated) {
-      toast({
-        title: "Authentication Required",
-        description: "Please login to vote on memes",
-        variant: "destructive",
-      });
+      showToast(
+        "Authentication Required",
+        "Please login to vote on memes",
+        "destructive"
+      );
       return;
     }
 
-    // Double-check ownership to prevent any bypass attempts
     const currentOwnership = checkOwnership();
     if (currentOwnership || isOwnMeme) {
-      toast({
-        title: "Cannot Vote on Own Meme",
-        description: "You cannot vote on your own memes to maintain fair competition",
-        variant: "destructive",
-      });
+      showToast(
+        "Cannot Vote on Own Meme",
+        "You cannot vote on your own memes to maintain fair competition",
+        "destructive"
+      );
       return;
     }
 
-    // Check if already voted
     if (hasVoted) {
-      toast({
-        title: "Already Voted",
-        description: "You have already voted on this meme",
-        variant: "destructive",
-      });
+      showToast(
+        "Already Voted",
+        "You have already voted on this meme",
+        "destructive"
+      );
       return;
     }
 
-    // Validate meme ID
     if (!memeId) {
       console.log("Invalid meme ID:", memeId);
-      toast({
-        title: "Invalid Meme",
-        description: "Cannot vote on this meme - invalid meme ID",
-        variant: "destructive",
-      });
+      showToast(
+        "Invalid Meme",
+        "Cannot vote on this meme - invalid meme ID",
+        "destructive"
+      );
       return;
     }
 
-    console.log("All checks passed, proceeding with vote");
-
-    // Execute vote
     if (onVote) {
-      console.log("Calling onVote function");
       setIsVoting(true);
       try {
-        // Get owner information for additional backend validation
         const owner = meme?.owner || meme?.creator;
-        console.log("Voting with params:", { memeId, votes, owner });
-
         await onVote(memeId, votes || 0, owner);
-        console.log("Vote successful, updating state");
-
-        // Re-check vote status after successful vote to update hasVoted state
         await checkAndUpdateVoteStatus();
-
-        // Call optional success callback if provided
         if (onVoteSuccess) {
           onVoteSuccess(memeId);
         }
-
-        console.log("Vote process completed successfully");
-        // Success toast is handled by parent component (Marketplace)
       } catch (error) {
         console.error("Vote failed:", error);
-        // Re-check ownership in case of error
         const recheckOwnership = checkOwnership();
         if (recheckOwnership) {
-          toast({
-            title: "Cannot Vote on Own Meme",
-            description: "You cannot vote on your own memes",
-            variant: "destructive",
-          });
+          showToast(
+            "Cannot Vote on Own Meme",
+            "You cannot vote on your own memes",
+            "destructive"
+          );
         } else {
-          // Show generic error for other failures
-          toast({
-            title: "Vote Failed",
-            description: error?.message || "An error occurred while voting",
-            variant: "destructive",
-          });
+          showToast(
+            "Vote Failed",
+            error?.message || "An error occurred while voting",
+            "destructive"
+          );
         }
       } finally {
         setIsVoting(false);
       }
-    } else {
-      console.log("onVote function not provided");
-      toast({
-        title: "Voting Unavailable",
-        description: "Voting functionality is not available for this meme",
-        variant: "destructive",
-      });
     }
   };
 
   const handleStake = () => {
     if (!isAuthenticated) {
-      toast({
-        title: "Authentication Required",
-        description: "Please login to stake ICP on memes",
-        variant: "destructive",
-      });
+      showToast(
+        "Authentication Required",
+        "Please login to stake ICP on memes",
+        "destructive"
+      );
       return;
     }
 
-    // Prevent staking on own memes
     if (isOwnMeme) {
-      toast({
-        title: "Cannot Stake on Own Meme",
-        description: "You cannot stake ICP on your own memes",
-        variant: "destructive",
-      });
+      showToast(
+        "Cannot Stake on Own Meme",
+        "You cannot stake ICP on your own memes",
+        "destructive"
+      );
       return;
     }
-
-    // For now, this is a mock implementation
-    // In a real implementation, this would:
-    // 1. Check user's ICP balance
-    // 2. Transfer ICP to a staking contract
-    // 3. Update the meme's staked amount
-    // 4. Provide staking rewards over time
 
     setHasStaked(!hasStaked);
-    toast({
-      title: hasStaked ? "Stake withdrawn" : "Staked! 💎",
-      description: hasStaked
+    showToast(
+      hasStaked ? "Stake withdrawn" : "Staked! 💎",
+      hasStaked
         ? "ICP stake withdrawn from this meme"
-        : "Successfully staked 10 ICP on this meme! You'll earn rewards as it gains votes.",
-    });
+        : "Successfully staked 10 ICP on this meme! You'll earn rewards as it gains votes."
+    );
   };
 
   const handleCardClick = (e) => {
-    // Prevent expansion if clicking on buttons
-    if (e.target.closest('button')) return;
-    setIsExpanded(!isExpanded);
+    if (e.target.closest("button")) return;
+    setShowModal(true);
+    incrementViews();
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
   };
 
   return (
-    <Card
-      className={`group overflow-hidden transition-all duration-200 cursor-pointer ${hasVoted ? 'ring-2 ring-primary/20 bg-primary/5' : ''} ${isExpanded ? 'ring-2 ring-primary/50' : ''} ${isOwnMeme ? 'ring-2 ring-orange-500/30 bg-orange-500/5' : ''}`}
-      onClick={handleCardClick}
-    >
-      <CardHeader className="pb-3">
-        <div className="flex justify-between items-start">
-          <CardTitle className="text-lg line-clamp-2">{title}</CardTitle>
-          <div className="flex gap-1">
-            {isOwnMeme && (
-              <Badge variant="outline" className="text-xs border-orange-500 text-orange-600">
-                <User className="h-3 w-3 mr-1" />
-                Your Meme
-              </Badge>
-            )}
-            {hasVoted && (
-              <Badge variant="default" className="text-xs bg-primary">
-                <Heart className="h-3 w-3 mr-1 fill-current" />
-                Voted
-              </Badge>
-            )}
-            {isViral && (
-              <Badge variant="secondary" className="text-xs">
-                <TrendingUp className="h-3 w-3 mr-1" />
-                Viral
-              </Badge>
-            )}
-            {isNFT && (
-              <Badge variant="default" className="text-xs">
-                <Crown className="h-3 w-3 mr-1" />
-                NFT
-              </Badge>
-            )}
-          </div>
-        </div>
-        <p className="text-sm text-muted-foreground">by @{creator}</p>
-      </CardHeader>
-
-      <CardContent className="pb-4">
-        <div className="bg-muted rounded-lg overflow-hidden mb-4 relative group-hover:scale-[1.02] transition-transform duration-300">
-          <img
-            src={image}
-            alt={title}
-            className="w-full h-auto object-contain max-h-96"
-          />
-          <div className="absolute inset-0 bg-gradient-glow opacity-0 group-hover:opacity-30 transition-opacity duration-300" />
-        </div>
-
-        <div className="flex justify-between items-center text-sm">
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1">
-              <Heart className="h-4 w-4" />
-              {votes}
-            </span>
-            <span className="flex items-center gap-1">
-              <Eye className="h-4 w-4" />
-              {views}
-            </span>
-            <span className="flex items-center gap-1">
-              <Coins className="h-4 w-4" />
-              {stakeAmount} ICP
-            </span>
-          </div>
-        </div>
-
-        {/* Expanded Content */}
-        {isExpanded && (
-          <div className="mt-4 pt-4 border-t border-border">
-            <div className="space-y-3">
-              <div>
-                <h4 className="text-sm font-medium text-muted-foreground mb-1">Prompt</h4>
-                <p className="text-sm bg-muted/50 p-2 rounded-md">
-                  {meme?.prompt || "No prompt available"}
-                </p>
+    <>
+      {/* Enhanced Instagram-style Card - Now Larger */}
+      <div
+        className="group relative cursor-pointer overflow-hidden rounded-xl bg-white dark:bg-gray-900 shadow-lg hover:shadow-2xl transition-all duration-300 w-full max-w-sm mx-auto transform hover:-translate-y-1"
+        onClick={handleCardClick}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        {/* Aspect ratio container - Made larger */}
+        <div className="aspect-[4/5] w-full relative">
+          {/* Main Image Container */}
+          <div className="relative w-full h-full overflow-hidden">
+            {image ? (
+              <img
+                src={image}
+                alt={title}
+                className="w-full h-full transition-transform duration-500 group-hover:scale-105"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center">
+                <span className="text-6xl filter drop-shadow-lg">
+                  {meme?.emoji || "🖼️"}
+                </span>
               </div>
-              <div>
-                <h4 className="text-sm font-medium text-muted-foreground mb-1">Owner</h4>
-                <p className="text-sm bg-muted/50 p-2 rounded-md">
-                  {creator}
-                  {isOwnMeme && <span className="ml-2 text-xs text-primary">(You)</span>}
-                </p>
+            )}
+
+            {/* Enhanced Gradient Overlay */}
+            <div
+              className={`absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity duration-300 ${
+                isHovered ? "opacity-100" : "opacity-60"
+              }`}
+            />
+
+            {/* Interactive Overlay Content */}
+            <div className="absolute inset-0 flex flex-col justify-between p-4">
+              {/* Top Section - Badges */}
+              <div className="flex justify-between items-start">
+                <div className="flex flex-wrap gap-2">
+                  {isOwnMeme && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-500/90 text-white border-0 backdrop-blur-sm">
+                      <User className="h-3 w-3 mr-1" />
+                      Mine
+                    </span>
+                  )}
+                  {hasVoted && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-500/90 text-white border-0 backdrop-blur-sm">
+                      <Heart className="h-3 w-3 mr-1 fill-current" />
+                      Voted
+                    </span>
+                  )}
+                  {isNFT && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/90 text-white border-0 backdrop-blur-sm">
+                      <Crown className="h-3 w-3 mr-1" />
+                      NFT
+                    </span>
+                  )}
+                  {isViral && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/90 text-white border-0 backdrop-blur-sm">
+                      <TrendingUp className="h-3 w-3 mr-1" />
+                      Viral
+                    </span>
+                  )}
+                </div>
+
+                {/* Action indicators */}
+                <div
+                  className={`transition-opacity duration-300 ${
+                    isHovered ? "opacity-100" : "opacity-0"
+                  }`}
+                >
+                  <div className="bg-black/40 backdrop-blur-sm rounded-full p-2">
+                    <Play className="h-4 w-4 text-white" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Section - Info and Stats */}
+              <div className="space-y-3">
+                {/* Stats Row - Always Visible */}
+                <div className="flex items-center justify-between text-white">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1">
+                      <Heart
+                        className={`h-4 w-4 ${
+                          hasVoted ? "fill-current text-red-400" : ""
+                        }`}
+                      />
+                      <span className="font-semibold text-sm">{votes}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Eye className="h-4 w-4" />
+                      <span className="font-semibold text-sm">{views}</span>
+                    </div>
+                    {stakeAmount > 0 && (
+                      <div className="flex items-center gap-1">
+                        <Coins className="h-4 w-4 text-yellow-400" />
+                        <span className="font-semibold text-sm">
+                          {stakeAmount}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Title and Creator */}
+                <div className="text-white">
+                  <h3 className="font-bold text-lg leading-tight mb-1 line-clamp-2">
+                    {title}
+                  </h3>
+                  <p className="text-white/80 text-sm">by @{creator}</p>
+                </div>
+
+                {/* Quick Action Buttons - Visible on Hover */}
+                <div
+                  className={`transition-all duration-300 ${
+                    isHovered
+                      ? "opacity-100 translate-y-0"
+                      : "opacity-0 translate-y-2"
+                  }`}
+                >
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleVote();
+                      }}
+                      disabled={
+                        isOwnMeme || hasVoted || loadingVoteStatus || isVoting
+                      }
+                      className="flex-1 px-3 py-2 bg-white/20 backdrop-blur-sm border border-white/30 text-white hover:bg-white/30 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    >
+                      <Heart
+                        className={`h-3 w-3 mr-1 ${
+                          hasVoted ? "fill-current" : ""
+                        }`}
+                      />
+                      {isVoting
+                        ? "..."
+                        : isOwnMeme
+                        ? "Mine"
+                        : hasVoted
+                        ? "Voted"
+                        : "Vote"}
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStake();
+                      }}
+                      disabled={!isAuthenticated || isOwnMeme}
+                      className="px-3 py-2 bg-white/20 backdrop-blur-sm border border-white/30 text-white hover:bg-white/30 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Zap className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        )}
-      </CardContent>
+        </div>
 
-      <CardFooter className="pt-0 space-x-2">
-        {/* Vote Button */}
-        <Button
-          variant={hasVoted ? "secondary" : "outline"}
-          size="sm"
-          onClick={handleVote}
-          className="flex-1"
-          disabled={isOwnMeme || hasVoted || loadingVoteStatus || isVoting}
-          title={
-            isOwnMeme
-              ? "You cannot vote on your own memes"
-              : hasVoted
-              ? "You have already voted on this meme"
-              : loadingVoteStatus
-              ? "Checking vote status..."
-              : isVoting
-              ? "Voting in progress..."
-              : "Click to vote on this meme"
-          }
+        {/* Subtle border glow effect */}
+        <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+      </div>
+
+      {/* Enhanced Modal */}
+      {showModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={handleCloseModal}
         >
-          <Heart className={`h-4 w-4 mr-1 ${hasVoted ? "fill-current" : ""}`} />
-          {isVoting ? (
-            <>
-              <div className="animate-spin h-3 w-3 border border-current border-t-transparent rounded-full mr-1" />
-              Voting...
-            </>
-          ) : loadingVoteStatus ? (
-            <>
-              <div className="animate-spin h-3 w-3 border border-current border-t-transparent rounded-full mr-1" />
-              Loading...
-            </>
-          ) : isOwnMeme ? (
-            "Your Meme"
-          ) : hasVoted ? (
-            "Voted ✓"
-          ) : (
-            "Vote"
-          )}
-        </Button>
-
-        {/* Refresh Vote Status Button (only show if there might be an issue) */}
-        {(loadingVoteStatus || (!isOwnMeme && !hasVoted && isAuthenticated)) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              console.log("Manually refreshing vote status");
-              checkAndUpdateVoteStatus();
-            }}
-            className="px-2"
-            title="Refresh vote status"
-            disabled={loadingVoteStatus}
+          <div
+            className="relative max-w-5xl w-full max-h-[95vh] bg-white dark:bg-gray-900 rounded-2xl overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-          </Button>
-        )}
+            {/* Close button */}
+            <button
+              onClick={handleCloseModal}
+              className="absolute top-6 right-6 z-10 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-full p-2 shadow-lg"
+            >
+              <X className="h-6 w-6" />
+            </button>
 
-        {/* ICP Staking Button - Locks 10 ICP to support this meme and earn rewards */}
-        <Button
-          variant={hasStaked ? "default" : "glow"}
-          size="sm"
-          onClick={handleStake}
-          className="flex-1"
-          disabled={!isAuthenticated || isOwnMeme}
-          title={isOwnMeme ? "Cannot stake on your own meme" : "Stake ICP to support this meme and earn rewards as it gains popularity"}
-        >
-          <Zap className="h-4 w-4 mr-1" />
-          {isOwnMeme ? "Your Meme" : hasStaked ? "Staked (10 ICP)" : "Stake 10 ICP"}
-        </Button>
-      </CardFooter>
-    </Card>
+            <div className="flex flex-col lg:flex-row max-h-[95vh]">
+              {/* Image Section - Left Side */}
+              <div className="lg:w-3/5 flex items-center justify-center bg-black p-6">
+                <div className="max-h-[80vh] overflow-auto flex items-center justify-center bg-black/5 p-2 rounded-lg">
+                  {image ? (
+                    <img
+                      src={image}
+                      alt={title}
+                      className="w-auto h-auto max-w-full max-h-[78vh] object-contain rounded-lg shadow-2xl"
+                    />
+                  ) : (
+                    <div className="w-96 h-96 bg-gray-200 dark:bg-gray-700 flex items-center justify-center rounded-lg">
+                      <span className="text-9xl">{meme?.emoji || "🖼️"}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Details Section - Right Side */}
+              <div className="lg:w-2/5 flex flex-col bg-white dark:bg-gray-900">
+                {/* Header */}
+                <div className="p-8 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex items-start justify-between mb-6">
+                    <div className="flex-1">
+                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 leading-tight">
+                        {title}
+                      </h2>
+                      <p className="text-gray-600 dark:text-gray-400 text-lg">
+                        by @{creator}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Badges */}
+                  <div className="flex gap-2 flex-wrap mb-6">
+                    {isOwnMeme && (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-300">
+                        <User className="h-3 w-3 mr-1" />
+                        Your Meme
+                      </span>
+                    )}
+                    {hasVoted && (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <Heart className="h-3 w-3 mr-1 fill-current" />
+                        Voted
+                      </span>
+                    )}
+                    {isNFT && (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        <Crown className="h-3 w-3 mr-1" />
+                        NFT
+                      </span>
+                    )}
+                    {isViral && (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        <TrendingUp className="h-3 w-3 mr-1" />
+                        Viral
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Enhanced Stats */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <Heart className="h-5 w-5 mx-auto mb-1 text-red-500" />
+                      <div className="font-bold text-lg text-red-600">
+                        {votes}
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                        Votes
+                      </div>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <Eye className="h-5 w-5 mx-auto mb-1 text-blue-500" />
+                      <div className="font-bold text-lg text-blue-600">
+                        {views}
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                        Views
+                      </div>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <Coins className="h-5 w-5 mx-auto mb-1 text-yellow-500" />
+                      <div className="font-bold text-lg text-yellow-600">
+                        {stakeAmount}
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                        ICP Staked
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto p-8">
+                  {/* Prompt */}
+                  {meme?.prompt && (
+                    <div className="mb-8">
+                      <h4 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">
+                        Prompt
+                      </h4>
+                      <p className="text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 leading-relaxed">
+                        {meme.prompt}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Additional Info */}
+                  <div className="space-y-4">
+                    <h4 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
+                      Details
+                    </h4>
+                    <div className="space-y-3 text-gray-600 dark:text-gray-400">
+                      <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                        <span className="font-medium">Created:</span>
+                        <span>
+                          {new Date(
+                            meme?.created_at
+                          ).toLocaleDateString()}
+                        </span>
+                      </div>
+                      {meme?.market_data?.is_listed && (
+                        <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                          <span className="font-medium">Price:</span>
+                          <span className="font-semibold text-green-600">
+                            {meme.market_data.listing_price
+                              ? (
+                                  meme.market_data.listing_price / 100000000
+                                ).toFixed(2)
+                              : "N/A"}{" "}
+                            ICP
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Enhanced Actions */}
+                <div className="p-8 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      onClick={handleVote}
+                      disabled={
+                        isOwnMeme || hasVoted || loadingVoteStatus || isVoting
+                      }
+                      className="h-12 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg text-base font-semibold transition-colors flex items-center justify-center"
+                    >
+                      <Heart
+                        className={`h-5 w-5 mr-2 ${
+                          hasVoted ? "fill-current" : ""
+                        }`}
+                      />
+                      {isVoting
+                        ? "Voting..."
+                        : isOwnMeme
+                        ? "Your Meme"
+                        : hasVoted
+                        ? "Voted"
+                        : "Vote"}
+                    </button>
+
+                    <button
+                      onClick={handleStake}
+                      disabled={!isAuthenticated || isOwnMeme}
+                      className="h-12 px-4 py-2 border border-gray-300 hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-700 rounded-lg text-base font-semibold transition-colors flex items-center justify-center"
+                    >
+                      <Zap className="h-5 w-5 mr-2" />
+                      {isOwnMeme
+                        ? "Your Meme"
+                        : hasStaked
+                        ? "Staked"
+                        : "Stake ICP"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };

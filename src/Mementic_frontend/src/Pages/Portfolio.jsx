@@ -321,6 +321,10 @@ const Portfolio = () => {
     () => nfts.filter(x => !x.isMinted).length,
     [nfts]
   );
+  const avgEarningsPerVote = useMemo(
+    () => totalVotes > 0 ? (totalEarnings / totalVotes) * 100 : 0,
+    [totalEarnings, totalVotes]
+  );
 
   // Separate memes into categories
   const generatedMemes = useMemo(
@@ -420,27 +424,32 @@ const Portfolio = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+      <div className="border-b border-border bg-gradient-to-r from-background via-card/50 to-background backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-6">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => navigate("/marketplace")}
+                className="hover:bg-primary/10"
               >
                 <ArrowUp className="w-5 h-5" />
               </Button>
               <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <Sparkles className="w-8 h-8 text-primary" />
-                  <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                    My Portfolio
-                  </h1>
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="p-3 bg-gradient-to-br from-primary/20 to-primary/10 rounded-xl">
+                    <Sparkles className="w-8 h-8 text-primary" />
+                  </div>
+                  <div>
+                    <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                      My Portfolio
+                    </h1>
+                    <p className="text-muted-foreground text-lg">
+                      Track your meme creations and earnings
+                    </p>
+                  </div>
                 </div>
-                <p className="text-muted-foreground">
-                  Manage your meme NFTs and earnings
-                </p>
               </div>
             </div>
 
@@ -541,64 +550,83 @@ const Portfolio = () => {
         )}
 
         {/* Stats Overview */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-6 mb-8">
           {loading ? (
-            Array.from({ length: 6 }).map((_, i) => (
+            Array.from({ length: 8 }).map((_, i) => (
               <SkeletonStat key={i} />
             ))
           ) : (
             <>
-              <Card>
-                <CardContent className="p-4 text-center">
-                  <Coins className="w-6 h-6 mx-auto mb-2 text-primary" />
-                  <div className="text-lg font-bold">
-                    {totalEarnings.toFixed(2)} ICP
+              <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/20 border-yellow-200">
+                <CardContent className="p-6 text-center">
+                  <Coins className="w-8 h-8 mx-auto mb-3 text-yellow-600" />
+                  <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">
+                    {totalEarnings.toFixed(2)}
                   </div>
-                  <p className="text-xs text-muted-foreground">Total Earned</p>
+                  <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">ICP Earned</p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="p-4 text-center">
-                  <Crown className="w-6 h-6 mx-auto mb-2 text-red-500" />
-                  <div className="text-lg font-bold">{totalVotes}</div>
-                  <p className="text-xs text-muted-foreground">Total Votes</p>
+              <Card className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-red-200">
+                <CardContent className="p-6 text-center">
+                  <Crown className="w-8 h-8 mx-auto mb-3 text-red-600" />
+                  <div className="text-2xl font-bold text-red-700 dark:text-red-300">
+                    {totalVotes.toLocaleString()}
+                  </div>
+                  <p className="text-sm text-red-600 dark:text-red-400 font-medium">Total Votes</p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="p-4 text-center">
-                  <Sparkles className="w-6 h-6 mx-auto mb-2 text-blue-500" />
-                  <div className="text-lg font-bold">
+              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200">
+                <CardContent className="p-6 text-center">
+                  <Sparkles className="w-8 h-8 mx-auto mb-3 text-blue-600" />
+                  <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
                     {totalViews.toLocaleString()}
                   </div>
-                  <p className="text-xs text-muted-foreground">Total Views</p>
+                  <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Total Views</p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="p-4 text-center">
-                  <Sparkles className="w-6 h-6 mx-auto mb-2 text-blue-500" />
-                  <div className="text-lg font-bold">{generatedCount}</div>
-                  <p className="text-xs text-muted-foreground">Generated Memes</p>
+              <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200">
+                <CardContent className="p-6 text-center">
+                  <TrendingUp className="w-8 h-8 mx-auto mb-3 text-green-600" />
+                  <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+                    {generatedCount}
+                  </div>
+                  <p className="text-sm text-green-600 dark:text-green-400 font-medium">Generated Memes</p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="p-4 text-center">
-                  <Crown className="w-6 h-6 mx-auto mb-2 text-purple-500" />
-                  <div className="text-lg font-bold">{mintedCount}</div>
-                  <p className="text-xs text-muted-foreground">Minted NFTs</p>
+              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-purple-200">
+                <CardContent className="p-6 text-center">
+                  <Crown className="w-8 h-8 mx-auto mb-3 text-purple-600" />
+                  <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+                    {mintedCount}
+                  </div>
+                  <p className="text-sm text-purple-600 dark:text-purple-400 font-medium">Minted NFTs</p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="p-4 text-center">
-                  <ArrowUp className="w-6 h-6 mx-auto mb-2 text-orange-500" />
-                  <div className="text-lg font-bold">{totalSales}</div>
-                  <p className="text-xs text-muted-foreground">Total Sales</p>
+              <Card className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 border-orange-200">
+                <CardContent className="p-6 text-center">
+                  <ArrowUp className="w-8 h-8 mx-auto mb-3 text-orange-600" />
+                  <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">
+                    {totalSales}
+                  </div>
+                  <p className="text-sm text-orange-600 dark:text-orange-400 font-medium">Total Sales</p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="p-4 text-center">
-                  <User className="w-6 h-6 mx-auto mb-2 text-green-500" />
-                  <div className="text-lg font-bold">{listedCount}</div>
-                  <p className="text-xs text-muted-foreground">Listed for Sale</p>
+              <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 border-indigo-200">
+                <CardContent className="p-6 text-center">
+                  <User className="w-8 h-8 mx-auto mb-3 text-indigo-600" />
+                  <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">
+                    {listedCount}
+                  </div>
+                  <p className="text-sm text-indigo-600 dark:text-indigo-400 font-medium">Listed for Sale</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-br from-pink-50 to-pink-100 dark:from-pink-900/20 dark:to-pink-800/20 border-pink-200">
+                <CardContent className="p-6 text-center">
+                  <TrendingUp className="w-8 h-8 mx-auto mb-3 text-pink-600" />
+                  <div className="text-2xl font-bold text-pink-700 dark:text-pink-300">
+                    {avgEarningsPerVote.toFixed(3)} ICP
+                  </div>
+                  <p className="text-sm text-pink-600 dark:text-pink-400 font-medium">Per Vote</p>
                 </CardContent>
               </Card>
             </>
@@ -606,10 +634,19 @@ const Portfolio = () => {
         </div>
 
         {/* Generated Memes & Marketplace Section */}
-        <div className="space-y-6">
+        <div className="space-y-8">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold">My Generated Memes</h2>
-            <Button onClick={() => navigate("/myplace")}>
+            <div className="flex items-center gap-4">
+              <div className="p-2 bg-gradient-to-br from-green-100 to-green-200 dark:from-green-900/30 dark:to-green-800/30 rounded-lg">
+                <Sparkles className="w-6 h-6 text-green-600" />
+              </div>
+              <div>
+                <h2 className="text-3xl font-bold text-green-700 dark:text-green-300">My Generated Memes</h2>
+                <p className="text-muted-foreground">Memes you've created and are earning from</p>
+              </div>
+            </div>
+            <Button onClick={() => navigate("/myplace")} className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700">
+              <Sparkles className="w-4 h-4 mr-2" />
               Create New Meme
             </Button>
           </div>
@@ -670,15 +707,24 @@ const Portfolio = () => {
                          </span>
                        </div>
                        <div className="flex justify-between">
-                         <span className="text-muted-foreground">Views:</span>
-                         <span className="font-medium">
+                         <span className="text-muted-foreground">👁️ Views:</span>
+                         <span className="font-medium text-blue-600">
                            {nft.views.toLocaleString()}
                          </span>
                        </div>
                        <div className="flex justify-between">
-                         <span className="text-muted-foreground">Earned:</span>
-                         <span className="font-bold text-primary">
+                         <span className="text-muted-foreground">💰 Earned:</span>
+                         <span className="font-bold text-yellow-600">
                            {nft.earnedIcp.toFixed(4)} ICP
+                         </span>
+                       </div>
+                       <div className="flex justify-between">
+                         <span className="text-muted-foreground">📅 Created:</span>
+                         <span className="font-medium text-gray-600 text-xs">
+                           {new Date(nft.created_at || Date.now()).toLocaleDateString("en-IN", {
+                             timeZone: "Asia/Kolkata",
+                             dateStyle: "short",
+                           })}
                          </span>
                        </div>
 
@@ -766,11 +812,24 @@ const Portfolio = () => {
         </div>
 
         {/* Minted NFTs Section */}
-        <div className="space-y-6 mt-12">
+        <div className="space-y-8 mt-16">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold">My Minted NFTs</h2>
-            <div className="text-sm text-muted-foreground">
-              NFTs that have been minted as collectibles
+            <div className="flex items-center gap-4">
+              <div className="p-2 bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900/30 dark:to-purple-800/30 rounded-lg">
+                <Crown className="w-6 h-6 text-purple-600" />
+              </div>
+              <div>
+                <h2 className="text-3xl font-bold text-purple-700 dark:text-purple-300">My Minted NFTs</h2>
+                <p className="text-muted-foreground">Rare collectible NFTs from your top-performing memes</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm text-muted-foreground">
+                NFTs that have been minted as collectibles
+              </div>
+              <div className="text-xs text-purple-600 font-medium">
+                🏆 Exclusive Digital Assets
+              </div>
             </div>
           </div>
 
@@ -830,21 +889,31 @@ const Portfolio = () => {
                          </span>
                        </div>
                        <div className="flex justify-between">
-                         <span className="text-muted-foreground">Views:</span>
-                         <span className="font-medium">
+                         <span className="text-muted-foreground">👁️ Views:</span>
+                         <span className="font-medium text-blue-600">
                            {nft.views.toLocaleString()}
                          </span>
                        </div>
                        <div className="flex justify-between">
-                         <span className="text-muted-foreground">Earned:</span>
-                         <span className="font-bold text-primary">
+                         <span className="text-muted-foreground">💰 Earned:</span>
+                         <span className="font-bold text-yellow-600">
                            {nft.earnedIcp.toFixed(4)} ICP
+                         </span>
+                       </div>
+                       <div className="flex justify-between">
+                         <span className="text-muted-foreground">📅 Created:</span>
+                         <span className="font-medium text-gray-600 text-xs">
+                           {new Date(nft.created_at || Date.now()).toLocaleDateString("en-IN", {
+                             timeZone: "Asia/Kolkata",
+                             dateStyle: "short",
+                           })}
                          </span>
                        </div>
 
                        <div className="flex justify-between">
                          <span className="text-muted-foreground">Status:</span>
-                         <span className="font-medium text-purple-600">
+                         <span className="font-medium text-purple-600 flex items-center gap-1">
+                           <Crown className="w-3 h-3" />
                            🏆 Minted NFT
                          </span>
                        </div>

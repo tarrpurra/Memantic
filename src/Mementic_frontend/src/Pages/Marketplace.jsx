@@ -24,6 +24,10 @@ import {
   LogIn,
   Home,
   Zap,
+  X,
+  Heart,
+  Eye,
+  Coins,
 } from "lucide-react";
 
 // --- Small utilities ---
@@ -129,9 +133,12 @@ const normalizeMeme = (m, extra = {}) => {
     image_url,
     votes: score,
     views: safeBigIntToNumber(m?.market_data?.views ?? m?.views ?? 0),
-    created_at: safeBigIntToNumber(
-      m?.created_at ?? md?.created_at ?? m?.timestamp ?? Date.now()
-    ),
+    created_at: (() => {
+      const raw = safeBigIntToNumber(m?.created_at) || safeBigIntToNumber(md?.created_at) || safeBigIntToNumber(m?.timestamp) || Date.now();
+      // Convert nanoseconds to milliseconds if needed
+      const ms = raw > 1e15 ? Math.floor(raw / 1e6) : raw;
+      return ms > 1000000000000 ? ms : Date.now();
+    })(),
     rank: safeBigIntToNumber(extra?.rank ?? m?.rank ?? 0),
     emoji: m?.emoji || "🖼️",
     market_data: m?.market_data,
@@ -154,6 +161,21 @@ function getWeekEndIST(now = new Date()) {
   return new Date(backUtc - end.getTimezoneOffset() * 60000);
 }
 
+function getWeekStartIST(now = new Date()) {
+  const offsetIST = 330; // +05:30
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const ist = new Date(utc + offsetIST * 60000);
+
+  const day = ist.getDay(); // 0=Sun
+  const daysToLastSunday = day;
+  const start = new Date(ist);
+  start.setDate(ist.getDate() - daysToLastSunday);
+  start.setHours(0, 0, 0, 0);
+
+  const backUtc = start.getTime() - offsetIST * 60000;
+  return new Date(backUtc - start.getTimezoneOffset() * 60000);
+}
+
 function formatRemaining(ms) {
   if (ms <= 0) return "0d 0h 0m";
   const d = Math.floor(ms / (24 * 3600e3));
@@ -172,6 +194,178 @@ const SkeletonCard = () => (
     </CardContent>
   </Card>
 );
+
+// --- Preview Modal ---
+function PreviewModal({
+  open,
+  onClose,
+  meme,
+  onLike,
+  isAuthenticated,
+  isOwn,
+}) {
+  const [hasVoted, setHasVoted] = useState(false);
+  const [loadingVoteStatus, setLoadingVoteStatus] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    if (open) window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  // Check vote status when meme changes
+  useEffect(() => {
+    if (!open || !meme || !isAuthenticated || isOwn) {
+      setHasVoted(false);
+      setLoadingVoteStatus(false);
+      return;
+    }
+
+    const checkVoteStatus = async () => {
+      setLoadingVoteStatus(true);
+      try {
+        const bid = toOptionalBigInt(String(meme.id));
+        if (!bid) {
+          setHasVoted(false);
+        } else {
+          const userVote = await backendService.getUserVote(bid);
+          setHasVoted(!!userVote);
+        }
+      } catch (error) {
+        console.warn("Failed to check vote status:", error);
+        setHasVoted(false);
+      } finally {
+        setLoadingVoteStatus(false);
+      }
+    };
+
+    checkVoteStatus();
+  }, [open, meme, isAuthenticated, isOwn]);
+
+  if (!open || !meme) return null;
+
+  const createdAt = (meme.created_at && !isNaN(Number(meme.created_at)) && Number(meme.created_at) > 1000000000000) ? Number(meme.created_at) : Date.now();
+  const createdDate = new Date(createdAt);
+  const createdStr = createdDate.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-[95vw] max-w-7xl h-[95vh] overflow-hidden">
+        <div className="flex h-full">
+          {/* Left Panel: Image */}
+          <div className="flex-1 flex items-center justify-center bg-muted p-4 overflow-auto ">
+            {meme.image_url ? (
+              <img
+                src={meme.image_url}
+                alt={meme.title}
+                className="max-w-full"
+                loading="lazy"
+              />
+            ) : (
+              <div className="text-9xl">
+                {meme.emoji || "🖼️"}
+              </div>
+            )}
+          </div>
+
+          {/* Right Panel: Info */}
+          <div className="w-96 flex flex-col border-l border-border">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/60 to-primary/30 flex items-center justify-center text-card font-bold">
+                  {meme.creator?.[0]?.toUpperCase() || "U"}
+                </div>
+                <div>
+                  <div className="font-semibold">{meme.creator || "Unknown"}</div>
+                  <div className="text-xs text-muted-foreground">{createdStr}</div>
+                </div>
+              </div>
+              <Button size="icon" variant="ghost" onClick={onClose} title="Close">
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">{meme.title}</h3>
+                  {meme.prompt && (
+                    <p className="text-sm text-muted-foreground">{meme.prompt}</p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1">
+                      <Heart className="w-4 h-4 text-red-500" />
+                      <span className="text-sm text-black">{meme.votes}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Eye className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm text-blue-500">{meme.views ?? 0} views</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Coins className="w-4 h-4 text-yellow-500" />
+                      <span className="text-sm text-yellow-500">{meme.stakeAmount || 0} ICP</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="px-4 py-3 border-t border-border">
+              <Button
+                size="sm"
+                variant={hasVoted ? "secondary" : (isAuthenticated && !isOwn ? "default" : "outline")}
+                onClick={() => {
+                  onLike(meme.id, meme.votes, meme.creator);
+                  setHasVoted(true); // Optimistic update
+                }}
+                disabled={!isAuthenticated || isOwn || hasVoted || loadingVoteStatus}
+                className={(!isAuthenticated || isOwn || hasVoted) ? "opacity-60" : ""}
+                title={
+                  !isAuthenticated
+                    ? "Login to like"
+                    : isOwn
+                    ? "Can't like your own meme"
+                    : hasVoted
+                    ? "You have already voted on this meme"
+                    : loadingVoteStatus
+                    ? "Checking vote status..."
+                    : "Like"
+                }
+              >
+                <Heart className={`w-4 h-4 mr-2 ${hasVoted ? "fill-current" : ""}`} />
+                {loadingVoteStatus ? (
+                  <>
+                    <div className="animate-spin h-3 w-3 border border-current border-t-transparent rounded-full mr-1" />
+                    Loading...
+                  </>
+                ) : isOwn ? (
+                  "Your Meme"
+                ) : hasVoted ? (
+                  `Voted (${meme.votes})`
+                ) : (
+                  `Vote (${meme.votes})`
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const Marketplace = () => {
   const { principal, isLoading: authLoading, isAuthenticated } = useAuth();
@@ -202,6 +396,10 @@ const Marketplace = () => {
     return () => clearInterval(t);
   }, []);
   const timeLeft = formatRemaining(weekEnd.getTime() - now.getTime());
+
+  // Preview Modal State
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [selectedMeme, setSelectedMeme] = useState(null);
 
   // Periodic refresh of vote counts and leaderboard
   useEffect(() => {
@@ -325,7 +523,10 @@ const Marketplace = () => {
             { rank: e?.rank, votes: e?.votes }
           );
         });
-        if (!cancelled) setTopMemes(arr);
+        // Filter to current week only
+        const weekStart = getWeekStartIST();
+        const filteredArr = arr.filter(m => m.created_at >= weekStart.getTime());
+        if (!cancelled) setTopMemes(filteredArr);
       } catch (e) {
         if (!cancelled) setErrorMsg("Failed to load top memes.");
       } finally {
@@ -405,6 +606,10 @@ const Marketplace = () => {
         if (dateDiff !== 0) return dateDiff;
         return (b.votes || 0) - (a.votes || 0);
       });
+
+      // Filter to current week only (cleanup old memes)
+      const weekStart = getWeekStartIST();
+      arr = arr.filter(m => m.created_at >= weekStart.getTime());
 
       // Client-side paging
       const start = (page - 1) * PAGE_SIZE;
@@ -560,6 +765,13 @@ const Marketplace = () => {
       )
     );
 
+    // Update selected meme in modal
+    setSelectedMeme((prev) =>
+      prev && String(prev.id) === String(memeId)
+        ? { ...prev, votes: safeBigIntToNumber(prev.votes || 0) + 1 }
+        : prev
+    );
+
     try {
       const bid = toOptionalBigInt(String(memeId));
       if (!bid) {
@@ -591,7 +803,9 @@ const Marketplace = () => {
                 { rank: e?.rank, votes: e?.votes }
               );
             });
-            setTopMemes(arr);
+            const weekStart = getWeekStartIST();
+            const filteredArr = arr.filter(m => m.created_at >= weekStart.getTime());
+            setTopMemes(filteredArr);
           })
           .catch((err) => console.warn("Failed to refresh leaderboard:", err));
       }, 1000);
@@ -718,6 +932,12 @@ const Marketplace = () => {
 
   const canLoadMore = ensureArray(memes).length < total;
 
+  // Open preview modal
+  const openPreview = (meme) => {
+    setSelectedMeme(meme);
+    setPreviewOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -820,84 +1040,115 @@ const Marketplace = () => {
           </Button>
         </div>
 
-        {/* Top 3 Memes Section */}
+        {/* Leaderboard Section */}
         <Card className="mb-8 bg-gradient-glow border-primary/30">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-2xl">
                 <Crown className="w-6 h-6 text-yellow-500" />
-                Top 3 Memes of the Week
+                Weekly Leaderboard
               </CardTitle>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Timer className="w-4 h-4" />
-                <span>Ends in {timeLeft}</span>
+                <span>Contest ends in {timeLeft}</span>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {ensureArray(topMemes).map((meme) => (
-                <Card key={meme.id} className="relative overflow-hidden">
-                  {meme.rank === 1 && (
-                    <div className="absolute top-2 left-2">
-                      <Crown className="w-6 h-6 text-yellow-500" />
+            <div className="space-y-4">
+              {ensureArray(topMemes).map((meme, index) => {
+                const rank = meme.rank || (index + 1);
+                const isTop3 = rank <= 3;
+                return (
+                  <div
+                    key={meme.id}
+                    className={`flex items-center gap-4 p-4 rounded-lg border ${
+                      rank === 1
+                        ? "bg-gradient-to-r from-yellow-500/10 to-yellow-600/10 border-yellow-500/30"
+                        : rank === 2
+                        ? "bg-gradient-to-r from-gray-400/10 to-gray-500/10 border-gray-400/30"
+                        : rank === 3
+                        ? "bg-gradient-to-r from-orange-500/10 to-orange-600/10 border-orange-500/30"
+                        : "bg-muted/50 border-border"
+                    }`}
+                  >
+                    {/* Rank Badge */}
+                    <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-lg ${
+                      rank === 1
+                        ? "bg-yellow-500 text-white"
+                        : rank === 2
+                        ? "bg-gray-400 text-white"
+                        : rank === 3
+                        ? "bg-orange-500 text-white"
+                        : "bg-muted text-muted-foreground"
+                    }`}>
+                      {rank === 1 ? "👑" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : rank}
                     </div>
-                  )}
-                  <CardContent className="p-6">
-                    <div className="text-center">
+
+                    {/* Image */}
+                    <div className="flex-shrink-0">
                       {meme.image_url ? (
                         <img
                           src={meme.image_url}
                           alt={meme.title}
-                          className="w-full h-auto object-contain max-h-32 rounded-lg mb-4"
+                          className="w-16 h-16 object-cover rounded-lg"
                           loading="lazy"
                         />
                       ) : (
-                        <div className="text-6xl mb-4">
+                        <div className="w-16 h-16 flex items-center justify-center text-2xl bg-muted rounded-lg">
                           {meme.emoji || "🖼️"}
                         </div>
                       )}
-                      <h3 className="font-bold text-lg mb-2">{meme.title}</h3>
-                      <p className="text-sm text-muted-foreground mb-4">
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold text-lg line-clamp-1">{meme.title}</h4>
+                      <p className="text-sm text-muted-foreground">
                         by {meme.creator}
                         {checkMemeOwnership(meme) && (
-                          <span className="ml-2 text-xs text-orange-600 font-medium">
-                            (You)
-                          </span>
+                          <span className="ml-2 text-xs text-orange-600 font-medium">(You)</span>
                         )}
                       </p>
-                      <div className="flex items-center justify-center gap-2">
-                        <Button
-                          size="sm"
-                          variant={isAuthenticated ? "outline" : "ghost"}
-                          onClick={() =>
-                            handleVote(meme.id, meme.votes, meme.creator)
-                          }
-                          disabled={
-                            !isAuthenticated || checkMemeOwnership(meme)
-                          }
-                          className={
-                            !isAuthenticated || checkMemeOwnership(meme)
-                              ? "opacity-50 cursor-not-allowed"
-                              : ""
-                          }
-                        >
-                          <ArrowUp className="w-4 h-4 mr-1" />
-                          {checkMemeOwnership(meme) ? "Your Meme" : meme.votes}
-                          {!isAuthenticated && (
-                            <span className="ml-1 text-xs">
-                              (Login to vote)
-                            </span>
-                          )}
-                          {checkMemeOwnership(meme) && (
-                            <span className="ml-1 text-xs">(Cannot vote)</span>
-                          )}
-                        </Button>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(meme.created_at || Date.now()).toLocaleString("en-IN", {
+                          timeZone: "Asia/Kolkata",
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })}
+                      </p>
+                      <div className="flex items-center gap-4 mt-1">
+                        <div className="flex items-center gap-1 text-sm">
+                          <Heart className="w-4 h-4 text-red-500" />
+                          <span className="text-red-500">{meme.votes}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-sm">
+                          <Eye className="w-4 h-4 text-blue-500" />
+                          <span className="text-blue-500">{meme.views ?? 0}</span>
+                        </div>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+
+                    {/* Vote Button */}
+                    <div className="flex-shrink-0">
+                      <Button
+                        size="sm"
+                        variant={isAuthenticated ? "outline" : "ghost"}
+                        onClick={() => handleVote(meme.id, meme.votes, meme.creator)}
+                        disabled={!isAuthenticated || checkMemeOwnership(meme)}
+                        className={
+                          !isAuthenticated || checkMemeOwnership(meme)
+                            ? "opacity-50 cursor-not-allowed"
+                            : ""
+                        }
+                      >
+                        <ArrowUp className="w-4 h-4 mr-1" />
+                        {checkMemeOwnership(meme) ? "Yours" : "Vote"}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -942,8 +1193,8 @@ const Marketplace = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {ensureArray(filteredMemes).map((meme) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {ensureArray(filteredMemes).filter(m => m).map((meme) => (
               <MemeCard
                 key={meme.id}
                 meme={meme}
@@ -954,6 +1205,7 @@ const Marketplace = () => {
                 }}
                 isAuthenticated={isAuthenticated}
                 currentUserPrincipal={principal}
+                onOpenPreview={openPreview}
               />
             ))}
           </div>
@@ -989,6 +1241,16 @@ const Marketplace = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Preview Modal */}
+      <PreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        meme={selectedMeme}
+        onLike={handleVote}
+        isAuthenticated={isAuthenticated}
+        isOwn={selectedMeme ? checkMemeOwnership(selectedMeme) : false}
+      />
     </div>
   );
 };

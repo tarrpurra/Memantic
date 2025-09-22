@@ -48,12 +48,7 @@ class BackendService {
         };
       } else {
         // Create auth client normally - allow it to restore identity from storage
-        this.authClient = await AuthClient.create({
-          idleOptions: {
-            disableIdle: true,
-            disableDefaultIdleCallback: true
-          },
-        });
+        this.authClient = await AuthClient.create();
       }
 
       // Check if user is already authenticated (restored from storage)
@@ -246,12 +241,7 @@ class BackendService {
     // Use existing AuthClient or create new one for login
     if (!this.authClient) {
       try {
-        this.authClient = await AuthClient.create({
-          idleOptions: {
-            disableIdle: true,
-            disableDefaultIdleCallback: true
-          },
-        });
+        this.authClient = await AuthClient.create();
         console.log("Created AuthClient for login");
       } catch (error) {
         console.error("Failed to create AuthClient:", error);
@@ -262,7 +252,7 @@ class BackendService {
     return new Promise((resolve, reject) => {
       this.authClient.login({
         identityProvider: getIdentityProvider(),
-        maxTimeToLive: BigInt(7 * 24 * 60 * 60 * 1000 * 1000 * 1000), // 7 days
+        maxTimeToLive: BigInt(30 * 24 * 60 * 60 * 1000 * 1000 * 1000), // 30 days
         windowOpenerFeatures: "toolbar=0,location=0,menubar=0,width=500,height=500,left=100,top=100",
         onSuccess: async () => {
           try {

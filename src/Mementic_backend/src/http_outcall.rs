@@ -22,7 +22,7 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 // ---------- Constants ----------
 const OUTCALL_CYCLES: u128 = 6_000_000_000; // cycles per outcall
-const MEME_WORKER_URL: &str = "https://plain-night-ff62.h28177922.workers.dev/generate_meme";
+const MEME_WORKER_URL: &str = "https://empty-frog-6140.h28177922.workers.dev/generate_meme"; //https://plain-night-ff62.h28177922.workers.dev/generate_meme
 
 // ---------- Storable wrapper for Principal ----------
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Serialize, Deserialize)]
