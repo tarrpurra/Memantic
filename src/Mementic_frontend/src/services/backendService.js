@@ -129,17 +129,14 @@ class BackendService {
        host: getAgentHost(),
        identity: finalIdentity,
      };
-       // CRITICAL: This must be set to false for localhost to disable signature verification
      console.log("Agent options:", agentOptions);
-
-     
 
      // Create the agent
      const agent = new HttpAgent(agentOptions);
 
      // CRITICAL: For development, we must fetch the root key
      if (isDevMode()) {
-       console.log("Fetching root key...");
+       console.log("Fetching root key for local development...");
        try {
          await agent.fetchRootKey();
          console.log("Root key fetched successfully");
@@ -158,13 +155,8 @@ class BackendService {
          // In development, this is usually fatal
          throw new Error(`Root key fetch failed: ${error.message}`);
        }
-     }
-
-     // Additional check: Ensure signature verification is disabled
-     if (agent._verifyQuerySignatures !== false) {
-       console.warn("Warning: verifyQuerySignatures is not properly set to false");
-       // Force disable it
-       agent._verifyQuerySignatures = false;
+     } else {
+       console.log("Production mode: using mainnet certificates");
      }
 
      return agent;
@@ -379,20 +371,29 @@ class BackendService {
         if (error.message.includes('certificate') ||
             error.message.includes('signature') ||
             error.message.includes('verification') ||
-            error.message.includes('delegation')) {
+            error.message.includes('delegation') ||
+            error.message.includes('Invalid certificate')) {
+
+          console.log(`Certificate/signature error on attempt ${attempt}:`, error.message);
 
           if (isDevMode() && attempt < maxRetries) {
-            console.log("Certificate/signature error detected, recreating agent...");
+            console.log("Recreating agent for local development...");
             try {
-              if (this.isAuthenticated) {
-                await this._setupAuthenticatedAgent();
-              } else {
-                await this._setupAnonymousAgent();
-              }
+              // Force re-initialize the service
+              this.initialized = false;
+              this.agent = null;
+              this.actor = null;
+              await this.initialize();
               console.log("Agent recreated successfully, retrying call...");
             } catch (agentError) {
               console.error("Failed to recreate agent:", agentError);
+              // Don't retry if agent recreation fails
+              break;
             }
+          } else if (!isDevMode()) {
+            console.log("Certificate error in production - this might indicate network issues");
+            // Don't retry certificate errors in production
+            break;
           }
         }
 
@@ -601,10 +602,26 @@ class BackendService {
   }
 
   /**
+    * Get all feedback (admin function)
+    */
+  async getAllFeedback() {
+    return await this._safeCall('get_all_feedback');
+  }
+
+  /**
     * Get feedback statistics
     */
   async getFeedbackStats() {
-    return await this._safeCall('get_feedback_stats');
+    console.log("Getting feedback stats...");
+    try {
+      const result = await this._safeCall('get_feedback_stats');
+      console.log("Feedback stats retrieved:", result);
+      return result;
+    } catch (error) {
+      console.error("Failed to get feedback stats:", error);
+      // Return default stats if the method fails
+      return [0, 0, 0]; // [total_feedback, approved_count, approval_rate]
+    }
   }
 
   /* ============ UTILITY METHODS ============ */

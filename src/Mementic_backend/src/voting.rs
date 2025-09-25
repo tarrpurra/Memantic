@@ -179,10 +179,11 @@ pub struct VoteResponse {
 
 // ---------- Helpers ----------
 
+const WEEK_S: u64 = 864_000; // 10 * 24 * 60 * 60 (10 days in seconds)
+
 /// Week index (0-based) from timestamp ns
 fn get_week_id(timestamp_ns: u64) -> u64 {
     const SEC: u64 = 1_000_000_000;
-    const WEEK_S: u64 = 604_800; // 7 * 24 * 60 * 60
     (timestamp_ns / SEC) / WEEK_S
 }
 
@@ -196,8 +197,8 @@ fn get_or_create_current_week() -> WeeklyPeriod {
         if let Some(period) = periods.get(&week_id) {
             period
         } else {
-            let week_start = week_id * 604_800 * 1_000_000_000;
-            let week_end = week_start + (604_800 * 1_000_000_000);
+            let week_start = week_id * WEEK_S * 1_000_000_000;
+            let week_end = week_start + (WEEK_S * 1_000_000_000);
             let new_period = WeeklyPeriod {
                 week_id,
                 start_time: week_start,
@@ -338,7 +339,7 @@ pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, Stri
     }
 
     // Ensure week periods are up to date (auto-lock past weeks)
-    close_finished_weeks();
+    // close_finished_weeks();
 
     // Validate meme exists
     let meme = get_meme(meme_id).ok_or("Meme not found")?;
@@ -500,8 +501,6 @@ pub fn remove_vote(meme_id: u64) -> Result<VoteResponse, String> {
 /// Current weekly leaderboard (active week). Limit max 50.
 #[query]
 pub fn get_current_leaderboard(limit: Option<u32>) -> WeeklyLeaderboard {
-    close_finished_weeks();
-
     let now = time();
     let period = get_or_create_current_week();
     let week_id = period.week_id;
@@ -528,8 +527,6 @@ pub fn get_current_leaderboard(limit: Option<u32>) -> WeeklyLeaderboard {
 /// Leaderboard for any week id. Returns None if week not found.
 #[query]
 pub fn get_week_leaderboard(week_id: u64, limit: Option<u32>) -> Option<WeeklyLeaderboard> {
-    close_finished_weeks();
-
     WEEKLY_PERIODS.with(|wp| {
         let periods = wp.borrow();
         let p = periods.get(&week_id)?;
@@ -559,8 +556,6 @@ pub fn get_week_leaderboard(week_id: u64, limit: Option<u32>) -> Option<WeeklyLe
 #[query]
 pub fn get_top3_for_week(week_id: u64) -> Result<Vec<TopEntry>, String> {
     // Ensure no active voting and week exists
-    close_finished_weeks();
-
     let p = WEEKLY_PERIODS.with(|wp| wp.borrow().get(&week_id));
     let period = p.ok_or_else(|| "Week not found".to_string())?;
     if !period.is_completed {
@@ -630,7 +625,6 @@ pub fn get_user_vote(meme_id: u64) -> Option<VoteRecord> {
 /// Completed weeks
 #[query]
 pub fn get_completed_weeks() -> Vec<WeeklyPeriod> {
-    close_finished_weeks(); // ⚠️ see note below
     WEEKLY_PERIODS.with(|wp| {
         let periods = wp.borrow();
         periods
@@ -646,7 +640,6 @@ pub fn get_completed_weeks() -> Vec<WeeklyPeriod> {
 /// Status for current week
 #[query]
 pub fn get_current_week_status() -> (u64, u64, u64, bool) {
-    close_finished_weeks();
     let now = time();
     let period = get_or_create_current_week();
     let remaining = if now < period.end_time { period.end_time - now } else { 0 };
@@ -676,6 +669,36 @@ pub fn finalize_week(week_id: u64) -> Result<(), String> {
             Err("Week not found".into())
         }
     })
+}
+
+/// Delete a meme and all associated data (votes, user votes)
+pub fn delete_meme_data(meme_id: u64) -> Result<(), String> {
+    // Remove all votes for this meme
+    VOTES.with(|v| {
+        v.borrow_mut().remove(&meme_id);
+    });
+
+    // Remove all user votes for this meme
+    USER_VOTES.with(|uv| {
+        let mut map = uv.borrow_mut();
+        let keys_to_remove: Vec<UserMemeKey> = map
+            .iter()
+            .filter_map(|entry| {
+                let key = entry.key();
+                if key.1 == meme_id {
+                    Some(key.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for key in keys_to_remove {
+            map.remove(&key);
+        }
+    });
+
+    Ok(())
 }
 
 /// Quick stats

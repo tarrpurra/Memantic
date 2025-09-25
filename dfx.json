@@ -39,6 +39,19 @@
       "packtool": ""
     }
   },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:4943",
+      "type": "ephemeral"
+    },
+    "ic": {
+      "providers": [
+        "https://icp0.io",
+        "https://icp-api.io"
+      ],
+      "type": "persistent"
+    }
+  },
   "output_env_file": ".env",
   "version": 1
 }

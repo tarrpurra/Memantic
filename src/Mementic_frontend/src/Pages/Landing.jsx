@@ -8,7 +8,7 @@ import {
 } from "../components/ui/Card";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { Sparkles, MessageSquare, Heart, RefreshCw, TrendingUp,Zap } from "lucide-react";
+import { Sparkles, MessageSquare, Heart, RefreshCw, TrendingUp, Zap, ChevronLeft, ChevronRight } from "lucide-react";
 import backendService from "../services/backendService";
 
 const Landing = () => {
@@ -24,6 +24,7 @@ const Landing = () => {
     reviews: 0
   });
   const [loadingStats, setLoadingStats] = useState(true);
+  const [currentFeedbackIndex, setCurrentFeedbackIndex] = useState(0);
 
   const handleCreateClick = () => {
     if (!isAuthenticated) {
@@ -31,6 +32,18 @@ const Landing = () => {
     } else {
       navigate("/myplace");
     }
+  };
+
+  const nextFeedback = () => {
+    setCurrentFeedbackIndex((prev) =>
+      prev < feedback.length - 1 ? prev + 1 : 0
+    );
+  };
+
+  const prevFeedback = () => {
+    setCurrentFeedbackIndex((prev) =>
+      prev > 0 ? prev - 1 : feedback.length - 1
+    );
   };
 
   // Fetch feedback data
@@ -41,7 +54,7 @@ const Landing = () => {
         console.log("Fetching real feedback data from backend...");
 
         const [feedbackData, statsData] = await Promise.all([
-          backendService.getApprovedFeedback(50), // Get all approved feedback
+          backendService.getAllFeedback(), // Get all feedback
           backendService.getFeedbackStats()
         ]);
 
@@ -87,7 +100,7 @@ const Landing = () => {
             setLoadingStats(true);
 
             const [feedbackData, statsData, totalUsers, totalMemes] = await Promise.all([
-              backendService.getApprovedFeedback(50),
+              backendService.getAllFeedback(),
               backendService.getFeedbackStats(),
               backendService.getTotalUsers(),
               backendService.getTotalMemes()
@@ -99,6 +112,8 @@ const Landing = () => {
               approved: statsData?.[1] || 0,
               returnRate: Math.round(statsData?.[2] || 0)
             });
+            setCurrentFeedbackIndex(0); // Reset to first feedback item
+            setCurrentFeedbackIndex(0); // Reset to first feedback item
 
             setStats({
               users: Number(totalUsers) || 0,
@@ -374,53 +389,83 @@ const Landing = () => {
           {/* Complete User Feedback - Only show if real feedback exists */}
           {feedback.length > 0 && (
             <div className="mt-12">
-              <div className="flex items-center gap-2 mb-6">
-                <MessageSquare className="w-5 h-5 text-primary" />
-                <h3 className="text-xl font-semibold">Complete User Feedback</h3>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-primary" />
+                  <h3 className="text-xl font-semibold">Complete User Feedback</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={prevFeedback}
+                    className="p-2 rounded-full bg-card hover:bg-card/80 border border-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={feedback.length <= 1}
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <span className="text-sm text-muted-foreground min-w-[60px] text-center">
+                    {currentFeedbackIndex + 1} / {feedback.length}
+                  </span>
+                  <button
+                    onClick={nextFeedback}
+                    className="p-2 rounded-full bg-card hover:bg-card/80 border border-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={feedback.length <= 1}
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
-              <div className="grid gap-6 sm:grid-cols-1 lg:grid-cols-2">
-                {feedback.slice(0, 4).map((item) => (
-                  <div key={item.id} className="rounded-2xl bg-card p-6 border border-border">
-                    <div className="space-y-3">
-                      {item.likes && (
-                        <div>
-                          <div className="flex items-center gap-1 mb-1">
-                            <Heart className="w-3 h-3 text-green-500" />
-                            <span className="text-xs font-medium text-green-600">What they love</span>
+              <div className="max-w-2xl mx-auto">
+                {(() => {
+                  const item = feedback[currentFeedbackIndex];
+                  return (
+                    <div className="rounded-2xl bg-card p-8 border border-border">
+                      <div className="space-y-4">
+                        {item.likes && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Heart className="w-4 h-4 text-green-500" />
+                              <span className="text-sm font-medium text-green-600">What they love</span>
+                            </div>
+                            <p className="text-base italic text-muted-foreground ml-6">"{item.likes}"</p>
                           </div>
-                          <p className="text-sm italic text-muted-foreground ml-4">"{item.likes}"</p>
-                        </div>
-                      )}
-                      {item.dislikes && (
-                        <div>
-                          <div className="flex items-center gap-1 mb-1">
-                            <TrendingUp className="w-3 h-3 text-orange-500" />
-                            <span className="text-xs font-medium text-orange-600">Could improve</span>
+                        )}
+                        {item.dislikes && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <TrendingUp className="w-4 h-4 text-orange-500" />
+                              <span className="text-sm font-medium text-orange-600">Could improve</span>
+                            </div>
+                            <p className="text-base italic text-muted-foreground ml-6">"{item.dislikes}"</p>
                           </div>
-                          <p className="text-sm italic text-muted-foreground ml-4">"{item.dislikes}"</p>
-                        </div>
-                      )}
-                      {item.suggestions && (
-                        <div>
-                          <div className="flex items-center gap-1 mb-1">
-                            <Sparkles className="w-3 h-3 text-blue-500" />
-                            <span className="text-xs font-medium text-blue-600">Suggestions</span>
+                        )}
+                        {item.suggestions && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Sparkles className="w-4 h-4 text-blue-500" />
+                              <span className="text-sm font-medium text-blue-600">Suggestions</span>
+                            </div>
+                            <p className="text-base italic text-muted-foreground ml-6">"{item.suggestions}"</p>
                           </div>
-                          <p className="text-sm italic text-muted-foreground ml-4">"{item.suggestions}"</p>
-                        </div>
-                      )}
+                        )}
+                      </div>
+                      <div className="mt-6 pt-4 border-t border-border text-sm text-muted-foreground flex items-center justify-between">
+                        <span className="font-medium">— {item.name}</span>
+                        {item.will_return ? (
+                          <span className="text-green-600 font-medium flex items-center gap-1">
+                            <span>Will return</span>
+                            <span>✅</span>
+                          </span>
+                        ) : (
+                          <span className="text-red-600 font-medium flex items-center gap-1">
+                            <span>Won't return</span>
+                            <span>❌</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="mt-4 pt-3 border-t border-border text-xs text-muted-foreground flex items-center justify-between">
-                      <span>— {item.name}</span>
-                      {item.will_return ? (
-                        <span className="text-green-600 font-medium">Will return! ✅</span>
-                      ) : (
-                        <span className="text-red-600 font-medium">Won't return ❌</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })()}
               </div>
             </div>
           )}

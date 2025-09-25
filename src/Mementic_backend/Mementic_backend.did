@@ -76,11 +76,12 @@ type PythonMetadata = record {
   file_size_bytes : nat64;
 };
 type Result = variant { Ok : text; Err : text };
-type Result_1 = variant { Ok; Err : text };
-type Result_2 = variant { Ok : vec TopEntry; Err : text };
-type Result_3 = variant { Ok : vec MintedPair; Err : text };
-type Result_4 = variant { Ok : PublicStoredMeme; Err : text };
-type Result_5 = variant { Ok : VoteResponse; Err : text };
+type Result_1 = variant { Ok : nat32; Err : text };
+type Result_2 = variant { Ok; Err : text };
+type Result_3 = variant { Ok : vec TopEntry; Err : text };
+type Result_4 = variant { Ok : vec MintedPair; Err : text };
+type Result_5 = variant { Ok : PublicStoredMeme; Err : text };
+type Result_6 = variant { Ok : VoteResponse; Err : text };
 type SupportedStandard = record { url : text; name : text };
 type TokenMetadataEntry = record {
   value : MetadataValue;
@@ -129,13 +130,17 @@ service : (opt InitArgs) -> {
   check_remaining_calls : () -> (nat8) query;
   // Mark any past weeks complete if their end_time has passed
   close_finished_weeks : () -> ();
+  // Delete all memes in the system (admin function, deletes all memes regardless of ownership, except minted NFTs)
+  delete_all_user_memes : () -> (Result_1);
   // Delete feedback (admin function)
   delete_feedback : (nat64) -> (Result);
+  // Delete a meme (owner only, if not minted as NFT)
+  delete_meme : (nat64) -> (Result_2);
   // Manually finalize any weeks that have ended.
   // Useful to ensure `is_completed = true` even if no votes happen at boundary.
   finalize_finished_weeks : () -> (text);
   // Force-complete a specific week_id (admin/ops hook).
-  finalize_week : (nat64) -> (Result_1);
+  finalize_week : (nat64) -> (Result_2);
   generate_meme : (text) -> (Result);
   // Get all feedback (admin function)
   get_all_feedback : () -> (vec Feedback) query;
@@ -160,7 +165,7 @@ service : (opt InitArgs) -> {
   get_token_by_meme_id : (nat64) -> (opt nat) query;
   // Return **Top 3** for a given week (for NFT mint step).
   // Fails if the week is not completed yet.
-  get_top3_for_week : (nat64) -> (Result_2) query;
+  get_top3_for_week : (nat64) -> (Result_3) query;
   get_total_memes : () -> (nat64) query;
   get_total_users : () -> (nat64) query;
   get_user_meme_count : () -> (nat32) query;
@@ -177,26 +182,28 @@ service : (opt InitArgs) -> {
   icrc7_tokens_of : (principal) -> (vec nat) query;
   icrc7_total_supply : () -> (nat) query;
   // Increment view count for a meme
-  increment_meme_views : (nat64) -> (Result_1);
+  increment_meme_views : (nat64) -> (Result_2);
   // Check if a meme has been minted as an NFT
   is_meme_minted : (nat64) -> (bool) query;
   // List a meme for sale on the marketplace
-  list_meme_for_sale : (nat64, nat64) -> (Result_1);
-  mint_week_top3_from_voting : (principal, nat64) -> (Result_3);
-  mint_week_top3_here : (nat64) -> (Result_3);
+  list_meme_for_sale : (nat64, nat64) -> (Result_2);
+  mint_week_top3_from_voting : (principal, nat64) -> (Result_4);
+  mint_week_top3_here : (nat64) -> (Result_4);
   // Store a generated meme into marketplace (associated to caller)
-  publish_meme : (MemeData) -> (Result_4);
+  publish_meme : (MemeData) -> (Result_5);
   // Record a sale (called internally or by marketplace canister)
-  record_meme_sale : (nat64, nat64) -> (Result_1);
+  record_meme_sale : (nat64, nat64) -> (Result_2);
+  // Remove all memes from the marketplace (admin function)
+  remove_all_memes_from_market : () -> (Result_1);
   // Remove a meme from the marketplace
-  remove_meme_from_market : (nat64) -> (Result_1);
+  remove_meme_from_market : (nat64) -> (Result_2);
   // Remove your vote (works only for current active week)
-  remove_vote : (nat64) -> (Result_5);
+  remove_vote : (nat64) -> (Result_6);
   // Submit feedback from a user
   submit_feedback : (text, text, text, text, bool) -> (Result);
   transform : (TransformArgs) -> (HttpResponse) query;
   // Cast or change a vote on a meme in the **current active week**.
   // Rejects if meme is not from current week or if the week is completed/expired.
-  vote_meme : (nat64, VoteType) -> (Result_5);
+  vote_meme : (nat64, VoteType) -> (Result_6);
   whoami : () -> (principal) query;
 }

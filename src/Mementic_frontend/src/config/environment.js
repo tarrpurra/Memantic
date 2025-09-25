@@ -1,9 +1,18 @@
 // environment.ts (or .js)
 
-const NETWORK = 'local'; // 'local' | 'ic' | 'mainnet' | 'playground'
-const CANISTER_ID = 'uxrrr-q7777-77774-qaaaq-cai';
+const NETWORK = import.meta.env?.VITE_NETWORK || 'ic'; // 'local' | 'ic' | 'mainnet' | 'playground'
+const CANISTER_ID = 'g3bm6-baaaa-aaaaa-qcexq-cai';
 
-export const isDevMode = () => true;
+export const isDevMode = () => {
+  // Check if we're on mainnet by looking at the hostname or environment
+  if (typeof window !== 'undefined') {
+    return window.location.hostname.includes('localhost') ||
+           window.location.hostname === '127.0.0.1' ||
+           import.meta.env?.DEV === 'true' ||
+           import.meta.env?.VITE_NETWORK === 'local';
+  }
+  return import.meta.env?.DEV === 'true' || import.meta.env?.VITE_NETWORK === 'local';
+};
 
 // Agent host: must match the page origin for delegation verification
 export const getAgentHost = () => {

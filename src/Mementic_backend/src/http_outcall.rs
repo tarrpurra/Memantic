@@ -22,7 +22,7 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 // ---------- Constants ----------
 const OUTCALL_CYCLES: u128 = 6_000_000_000; // cycles per outcall
-const MEME_WORKER_URL: &str = "https://empty-frog-6140.h28177922.workers.dev/generate_meme"; //https://plain-night-ff62.h28177922.workers.dev/generate_meme
+const MEME_WORKER_URL: &str = "https://dark-shape-faac.h28177922.workers.dev/generate_meme"; //https://plain-night-ff62.h28177922.workers.dev/generate_meme
 
 // ---------- Storable wrapper for Principal ----------
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Serialize, Deserialize)]
@@ -546,6 +546,158 @@ pub fn remove_meme_from_market(meme_id: u64) -> Result<(), String> {
             Err("Meme not found".to_string())
         }
     })
+}
+
+/// Remove all memes from the marketplace (admin function)
+#[update]
+pub fn remove_all_memes_from_market() -> Result<u32, String> {
+    let user = caller();
+    if user == Principal::anonymous() {
+        return Err("Authentication required".to_string());
+    }
+
+    // Optional: Add admin check here if you have admin principals
+    // For now, allowing any authenticated user
+
+    let mut removed_count = 0;
+    MEMES.with(|m| {
+        let mut map = m.borrow_mut();
+        let keys_to_update: Vec<u64> = map
+            .iter()
+            .filter_map(|entry| {
+                let sm = entry.value();
+                if sm.market_data.is_listed {
+                    Some(*entry.key())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for meme_id in keys_to_update {
+            if let Some(mut stored) = map.get(&meme_id) {
+                stored.market_data.is_listed = false;
+                stored.market_data.listing_price = None;
+                stored.market_data.listed_at = None;
+                map.insert(meme_id, stored);
+                removed_count += 1;
+            }
+        }
+    });
+
+    Ok(removed_count)
+}
+
+/// Delete a meme (owner only, if not minted as NFT)
+#[update]
+pub fn delete_meme(meme_id: u64) -> Result<(), String> {
+    let user = caller();
+    if user == Principal::anonymous() {
+        return Err("Authentication required".to_string());
+    }
+
+    // Check if meme exists and verify ownership
+    let meme = MEMES.with(|m| m.borrow().get(&meme_id));
+    let stored_meme = match meme {
+        Some(sm) => sm,
+        None => return Err("Meme not found".to_string()),
+    };
+
+    if stored_meme.owner.0 != user {
+        return Err("You don't own this meme".to_string());
+    }
+
+    // Check if meme is minted as NFT
+    if is_meme_minted(meme_id) {
+        return Err("Cannot delete a meme that has been minted as NFT".to_string());
+    }
+
+    // Remove from main MEMES storage
+    MEMES.with(|m| {
+        m.borrow_mut().remove(&meme_id);
+    });
+
+    // Remove from user's meme list
+    USER_MEMES.with(|um| {
+        let mut map = um.borrow_mut();
+        let key = StorablePrincipal::from(user);
+        if let Some(mut list) = map.get(&key) {
+            let mut ids: Vec<u64> = list.into();
+            ids.retain(|&id| id != meme_id);
+            map.insert(key, StorableVecU64::from(ids));
+        }
+    });
+
+    // Remove all voting data for this meme
+    crate::voting::delete_meme_data(meme_id)?;
+
+    Ok(())
+}
+
+/// Delete all memes in the system (admin function, deletes all memes regardless of ownership, except minted NFTs)
+#[update]
+pub fn delete_all_user_memes() -> Result<u32, String> {
+    let user = caller();
+    if user == Principal::anonymous() {
+        return Err("Authentication required".to_string());
+    }
+
+    // Get all meme IDs in the system
+    let all_meme_ids: Vec<u64> = MEMES.with(|m| {
+        m.borrow().iter().map(|entry| *entry.key()).collect()
+    });
+
+    let mut deleted_count = 0;
+    let mut failed_deletions = Vec::new();
+
+    for meme_id in all_meme_ids {
+        // Check if meme exists
+        if let Some(stored_meme) = MEMES.with(|m| m.borrow().get(&meme_id)) {
+            // Check if meme is minted as NFT
+            if is_meme_minted(meme_id) {
+                failed_deletions.push(format!("Meme {}: cannot delete minted NFT", meme_id));
+                continue;
+            }
+
+            // Remove from main MEMES storage
+            MEMES.with(|m| {
+                m.borrow_mut().remove(&meme_id);
+            });
+
+            // Remove from owner's meme list
+            let owner = stored_meme.owner.0;
+            let storable_owner = StorablePrincipal::from(owner);
+            USER_MEMES.with(|um| {
+                let mut map = um.borrow_mut();
+                if let Some(mut list) = map.get(&storable_owner) {
+                    let mut ids: Vec<u64> = list.into();
+                    ids.retain(|&id| id != meme_id);
+                    if ids.is_empty() {
+                        map.remove(&storable_owner);
+                    } else {
+                        map.insert(storable_owner, StorableVecU64::from(ids));
+                    }
+                }
+            });
+
+            // Remove all voting data for this meme
+            if let Err(e) = crate::voting::delete_meme_data(meme_id) {
+                failed_deletions.push(format!("Meme {}: voting data deletion failed: {}", meme_id, e));
+                continue;
+            }
+
+            deleted_count += 1;
+        } else {
+            failed_deletions.push(format!("Meme {}: not found", meme_id));
+        }
+    }
+
+    // If there were any failures, return an error with details
+    if !failed_deletions.is_empty() {
+        return Err(format!("Deleted {} memes, but failed to delete: {}", deleted_count, failed_deletions.join(", ")));
+    }
+
+    Ok(deleted_count)
 }
 
 /// Record a sale (called internally or by marketplace canister)
