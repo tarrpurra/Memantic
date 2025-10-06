@@ -4,97 +4,98 @@
 
 /* 1) Remove @theme - use :root instead */
 :root {
-  /* Color tokens */
-  --background: 237 19% 13%;
-  --foreground: 41 100% 95%;
+  color-scheme: light;
+  --background: 210 38% 97%;
+  --foreground: 222 47% 11%;
 
-  --card: 237 19% 13% / 0.85;
-  --card-foreground: 41 100% 90%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
 
-  --popover: 237 19% 13% / 0.9;
-  --popover-foreground: 41 100% 95%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
 
-  --primary: 273 68% 59%;
-  --primary-foreground: 237 19% 13%;
-  --primary-glow: 273 68% 69%;
+  --primary: 248 86% 60%;
+  --primary-foreground: 210 40% 98%;
 
-  --secondary: 86 87% 54%;
-  --secondary-foreground: 237 19% 13%;
-  --secondary-glow: 86 87% 64%;
+  --secondary: 172 59% 45%;
+  --secondary-foreground: 210 40% 98%;
 
-  --accent: 331 100% 59%;
-  --accent-foreground: 237 19% 13%;
+  --accent: 22 89% 60%;
+  --accent-foreground: 210 40% 98%;
 
-  --muted: 237 15% 20%;
-  --muted-foreground: 41 50% 70%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 222 28% 36%;
 
-  --destructive: 0 84.2% 60.2%;
+  --destructive: 0 84% 63%;
   --destructive-foreground: 210 40% 98%;
 
-  --border: 237 25% 22%;
-  --input: 237 25% 17%;
-  --ring: 273 68% 59%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 248 86% 60%;
 
-  /* Optional meme colors */
-  --meme-yellow: 50 96% 52%;
-  --meme-cyan: 106 100% 50%;
+  --gradient-primary: linear-gradient(135deg, hsl(248 86% 60%), hsl(172 59% 45%));
+  --gradient-secondary: linear-gradient(135deg, hsl(199 86% 92%), hsl(172 59% 90%));
+  --gradient-background: radial-gradient(circle at top, hsl(248 86% 85% / 0.45), transparent 55%),
+    radial-gradient(circle at bottom, hsl(172 59% 82% / 0.3), transparent 65%),
+    linear-gradient(180deg, hsl(210 38% 97%), hsl(210 44% 93%));
+  --gradient-hero: linear-gradient(135deg, hsl(199 86% 92%) 0%, hsl(248 86% 95%) 50%, hsl(172 59% 90%) 100%);
+  --gradient-card: linear-gradient(150deg, hsl(0 0% 100% / 0.9) 0%, hsl(0 0% 100% / 0.75) 100%);
+  --gradient-glow: radial-gradient(circle at top, hsl(248 86% 65% / 0.18), transparent 60%);
 
-  /* Custom color variables */
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
+  --shadow-glow: 0 40px 80px hsl(248 86% 55% / 0.15);
+  --shadow-glow-secondary: 0 35px 70px hsl(172 59% 45% / 0.18);
+  --shadow-card: 0 18px 48px hsl(210 40% 30% / 0.1);
+  --shadow-elevation: 0 12px 30px hsl(210 40% 40% / 0.12);
 
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-primary-glow: hsl(var(--primary-glow));
-
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-secondary-glow: hsl(var(--secondary-glow));
-
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-
-  /* Gradients */
-  --gradient-primary: linear-gradient(135deg, hsl(273 68% 59%), hsl(331 100% 59%));
-  --gradient-secondary: linear-gradient(135deg, hsl(86 87% 54%), hsl(106 87% 64%));
-  --gradient-background: linear-gradient(135deg, hsl(273 68% 59%) 0%, hsl(331 100% 59%) 50%, hsl(86 87% 54%) 100%);
-  --gradient-hero: linear-gradient(
-    135deg,
-    hsl(237 19% 13%) 0%,
-    hsl(273 68% 59%) 40%,
-    hsl(331 100% 59%) 75%,
-    hsl(86 87% 54%) 100%
-  );
-  --gradient-card: linear-gradient(145deg, hsl(237 19% 13% / 0.85) 0%, hsl(237 19% 13% / 0.9) 100%);
-  --gradient-glow: radial-gradient(ellipse at center, hsl(273 68% 59% / 0.3) 0%, transparent 70%);
-
-  /* Shadows & Effects */
-  --shadow-glow: 0 0 30px hsl(273 68% 59% / 0.3);
-  --shadow-glow-secondary: 0 0 30px hsl(86 87% 54% / 0.3);
-  --shadow-card: 0 8px 32px hsl(237 50% 4% / 0.8);
-  --shadow-elevation: 0 4px 16px hsl(237 50% 4% / 0.6);
-
-  /* Animations */
   --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-bounce: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --transition-bounce: all 0.45s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 
-  --radius: 0.75rem;
+  --radius: 0.85rem;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: 222 42% 9%;
+  --foreground: 210 40% 98%;
+
+  --card: 222 36% 12% / 0.96;
+  --card-foreground: 210 40% 98%;
+
+  --popover: 222 36% 12% / 0.92;
+  --popover-foreground: 210 40% 98%;
+
+  --primary: 248 86% 68%;
+  --primary-foreground: 222 47% 12%;
+
+  --secondary: 172 59% 55%;
+  --secondary-foreground: 222 47% 10%;
+
+  --accent: 22 89% 60%;
+  --accent-foreground: 210 40% 98%;
+
+  --muted: 222 38% 18%;
+  --muted-foreground: 214 32% 80%;
+
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 222 38% 20%;
+  --input: 222 38% 20%;
+  --ring: 248 86% 68%;
+
+  --gradient-primary: linear-gradient(135deg, hsl(248 68% 55%), hsl(172 59% 52%));
+  --gradient-secondary: linear-gradient(135deg, hsl(248 40% 16%), hsl(222 45% 12%));
+  --gradient-background: radial-gradient(circle at 20% -10%, hsl(248 86% 45% / 0.35), transparent 60%),
+    radial-gradient(circle at 80% 110%, hsl(172 59% 45% / 0.25), transparent 65%),
+    linear-gradient(180deg, hsl(222 42% 11%), hsl(222 42% 7%));
+  --gradient-hero: linear-gradient(135deg, hsl(248 45% 18%) 0%, hsl(222 45% 12%) 50%, hsl(172 42% 18%) 100%);
+  --gradient-card: linear-gradient(150deg, hsl(222 36% 16% / 0.96) 0%, hsl(222 36% 10% / 0.85) 100%);
+  --gradient-glow: radial-gradient(circle at top, hsl(248 86% 65% / 0.35), transparent 60%);
+
+  --shadow-glow: 0 40px 90px hsl(248 86% 55% / 0.25);
+  --shadow-glow-secondary: 0 35px 80px hsl(172 59% 55% / 0.28);
+  --shadow-card: 0 20px 50px hsl(222 40% 4% / 0.6);
+  --shadow-elevation: 0 16px 40px hsl(222 40% 5% / 0.7);
 }
 
 /* 2) Add custom utilities using @layer utilities */
@@ -137,6 +138,13 @@
   .transition-bounce {
     transition: var(--transition-bounce);
   }
+
+  .glass-surface {
+    @apply border border-border/60 bg-card/70 backdrop-blur-lg shadow-card;
+  }
+  .section-wrapper {
+    @apply px-5 py-16 sm:px-8 lg:px-12;
+  }
 }
 
 /* 3) Base styles */
@@ -146,7 +154,8 @@
   }
 
   body {
-    @apply bg-gradient-background text-foreground;
+    @apply bg-gradient-background text-foreground antialiased transition-colors duration-300;
+    min-height: 100vh;
   }
 }
 
@@ -154,7 +163,9 @@
 @layer components {
   .hero-button {
     position: relative;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     isolation: isolate;
     overflow: hidden;
   }
@@ -162,37 +173,16 @@
   .hero-button::before {
     content: "";
     position: absolute;
-    top: 0;
-    left: -20%;
-    height: 100%;
-    width: 50%;
-    background: linear-gradient(
-      120deg,
-      transparent,
-      rgba(255, 255, 255, 0.5),
-      transparent
-    );
-    transform: skewX(-20deg);
+    inset: 0;
+    background: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.45) 40%, transparent 60%);
+    transform: translateX(-120%);
+    transition: transform 0.6s ease-in-out;
     pointer-events: none;
     z-index: 1;
-    opacity: 0;
   }
 
-  .hero-button:hover::before {
-    animation: shimmer 0.9s ease-in-out forwards;
-  }
-
-  @keyframes shimmer {
-    0% {
-      left: -20%;
-      opacity: 0;
-    }
-    50% {
-      opacity: 1;
-    }
-    100% {
-      left: 120%;
-      opacity: 0;
-    }
+  .hero-button:hover::before,
+  .hero-button:focus-visible::before {
+    transform: translateX(120%);
   }
 }

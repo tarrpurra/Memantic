@@ -26,7 +26,8 @@ export const Button = React.forwardRef(
       secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
       ghost: "hover:bg-accent hover:text-accent-foreground",
       link: "underline-offset-4 hover:underline text-primary",
-      hero: "bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70",
+      hero:
+        "bg-gradient-to-r from-primary via-primary/90 to-secondary text-primary-foreground hover:from-primary/90 hover:via-primary/80 hover:to-secondary/90",
     };
 
     const sizeClasses = {
