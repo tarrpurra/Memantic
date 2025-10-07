@@ -538,6 +538,19 @@ class BackendService {
   }
 
   /**
+     * Mint a meme as an NFT
+     */
+  async mintMemeNft(memeId) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to mint NFTs");
+    }
+
+    const bigintId = typeof memeId === 'bigint' ? memeId : BigInt(memeId);
+    const result = await this._safeCall('mint_nft', bigintId);
+    return this._unwrapResult(result, "mint_nft failed");
+  }
+
+  /**
      * List a meme for sale
      */
   async listMemeForSale(memeId, priceE8s) {
