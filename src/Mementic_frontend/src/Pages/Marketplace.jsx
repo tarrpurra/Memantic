@@ -864,7 +864,7 @@ const Marketplace = () => {
 
   const handleCreateMeme = () => {
     if (!isAuthenticated) navigate("/login");
-    else navigate("/myplace");
+    else navigate("/create");
   };
 
   const handleRefreshVotes = async () => {

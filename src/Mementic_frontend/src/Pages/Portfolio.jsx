@@ -1,962 +1,541 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motion";
+import {
+  Menu,
+  X,
+  Sparkles,
+  Wallet,
+  Coins,
+  Gauge,
+  ShieldCheck,
+  Crown,
+  LineChart,
+  ArrowUpRight,
+  ArrowDownToLine,
+  Download,
+  TrendingUp,
+  Trophy,
+} from "lucide-react";
 import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "../components/ui/Card";
-import {
-  TrendingUp,
-  Coins,
-  Crown,
-  ArrowUp,
-  ArrowDown,
-  User,
-  Sparkles,
-  MessageSquare,
-} from "lucide-react";
-import { useAuth } from "../contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
 import { useToast } from "../hooks/use-toast";
-import { FeedbackForm } from "../components/FeedbackForm";
+import useICPPortfolioData from "../hooks/useICPPortfolioData";
 
-import backendService from "../services/backendService";
+const NAV_ITEMS = [
+  { label: "Home", href: "/" },
+  { label: "Marketplace", href: "/marketplace" },
+  { label: "NFTs", href: "/nft-marketplace" },
+  { label: "Auction", href: "/auction" },
+  { label: "Profile", href: "/portfolio" },
+];
 
+const formatNumber = (value) => {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric)) return "0";
+  return new Intl.NumberFormat("en-US", {
+    notation: numeric >= 1000 ? "compact" : "standard",
+    maximumFractionDigits: numeric >= 1000 ? 1 : 0,
+  }).format(numeric);
+};
 
+const formatCurrency = (value) => {
+  const numeric = Number(value || 0);
+  return `${numeric >= 0 ? "" : "-"}${new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: numeric >= 100 ? 0 : 2,
+  }).format(Math.abs(numeric))} ICP`.replace("$", "");
+};
 
+const AnimatedNumber = ({ value, format = "number" }) => {
+  const ref = useRef(null);
+  const motionValue = useMotionValue(0);
+  const spring = useSpring(motionValue, {
+    stiffness: 120,
+    damping: 20,
+    mass: 0.5,
+  });
 
-/**
- * UI NFT shape (for reference)
- * {
- *   id: string,
- *   title: string,
- *   emoji: string,
- *   votes: number,
- *   earnedIcp: number,
- *   views: number,
- *   status: "earning" | "selling" | "minted" | "unknown",
- *   imageUrl?: string
- * }
- */
+  useEffect(() => {
+    motionValue.set(Number(value) || 0);
+  }, [value, motionValue]);
 
-const SkeletonStat = () => (
-  <Card>
-    <CardContent className="p-6 text-center animate-pulse">
-      <div className="w-8 h-8 mx-auto mb-2 rounded-full bg-muted" />
-      <div className="h-7 w-24 mx-auto bg-muted rounded mb-2" />
-      <div className="h-4 w-20 mx-auto bg-muted rounded" />
-    </CardContent>
-  </Card>
-);
+  useEffect(() => {
+    const unsubscribe = spring.on("change", (latest) => {
+      if (!ref.current) return;
+      if (format === "currency") {
+        ref.current.textContent = formatCurrency(latest);
+      } else if (format === "percent") {
+        ref.current.textContent = `${Math.round(latest)}%`;
+      } else {
+        ref.current.textContent = formatNumber(latest);
+      }
+    });
 
-const SkeletonTile = () => (
-  <Card className="group">
-    <CardHeader>
-      <div className="flex items-center justify-between">
-        <div className="w-16 h-16 rounded bg-muted animate-pulse" />
-        <div className="h-5 w-40 bg-muted rounded animate-pulse" />
-      </div>
+    return () => unsubscribe();
+  }, [format, spring]);
+
+  return <span ref={ref}>0</span>;
+};
+
+const SummaryMetric = ({ title, icon: Icon, value, sublabel, format = "number" }) => (
+  <Card className="relative overflow-hidden border-white/10 bg-white/5 backdrop-blur">
+    <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-primary/20" />
+    <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+      <CardTitle className="text-sm font-medium text-white/70">{title}</CardTitle>
+      <Icon className="h-5 w-5 text-cyan-300" />
     </CardHeader>
-    <CardContent className="space-y-4">
-      <div className="h-6 w-48 bg-muted rounded animate-pulse" />
-      <div className="space-y-2">
-        <div className="h-4 w-full bg-muted rounded animate-pulse" />
-        <div className="h-4 w-2/3 bg-muted rounded animate-pulse" />
-        <div className="h-4 w-1/2 bg-muted rounded animate-pulse" />
+    <CardContent className="relative">
+      <div className="text-3xl font-semibold tracking-tight text-white">
+        <AnimatedNumber value={value} format={format} />
       </div>
-      <div className="flex gap-2">
-        <div className="h-9 w-full bg-muted rounded animate-pulse" />
-        <div className="h-9 w-full bg-muted rounded animate-pulse" />
-      </div>
+      {sublabel ? (
+        <p className="mt-1 text-sm text-white/60">{sublabel}</p>
+      ) : null}
     </CardContent>
   </Card>
 );
 
 const Portfolio = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
-  const {
-    principal,
-    logout,
-    isAuthenticated,
-    isLoading: authLoading,
-  } = useAuth();
+  const { loading, error, summary, tableRows, refresh } = useICPPortfolioData();
+  const [menuOpen, setMenuOpen] = useState(false);
 
+  const topRows = useMemo(() => {
+    if (!tableRows.length) return new Set();
+    const sorted = [...tableRows]
+      .sort((a, b) => (b.votes || 0) - (a.votes || 0))
+      .slice(0, 3)
+      .map((row) => row.id);
+    return new Set(sorted);
+  }, [tableRows]);
 
-  const [loading, setLoading] = useState(true);
-  const [nfts, setNfts] = useState([]);
-  const [error, setError] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
-
-
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      navigate("/login");
-    }
-  }, [isAuthenticated, authLoading, navigate]);
-
-  // Safely unwrap candid optionals that arrive as [] | [value]
-  function unopt(v) {
-    return Array.isArray(v) ? v[0] : v;
-  }
-
-  /**
-   * Safely convert BigInt to number, handling large values
-   */
-  function safeBigIntToNumber(value) {
-    if (typeof value === 'bigint') {
-      // Check if BigInt is within safe number range
-      if (value > Number.MAX_SAFE_INTEGER) {
-        return Number.MAX_SAFE_INTEGER;
-      }
-      if (value < Number.MIN_SAFE_INTEGER) {
-        return Number.MIN_SAFE_INTEGER;
-      }
-      return Number(value);
-    }
-    return Number(value) || 0;
-  }
-
-  // Map canister records -> UI
-  const mapToUi = (item) => {
-    const memeData = unopt(item?.meme_data) || {};
-    const marketData = item?.market_data || {};
-    const votes = safeBigIntToNumber(item?.votes?.upvotes ?? item?.votes ?? 0);
-
-    // Handle bigint conversion for earned ICP (from market data)
-    let earnedIcp = 0;
-    if (marketData?.total_earned) {
-      earnedIcp = safeBigIntToNumber(marketData.total_earned) / 100000000; // Convert e8s to ICP
-    }
-
-    // Determine status based on market data
-    let status = "earning";
-    if (marketData?.is_listed) {
-      status = "selling";
-    }
-
-    return {
-      id: String(item?.meme_id ?? item?.id ?? crypto.randomUUID()),
-      title: memeData?.prompt || item?.title || "Untitled Meme",
-      emoji: "🖼️",
-      votes: votes,
-      earnedIcp: Number.isFinite(earnedIcp) ? earnedIcp : 0,
-      views: safeBigIntToNumber(marketData?.views || item?.views || 0),
-      status,
-      imageUrl: memeData?.image_url,
-      // Market data
-      isListed: marketData?.is_listed || false,
-      listingPrice: marketData?.listing_price ? safeBigIntToNumber(marketData.listing_price) / 100000000 : null,
-      totalSales: safeBigIntToNumber(marketData?.total_sales || 0),
-      lastSalePrice: marketData?.last_sale_price ? safeBigIntToNumber(marketData.last_sale_price) / 100000000 : null,
-      listedAt: marketData?.listed_at,
-      lastSaleAt: marketData?.last_sale_at,
-      // isMinted will be set in fetchData after checking with backend
-      isMinted: false, // default value, will be overridden
-    };
+  const handleNav = (href) => {
+    setMenuOpen(false);
+    navigate(href);
   };
 
-  async function fetchData() {
-    if (!isAuthenticated) return;
-    setLoading(true);
-    setError("");
-    try {
-      // Ensure backend service is ready
-      await backendService.ensureReady();
-
-      // Use centralized backend service
-      let mine = [];
-      try {
-        mine = await backendService.getUserMemes();
-        console.log(`Fetched ${mine?.length || 0} user memes`);
-      } catch (error) {
-        console.warn("Failed to fetch user memes:", error);
-        // Create sample data for testing
-        mine = [
-          {
-            id: "sample-1",
-            meme_data: {
-              prompt: "Sample meme for testing",
-              image_url: "",
-              image_filename: "sample.png",
-              image_format: "png",
-              metadata: {
-                processing_time: 1.5,
-                timestamp: Date.now() * 1000000,
-                file_size_bytes: 1024000,
-                service: "sample"
-              }
-            },
-            created_at: Date.now(),
-            market_data: {
-              is_listed: false,
-              listing_price: null,
-              views: 25,
-              total_sales: 0,
-              total_earned: 0
-            }
-          }
-        ];
-        console.log("Using sample data due to backend issues");
-      }
-
-      if (!mine || !Array.isArray(mine)) {
-        console.warn("Invalid response from getUserMemes:", mine);
-        setNfts([]);
-        return;
-      }
-
-      // Check minting status for each meme
-      const ui = await Promise.all(mine.map(async (item, index) => {
-        const baseUi = mapToUi(item);
-        try {
-          // Add a small delay to avoid overwhelming the backend
-          if (index > 0) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-          const isMinted = await backendService.isMemeMinted(BigInt(baseUi.id));
-          return { ...baseUi, isMinted: Boolean(isMinted) };
-        } catch (error) {
-          console.warn(`Failed to check minting status for meme ${baseUi.id}:`, error);
-          return { ...baseUi, isMinted: false };
-        }
-      }));
-
-      setNfts(ui);
-    } catch (e) {
-      console.error("Error loading portfolio:", e);
-      // Check if it's an authentication/storage error
-      if (e.message && (e.message.includes('anchor_number') || e.message.includes('storage'))) {
-        setError("Authentication issue. Please try logging out and back in.");
-      } else {
-        setError("Failed to load your portfolio. Please try again.");
-      }
-      setNfts([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
-
-  // Periodic refresh of vote counts and stats
-  useEffect(() => {
-    if (!isAuthenticated || loading) return;
-
-    const refreshPortfolio = async () => {
-      if (refreshing) return; // Prevent multiple simultaneous refreshes
-
-      setRefreshing(true);
-      try {
-        // Refresh vote counts for existing memes
-        if (nfts.length > 0) {
-          const updatedNfts = await Promise.all(
-            nfts.map(async (nft) => {
-              try {
-                const memeIdBigInt = BigInt(nft.id);
-                const voteData = await backendService.getMemeVotes(memeIdBigInt);
-
-                if (voteData) {
-                  const newVotes = safeBigIntToNumber(voteData.upvotes) - safeBigIntToNumber(voteData.downvotes);
-                  return { ...nft, votes: newVotes };
-                }
-                return nft;
-              } catch (error) {
-                console.warn(`Failed to refresh votes for meme ${nft.id}:`, error);
-                return nft;
-              }
-            })
-          );
-          setNfts(updatedNfts);
-        }
-      } catch (error) {
-        console.warn("Failed to refresh portfolio data:", error);
-      } finally {
-        setRefreshing(false);
-      }
-    };
-
-    // Initial refresh after loading
-    const initialRefreshTimer = setTimeout(refreshPortfolio, 2000);
-
-    // Set up periodic refresh every 30 seconds
-    const refreshInterval = setInterval(refreshPortfolio, 30000);
-
-    return () => {
-      clearTimeout(initialRefreshTimer);
-      clearInterval(refreshInterval);
-    };
-  }, [isAuthenticated, loading, nfts.length, refreshing]);
-
-  const totalEarnings = useMemo(
-    () => nfts.reduce((sum, x) => sum + (x.earnedIcp || 0), 0),
-    [nfts]
-  );
-  const totalVotes = useMemo(
-    () => nfts.reduce((sum, x) => sum + (x.votes || 0), 0),
-    [nfts]
-  );
-  const totalViews = useMemo(
-    () => nfts.reduce((sum, x) => sum + (x.views || 0), 0),
-    [nfts]
-  );
-  const totalSales = useMemo(
-    () => nfts.reduce((sum, x) => sum + (x.totalSales || 0), 0),
-    [nfts]
-  );
-  const listedCount = useMemo(
-    () => nfts.filter(x => x.isListed).length,
-    [nfts]
-  );
-  const mintedCount = useMemo(
-    () => nfts.filter(x => x.isMinted).length,
-    [nfts]
-  );
-  const generatedCount = useMemo(
-    () => nfts.filter(x => !x.isMinted).length,
-    [nfts]
-  );
-  const avgEarningsPerVote = useMemo(
-    () => totalVotes > 0 ? (totalEarnings / totalVotes) * 100 : 0,
-    [totalEarnings, totalVotes]
-  );
-
-  // Separate memes into categories
-  const generatedMemes = useMemo(
-    () => nfts.filter(nft => !nft.isMinted),
-    [nfts]
-  );
-  const mintedNFTs = useMemo(
-    () => nfts.filter(nft => nft.isMinted),
-    [nfts]
-  );
-
-  const handleLogout = async () => {
-    try {
-      const success = await logout();
-      if (success) {
-        toast({
-          title: "Logged Out Successfully 👋",
-          description: "You have been safely logged out of your account.",
-        });
-        navigate("/");
-      } else {
-        toast({
-          title: "Logout Error",
-          description: "There was an issue logging out. Please try again.",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Logout error:", error);
+  const handleExport = () => {
+    if (!tableRows.length) {
       toast({
-        title: "Logout Error",
-        description: "An unexpected error occurred during logout.",
-        variant: "destructive",
+        title: "No data to export",
+        description: "Generate or mint memes to populate your portfolio first.",
       });
+      return;
     }
-  };
 
-  // Listing actions
-  const handleSell = async (nftId) => {
-    try {
-      // For now, use a default price. In a real app, you'd show a price input dialog
-      const defaultPriceE8s = 100000000; // 1 ICP in e8s
-      await backendService.listMemeForSale(BigInt(nftId), defaultPriceE8s);
+    const header = [
+      "Index",
+      "Meme Name",
+      "Votes Used",
+      "Participation",
+      "ICP Staked",
+      "Result",
+    ];
 
-      toast({
-        title: "Meme listed for sale! 📈",
-        description: "Your meme is now available on the marketplace.",
-      });
+    const rows = tableRows.map((row) => [
+      row.index,
+      `"${row.title.replace(/"/g, '""')}"`,
+      row.votes ?? 0,
+      `${row.participation ?? 0}%`,
+      (row.listingPrice ?? 0).toFixed(2),
+      row.votes >= 0 ? "Win" : "Loss",
+    ]);
 
-      // Refresh data
-      await fetchData();
-    } catch (e) {
-      console.error("Sell error:", e);
-      toast({
-        title: "Listing failed",
-        description: e?.message || "Could not list this meme for sale.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleKeep = async (nftId) => {
-    try {
-      await backendService.removeMemeFromMarket(BigInt(nftId));
-
-      toast({
-        title: "Meme kept in portfolio 💎",
-        description: "Your meme will continue earning from votes.",
-      });
-
-      // Refresh data
-      await fetchData();
-    } catch (e) {
-      console.error("Keep error:", e);
-      toast({
-        title: "Action failed",
-        description: e?.message || "Could not remove from marketplace.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Loading gate
-  if (authLoading || !isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <div className="text-lg text-muted-foreground">
-            Loading your portfolio...
-          </div>
-        </div>
-      </div>
+    const csv = [header.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute(
+      "download",
+      `mementic-portfolio-${Date.now().toString().slice(0, 10)}.csv`
     );
-  }
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    toast({
+      title: "Stats exported",
+      description: "Your portfolio metrics are ready to share.",
+    });
+  };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-gradient-to-r from-background via-card/50 to-background backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate("/marketplace")}
-                className="hover:bg-primary/10"
-              >
-                <ArrowUp className="w-5 h-5" />
-              </Button>
-              <div>
-                <div className="flex items-center gap-4 mb-3">
-                  <div className="p-3 bg-gradient-to-br from-primary/20 to-primary/10 rounded-xl">
-                    <Sparkles className="w-8 h-8 text-primary" />
-                  </div>
-                  <div>
-                    <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                      My Portfolio
-                    </h1>
-                    <p className="text-muted-foreground text-lg">
-                      Track your meme creations and earnings
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(139,92,246,0.35),_transparent_55%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom,_rgba(34,211,238,0.25),_transparent_60%)]" />
 
-            {/* User Info + Logout */}
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-muted/20 rounded-lg">
-                <User className="w-4 h-4 text-muted-foreground" />
-                <span
-                  className="text-sm font-mono text-muted-foreground"
-                  title={principal || ""}
-                >
-                  {principal
-                    ? `${principal.slice(0, 8)}...${principal.slice(-6)}`
-                    : "Not logged in"}
-                </span>
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  setRefreshing(true);
-                  try {
-                    await fetchData();
-                    toast({
-                      title: "Portfolio Refreshed! 🔄",
-                      description: "Your vote counts and stats have been updated.",
-                    });
-                  } catch (error) {
-                    toast({
-                      title: "Refresh Failed",
-                      description: "Could not refresh portfolio data.",
-                      variant: "destructive",
-                    });
-                  } finally {
-                    setRefreshing(false);
-                  }
-                }}
-                disabled={refreshing || loading}
-                title="Refresh vote counts and stats"
-              >
-                {refreshing ? (
-                  <div className="w-4 h-4 border border-current border-t-transparent rounded-full animate-spin mr-2" />
-                ) : (
-                  <ArrowUp className="w-4 h-4 mr-2" />
-                )}
-                <span className="hidden sm:inline">Refresh</span>
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLogout}
-                className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 hover:border-red-300"
-              >
-                <ArrowDown className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">Logout</span>
-              </Button>
-            </div>
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-black/40 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-6">
+            <span className="text-lg font-semibold tracking-[0.2em] text-white/80">
+              Mementic
+            </span>
+            <nav className="hidden items-center gap-6 md:flex">
+              {NAV_ITEMS.map((item) => {
+                const isActive = location.pathname === item.href;
+                return (
+                  <button
+                    key={item.href}
+                    type="button"
+                    onClick={() => handleNav(item.href)}
+                    className={`relative text-sm font-medium transition-colors hover:text-cyan-200 ${
+                      isActive ? "text-cyan-300" : "text-white/70"
+                    }`}
+                  >
+                    <span>{item.label}</span>
+                    <span
+                      className={`absolute -bottom-1 left-0 h-0.5 w-full rounded-full bg-gradient-to-r from-primary to-cyan-400 transition-transform ${
+                        isActive ? "scale-100" : "scale-0"
+                      }`}
+                    />
+                  </button>
+                );
+              })}
+            </nav>
           </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Account Info Card - Mobile */}
-        <Card className="mb-6 sm:hidden">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <User className="w-5 h-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">Logged in as:</p>
-                  <p className="text-xs font-mono text-muted-foreground">
-                    {principal
-                      ? `${principal.slice(0, 8)}...${principal.slice(-6)}`
-                      : "Not logged in"}
-                  </p>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLogout}
-                className="text-red-600 bg-gradient-to-t from-red-500 to-red-50 border-red-200 hero-button"
-              >
-                <ArrowDown className="w-4 h-4 mr-2" />
-                Logout
-              </Button>
+          <div className="flex items-center gap-3">
+            <div className="hidden items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm text-cyan-200 md:flex">
+              <Sparkles className="h-4 w-4" />
+              <span>@{summary.username}</span>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Error banner */}
-        {error && (
-          <Card className="mb-6 border-destructive/30 bg-destructive/5">
-            <CardContent className="p-4 text-sm">{error}</CardContent>
-          </Card>
-        )}
-
-        {/* Stats Overview */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-6 mb-8">
-          {loading ? (
-            Array.from({ length: 8 }).map((_, i) => (
-              <SkeletonStat key={i} />
-            ))
-          ) : (
-            <>
-              <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/20 border-yellow-200">
-                <CardContent className="p-6 text-center">
-                  <Coins className="w-8 h-8 mx-auto mb-3 text-yellow-600" />
-                  <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">
-                    {totalEarnings.toFixed(2)}
-                  </div>
-                  <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">ICP Earned</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-red-200">
-                <CardContent className="p-6 text-center">
-                  <Crown className="w-8 h-8 mx-auto mb-3 text-red-600" />
-                  <div className="text-2xl font-bold text-red-700 dark:text-red-300">
-                    {totalVotes.toLocaleString()}
-                  </div>
-                  <p className="text-sm text-red-600 dark:text-red-400 font-medium">Total Votes</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200">
-                <CardContent className="p-6 text-center">
-                  <Sparkles className="w-8 h-8 mx-auto mb-3 text-blue-600" />
-                  <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                    {totalViews.toLocaleString()}
-                  </div>
-                  <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Total Views</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200">
-                <CardContent className="p-6 text-center">
-                  <TrendingUp className="w-8 h-8 mx-auto mb-3 text-green-600" />
-                  <div className="text-2xl font-bold text-green-700 dark:text-green-300">
-                    {generatedCount}
-                  </div>
-                  <p className="text-sm text-green-600 dark:text-green-400 font-medium">Generated Memes</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-purple-200">
-                <CardContent className="p-6 text-center">
-                  <Crown className="w-8 h-8 mx-auto mb-3 text-purple-600" />
-                  <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
-                    {mintedCount}
-                  </div>
-                  <p className="text-sm text-purple-600 dark:text-purple-400 font-medium">Minted NFTs</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 border-orange-200">
-                <CardContent className="p-6 text-center">
-                  <ArrowUp className="w-8 h-8 mx-auto mb-3 text-orange-600" />
-                  <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">
-                    {totalSales}
-                  </div>
-                  <p className="text-sm text-orange-600 dark:text-orange-400 font-medium">Total Sales</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 border-indigo-200">
-                <CardContent className="p-6 text-center">
-                  <User className="w-8 h-8 mx-auto mb-3 text-indigo-600" />
-                  <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">
-                    {listedCount}
-                  </div>
-                  <p className="text-sm text-indigo-600 dark:text-indigo-400 font-medium">Listed for Sale</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-pink-50 to-pink-100 dark:from-pink-900/20 dark:to-pink-800/20 border-pink-200">
-                <CardContent className="p-6 text-center">
-                  <TrendingUp className="w-8 h-8 mx-auto mb-3 text-pink-600" />
-                  <div className="text-2xl font-bold text-pink-700 dark:text-pink-300">
-                    {avgEarningsPerVote.toFixed(3)} ICP
-                  </div>
-                  <p className="text-sm text-pink-600 dark:text-pink-400 font-medium">Per Vote</p>
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </div>
-
-        {/* Generated Memes & Marketplace Section */}
-        <div className="space-y-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="p-2 bg-gradient-to-br from-green-100 to-green-200 dark:from-green-900/30 dark:to-green-800/30 rounded-lg">
-                <Sparkles className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <h2 className="text-3xl font-bold text-green-700 dark:text-green-300">My Generated Memes</h2>
-                <p className="text-muted-foreground">Memes you've created and are earning from</p>
-              </div>
-            </div>
-            <Button onClick={() => navigate("/myplace")} className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700">
-              <Sparkles className="w-4 h-4 mr-2" />
-              Create New Meme
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white md:hidden"
+              onClick={() => setMenuOpen((prev) => !prev)}
+              aria-label="Toggle navigation"
+            >
+              {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+            <Button
+              variant="default"
+              className="hidden bg-gradient-to-r from-primary to-cyan-400 text-black shadow-lg md:inline-flex"
+              onClick={() => navigate("/create")}
+            >
+              Launch Creative Space
+              <ArrowUpRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
-
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <SkeletonTile key={i} />
-              ))}
-            </div>
-          ) : generatedMemes.length === 0 ? (
-            <Card className="py-12 text-center">
-              <CardContent>
-                <CardTitle className="mb-2">No Generated Memes yet</CardTitle>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Create your first meme and start earning from votes or list it for sale.
-                </p>
-                <Button onClick={() => navigate("/myplace")}>
-                  Create Meme
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {generatedMemes.map((nft) => (
-                <Card key={nft.id} className="group">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      {nft.imageUrl ? (
-                        <img
-                          src={nft.imageUrl}
-                          alt={nft.title}
-                          className="w-16 h-16 object-contain rounded-lg group-hover:scale-105 transition-transform"
-                        />
-                      ) : (
-                        <div className="text-4xl mb-4 group-hover:animate-float">
-                          {nft.emoji}
-                        </div>
-                      )}
-                      <div className="flex-1 ml-4">
-                        <h3 className="font-bold text-lg mb-1 line-clamp-2">
-                          {nft.title}
-                        </h3>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Crown className="w-4 h-4 text-red-500" />
-                          <span className="font-medium text-red-600">{nft.votes} likes</span>
-                        </div>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2 text-sm">
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">❤️ Likes:</span>
-                         <span className="font-bold text-red-600 flex items-center gap-1">
-                           <Crown className="w-3 h-3" />
-                           {nft.votes.toLocaleString()}
-                         </span>
-                       </div>
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">👁️ Views:</span>
-                         <span className="font-medium text-blue-600">
-                           {nft.views.toLocaleString()}
-                         </span>
-                       </div>
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">💰 Earned:</span>
-                         <span className="font-bold text-yellow-600">
-                           {nft.earnedIcp.toFixed(4)} ICP
-                         </span>
-                       </div>
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">📅 Created:</span>
-                         <span className="font-medium text-gray-600 text-xs">
-                           {new Date(nft.created_at || Date.now()).toLocaleDateString("en-IN", {
-                             timeZone: "Asia/Kolkata",
-                             dateStyle: "short",
-                           })}
-                         </span>
-                       </div>
-
-                       {/* Market Information */}
-                       {nft.isListed && (
-                         <div className="flex justify-between">
-                           <span className="text-muted-foreground">Listed Price:</span>
-                           <span className="font-medium text-green-600">
-                             {nft.listingPrice?.toFixed(2)} ICP
-                           </span>
-                         </div>
-                       )}
-
-                       {nft.totalSales > 0 && (
-                         <>
-                           <div className="flex justify-between">
-                             <span className="text-muted-foreground">Total Sales:</span>
-                             <span className="font-medium">{nft.totalSales}</span>
-                           </div>
-                           {nft.lastSalePrice && (
-                             <div className="flex justify-between">
-                               <span className="text-muted-foreground">Last Sale:</span>
-                               <span className="font-medium text-blue-600">
-                                 {nft.lastSalePrice.toFixed(2)} ICP
-                               </span>
-                             </div>
-                           )}
-                         </>
-                       )}
-
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">Status:</span>
-                         <span className={`font-medium ${nft.isListed ? 'text-green-600' : 'text-blue-600'}`}>
-                           {nft.isListed ? 'Listed for Sale' : 'Earning from Votes'}
-                         </span>
-                       </div>
-                     </div>
-
-                    <div className="flex gap-2">
-                      {nft.isListed ? (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => handleKeep(nft.id)}
-                          >
-                            Remove from Market
-                          </Button>
-                          <Button
-                            variant="default"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => navigate("/marketplace")}
-                          >
-                            View in Market
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => handleSell(nft.id)}
-                          >
-                            List for Sale
-                          </Button>
-                          <Button
-                            variant="default"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => navigate("/marketplace")}
-                          >
-                            View Market
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
         </div>
+        <AnimatePresence>
+          {menuOpen ? (
+            <motion.nav
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="border-t border-white/10 bg-black/70 px-6 py-4 md:hidden"
+            >
+              <div className="flex flex-col gap-3">
+                {NAV_ITEMS.map((item) => {
+                  const isActive = location.pathname === item.href;
+                  return (
+                    <Button
+                      key={item.href}
+                      variant={isActive ? "default" : "ghost"}
+                      className={`justify-between border border-white/10 ${
+                        isActive
+                          ? "bg-gradient-to-r from-primary to-cyan-500 text-black"
+                          : "text-white"
+                      }`}
+                      onClick={() => handleNav(item.href)}
+                    >
+                      {item.label}
+                      <ArrowUpRight className="h-4 w-4" />
+                    </Button>
+                  );
+                })}
+              </div>
+            </motion.nav>
+          ) : null}
+        </AnimatePresence>
+      </header>
 
-        {/* Minted NFTs Section */}
-        <div className="space-y-8 mt-16">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="p-2 bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900/30 dark:to-purple-800/30 rounded-lg">
-                <Crown className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <h2 className="text-3xl font-bold text-purple-700 dark:text-purple-300">My Minted NFTs</h2>
-                <p className="text-muted-foreground">Rare collectible NFTs from your top-performing memes</p>
-              </div>
+      <main className="relative z-10 mx-auto flex max-w-6xl flex-col gap-12 px-6 py-12">
+        <section className="space-y-6">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div>
+              <motion.h1
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+                className="text-4xl font-bold tracking-tight text-white"
+              >
+                My Portfolio
+              </motion.h1>
+              <p className="mt-2 max-w-xl text-base text-white/70">
+                Track your meme creations, earnings & voting performance. Stay ahead
+                with live ICP metrics synced from your canisters.
+              </p>
             </div>
-            <div className="text-right">
-              <div className="text-sm text-muted-foreground">
-                NFTs that have been minted as collectibles
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm text-cyan-200">
+                <Wallet className="h-4 w-4" />
+                <span>{summary.totalMemes} creations</span>
               </div>
-              <div className="text-xs text-purple-600 font-medium">
-                🏆 Exclusive Digital Assets
-              </div>
+              <Button
+                variant="outline"
+                className="border-white/30 bg-white/10 text-white hover:border-cyan-400 hover:text-cyan-100"
+                onClick={refresh}
+              >
+                Refresh Data
+                <ArrowUpRight className="ml-2 h-4 w-4" />
+              </Button>
             </div>
           </div>
-
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <SkeletonTile key={i} />
-              ))}
+          <div className="flex flex-wrap gap-2 text-xs text-white/50">
+            <span className="flex items-center gap-1"><Sparkles className="h-3 w-3" /> Live metrics</span>
+            <span className="flex items-center gap-1"><ShieldCheck className="h-3 w-3" /> Immutable history</span>
+            <span className="flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Voting analytics</span>
+          </div>
+          {error ? (
+            <div className="rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+              {error}
             </div>
-          ) : mintedNFTs.length === 0 ? (
-            <Card className="py-12 text-center">
-              <CardContent>
-                <CardTitle className="mb-2">No Minted NFTs yet</CardTitle>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Your top-performing memes will be minted as NFTs automatically.
+          ) : null}
+        </section>
+
+        <section className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <Card className="relative overflow-hidden border-white/10 bg-white/5 backdrop-blur">
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-cyan-400/20" />
+            <CardHeader className="relative pb-4">
+              <CardTitle className="flex items-center justify-between text-sm font-medium text-white/70">
+                <span>Generated Memes</span>
+                <Crown className="h-5 w-5 text-cyan-300" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="relative space-y-4">
+              <div className="text-4xl font-semibold text-white">
+                <AnimatedNumber value={summary.totalMemes} />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge className="bg-green-500/10 text-green-300">
+                  Wins: {summary.wins}
+                </Badge>
+                <Badge className="bg-red-500/10 text-red-300">
+                  Losses: {summary.losses}
+                </Badge>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm text-white/70">
+                  <span>Success Rate</span>
+                  <span>{summary.successRate}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                  <motion.div
+                    key={summary.successRate}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${summary.successRate}%` }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                    className="h-full rounded-full bg-gradient-to-r from-primary to-cyan-400"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex flex-col gap-6">
+            <SummaryMetric
+              title="Memes Converted to NFT"
+              icon={ShieldCheck}
+              value={summary.nftsHeld}
+              sublabel={`Total ICP Staked: ${summary.icpStaked.toFixed(2)} ICP`}
+            />
+            <SummaryMetric
+              title="Voting Participation"
+              icon={Gauge}
+              value={summary.votingParticipation}
+              format="percent"
+              sublabel={`Total Votes Used: ${formatNumber(summary.totalVotes)}`}
+            />
+          </div>
+
+          <SummaryMetric
+            title={`@${summary.username}`}
+            icon={Wallet}
+            value={summary.netProfit}
+            format="currency"
+            sublabel={`NFTs Holding: ${summary.nftsHeld}`}
+          />
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-white">
+                Meme Performance Overview
+              </h2>
+              <p className="text-sm text-white/60">
+                Explore how your creations performed across staking, voting, and auction rounds.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                className="border-white/20 bg-white/10 text-white hover:border-cyan-400 hover:text-cyan-100"
+                onClick={handleExport}
+              >
+                Export Stats
+                <Download className="ml-2 h-4 w-4" />
+              </Button>
+              <Button
+                variant="default"
+                className="bg-gradient-to-r from-primary to-cyan-400 text-black shadow-lg"
+                onClick={() => navigate("/nft-marketplace")}
+              >
+                View NFTs
+                <ArrowUpRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40 shadow-lg">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-white/10 text-left text-sm">
+                <thead className="bg-white/5 text-xs uppercase tracking-wide text-white/60">
+                  <tr>
+                    <th className="px-4 py-3">#</th>
+                    <th className="px-4 py-3">Meme Name</th>
+                    <th className="px-4 py-3">Votes Used</th>
+                    <th className="px-4 py-3">Participation</th>
+                    <th className="px-4 py-3">ICP Staked</th>
+                    <th className="px-4 py-3">Result</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  <AnimatePresence initial={false}>
+                    {loading ? (
+                      Array.from({ length: 4 }).map((_, index) => (
+                        <tr key={`skeleton-${index}`} className="animate-pulse">
+                          <td className="px-4 py-4">
+                            <div className="h-4 w-8 rounded bg-white/10" />
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="h-4 w-48 rounded bg-white/10" />
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="h-4 w-16 rounded bg-white/10" />
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="h-4 w-20 rounded bg-white/10" />
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="h-4 w-16 rounded bg-white/10" />
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="h-6 w-20 rounded-full bg-white/10" />
+                          </td>
+                        </tr>
+                      ))
+                    ) : tableRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-12 text-center text-white/60">
+                          No memes yet. Generate one in the Creative Space to see live performance data.
+                        </td>
+                      </tr>
+                    ) : (
+                      tableRows.map((row) => {
+                        const isTop = topRows.has(row.id);
+                        return (
+                          <motion.tr
+                            key={row.id}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            whileHover={{ scale: 1.01 }}
+                            className={`cursor-pointer transition-colors ${
+                              isTop
+                                ? "bg-gradient-to-r from-primary/20 to-cyan-400/20"
+                                : "hover:bg-white/5"
+                            }`}
+                            onClick={() => row.id && navigate(`/meme/${row.id}`)}
+                          >
+                            <td className="px-4 py-4 text-white/60">{row.index}</td>
+                            <td className="px-4 py-4 font-medium text-white">{row.title}</td>
+                            <td className="px-4 py-4 text-white/70">{row.votes ?? 0}</td>
+                            <td className="px-4 py-4">
+                              <div className="flex items-center gap-2 text-white/70">
+                                <div className="h-1.5 w-24 rounded-full bg-white/10">
+                                  <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${row.participation ?? 0}%` }}
+                                    transition={{ duration: 0.6, ease: "easeOut" }}
+                                    className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-primary"
+                                  />
+                                </div>
+                                <span>{row.participation ?? 0}%</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-white/70">
+                              {(row.listingPrice ?? 0).toFixed(2)} ICP
+                            </td>
+                            <td className="px-4 py-4">
+                              <Badge
+                                className={`border ${
+                                  row.votes >= 0
+                                    ? "border-green-400/40 bg-green-400/10 text-green-200"
+                                    : "border-red-400/40 bg-red-400/10 text-red-200"
+                                }`}
+                              >
+                                {row.votes >= 0 ? "Win" : "Loss"}
+                              </Badge>
+                            </td>
+                          </motion.tr>
+                        );
+                      })
+                    )}
+                  </AnimatePresence>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <Card className="border-white/10 bg-white/5 backdrop-blur">
+            <CardContent className="flex flex-col gap-6 p-6 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-6 text-sm text-white/70">
+                  <span className="flex items-center gap-2">
+                    <Coins className="h-4 w-4 text-cyan-300" />
+                    Total ICP Earned: {summary.icpEarned.toFixed(2)} ICP
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <Trophy className="h-4 w-4 text-cyan-300" />
+                    Total NFTs Minted: {summary.nftsHeld}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <LineChart className="h-4 w-4 text-cyan-300" />
+                    Average Votes per Meme: {summary.avgVotes.toFixed(1)}
+                  </span>
+                </div>
+                <p className="text-xs uppercase tracking-[0.3em] text-white/40">
+                  Built on Internet Computer — Immutable Meme History.
                 </p>
-                <Button variant="outline" onClick={() => navigate("/marketplace")}>
-                  View Marketplace
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {mintedNFTs.map((nft) => (
-                <Card key={nft.id} className="group border-purple-200">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      {nft.imageUrl ? (
-                        <img
-                          src={nft.imageUrl}
-                          alt={nft.title}
-                          className="w-16 h-16 object-contain rounded-lg group-hover:scale-105 transition-transform"
-                        />
-                      ) : (
-                        <div className="text-4xl mb-4 group-hover:animate-float">
-                          {nft.emoji}
-                        </div>
-                      )}
-                      <div className="flex-1 ml-4">
-                        <h3 className="font-bold text-lg mb-1 line-clamp-2">
-                          {nft.title}
-                        </h3>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Crown className="w-4 h-4 text-red-500" />
-                          <span className="font-medium text-red-600">{nft.votes} likes</span>
-                        </div>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2 text-sm">
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">❤️ Likes:</span>
-                         <span className="font-bold text-red-600 flex items-center gap-1">
-                           <Crown className="w-3 h-3" />
-                           {nft.votes.toLocaleString()}
-                         </span>
-                       </div>
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">👁️ Views:</span>
-                         <span className="font-medium text-blue-600">
-                           {nft.views.toLocaleString()}
-                         </span>
-                       </div>
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">💰 Earned:</span>
-                         <span className="font-bold text-yellow-600">
-                           {nft.earnedIcp.toFixed(4)} ICP
-                         </span>
-                       </div>
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">📅 Created:</span>
-                         <span className="font-medium text-gray-600 text-xs">
-                           {new Date(nft.created_at || Date.now()).toLocaleDateString("en-IN", {
-                             timeZone: "Asia/Kolkata",
-                             dateStyle: "short",
-                           })}
-                         </span>
-                       </div>
-
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">Status:</span>
-                         <span className="font-medium text-purple-600 flex items-center gap-1">
-                           <Crown className="w-3 h-3" />
-                           🏆 Minted NFT
-                         </span>
-                       </div>
-                     </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => navigate("/marketplace")}
-                      >
-                        View NFT
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-         </div>
-
-         {/* Feedback Section */}
-         <div className="space-y-8 mt-16">
-           <div className="flex items-center justify-between">
-             <div className="flex items-center gap-4">
-               <div className="p-2 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 rounded-lg">
-                 <MessageSquare className="w-6 h-6 text-blue-600" />
-               </div>
-               <div>
-                 <h2 className="text-3xl font-bold text-blue-700 dark:text-blue-300">Share Your Feedback</h2>
-                 <p className="text-muted-foreground">Help us improve Mementic with your thoughts</p>
-               </div>
-             </div>
-           </div>
-
-           <FeedbackForm />
-         </div>
-       </div>
-     </div>
-   );
- };
+              </div>
+              <Button
+                variant="default"
+                className="w-full bg-gradient-to-r from-primary to-cyan-400 text-black shadow-lg sm:w-auto"
+                onClick={handleExport}
+              >
+                Export Stats
+                <ArrowDownToLine className="ml-2 h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+      </main>
+    </div>
+  );
+};
 
 export default Portfolio;

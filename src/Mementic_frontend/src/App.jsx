@@ -40,6 +40,7 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/landing" element={<Landing />} />
+          <Route path="/create" element={<MyPlace />} />
           <Route path="/myplace" element={<MyPlace />} />
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/portfolio" element={<Portfolio />} />
