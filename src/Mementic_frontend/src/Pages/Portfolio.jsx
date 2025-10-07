@@ -30,8 +30,8 @@ import useICPPortfolioData from "../hooks/useICPPortfolioData";
 
 const NAV_ITEMS = [
   { label: "Home", href: "/" },
-  { label: "Pre-Market", href: "/pre-marketplace" },
   { label: "Marketplace", href: "/marketplace" },
+  { label: "NFTs", href: "/nft-marketplace" },
   { label: "Auction", href: "/auction" },
   { label: "Profile", href: "/portfolio" },
 ];
@@ -391,7 +391,7 @@ const Portfolio = () => {
               <Button
                 variant="default"
                 className="bg-gradient-to-r from-primary to-cyan-400 text-black shadow-lg"
-                onClick={() => navigate("/marketplace")}
+                onClick={() => navigate("/nft-marketplace")}
               >
                 View NFTs
                 <ArrowUpRight className="ml-2 h-4 w-4" />

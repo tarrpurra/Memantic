@@ -290,7 +290,7 @@ const MyCreativeSpace = () => {
         title: "NFT minted",
         description: `Meme #${memeId} is now an ICP collectible.`,
       });
-      navigate("/marketplace");
+      navigate("/nft-marketplace");
     } catch (error) {
       console.error("Mint NFT failed", error);
       toast({

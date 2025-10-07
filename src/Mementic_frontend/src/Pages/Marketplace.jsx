@@ -537,15 +537,73 @@ const Marketplace = () => {
     }
   };
 
-  const actionDefinitions = useMemo(
-    () => ({
-      buy: { key: "buy", label: "Buy Now", cta: "Confirm Purchase" },
-      offer: { key: "offer", label: "Make Offer", cta: "Submit Offer", requiresExpiry: true },
-      list: { key: "list", label: "List for Sale", cta: "Create Listing" },
-      auction: { key: "auction", label: "Start Auction", cta: "Launch Auction", requiresExpiry: true },
-    }),
-    []
-  );
+  const handleCreateMeme = () => {
+    if (!isAuthenticated) navigate("/login");
+    else navigate("/create");
+  };
+
+  const handleRefreshVotes = async () => {
+    if (!isAuthenticated) return;
+
+    try {
+      // Refresh top memes leaderboard
+      const leaderboardRes = await backendService.getCurrentLeaderboard(3);
+      const entries = ensureArray(leaderboardRes?.top_memes);
+      const updatedTopMemes = entries.map((e) => {
+        const pm = Array.isArray(e?.meme_data) ? e.meme_data[0] : e?.meme_data;
+        if (pm) {
+          return normalizeMeme(pm, { rank: e?.rank, votes: e?.votes });
+        }
+        return normalizeMeme(
+          { id: e?.meme_id, owner: e?.owner, meme_data: e?.meme_data },
+          { rank: e?.rank, votes: e?.votes }
+        );
+      });
+      setTopMemes(updatedTopMemes);
+
+      // Refresh all current memes with updated vote counts
+      if (memes.length > 0) {
+        const currentMemeIds = memes.map((m) => m.id);
+        const updatedMemes = await Promise.all(
+          currentMemeIds.map(async (memeId) => {
+            try {
+              const bid = toOptionalBigInt(String(memeId));
+              if (!bid) return memes.find((m) => m.id === memeId);
+              const voteData = await backendService.getMemeVotes(bid);
+              if (voteData) {
+                return {
+                  ...memes.find((m) => m.id === memeId),
+                  votes:
+                    safeBigIntToNumber(voteData.upvotes) -
+                    safeBigIntToNumber(voteData.downvotes),
+                };
+              }
+              return memes.find((m) => m.id === memeId);
+            } catch (error) {
+              console.warn(
+                `Failed to refresh votes for meme ${memeId}:`,
+                error
+              );
+              return memes.find((m) => m.id === memeId);
+            }
+          })
+        );
+        setMemes(updatedMemes);
+      }
+
+      toast({
+        title: "Votes Refreshed! 🔄",
+        description: "Vote counts have been updated with the latest data.",
+      });
+    } catch (error) {
+      console.error("Failed to refresh votes:", error);
+      toast({
+        title: "Refresh Failed",
+        description: "Could not refresh vote counts. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const openBuy = (collection) => openAction(actionDefinitions.buy, collection);
   const openOffer = (collection) => openAction(actionDefinitions.offer, collection);
