@@ -30,19 +30,19 @@ import backendService from "../services/backendService";
 const NAV_LINKS = [
   {
     label: "Pre Meme Marketplace",
-    href: "#pre-marketplace",
+    href: "/pre-marketplace",
     icon: Store,
-    type: "anchor",
+    type: "route",
   },
   {
     label: "Meme NFT Marketplace",
-    href: "#nft-marketplace",
+    href: "/meme-nft",
     icon: ShoppingBag,
-    type: "anchor",
+    type: "route",
   },
-  { label: "Auction", href: "#auction", icon: Gavel, type: "anchor" },
+  { label: "Auction", href: "/auction", icon: Gavel, type: "route" },
   { label: "CTO", href: "#cto-guide", icon: BookOpen, type: "anchor" },
-  {label:"Guide",href:"#guide",icon:Book,type:"anchor"},
+  { label: "Guide", href: "#guide", icon: Book, type: "anchor" },
 ];
 
 const ACTION_CARDS = [
@@ -92,7 +92,13 @@ const Landing = () => {
   const { isAuthenticated, principal } = useAuth();
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [activeLink, setActiveLink] = useState("hero");
+  const [activeLink, setActiveLink] = useState(
+    location.hash
+      ? `#${location.hash.replace("#", "")}`
+      : location.pathname !== "/"
+      ? location.pathname
+      : "#hero"
+  );
   const [globalStats, setGlobalStats] = useState({ memesCreated: 12 });
   const [globalLoading, setGlobalLoading] = useState(true);
 
@@ -122,10 +128,17 @@ const Landing = () => {
 
   useEffect(() => {
     const currentHash = location.hash?.replace("#", "");
+    if (location.pathname !== "/") {
+      setActiveLink(location.pathname);
+      return;
+    }
+
     if (currentHash) {
       setActiveLink(`#${currentHash}`);
+    } else {
+      setActiveLink("#hero");
     }
-  }, [location.hash]);
+  }, [location.hash, location.pathname]);
 
   useEffect(() => {
     const anchors = navLinks
@@ -349,12 +362,7 @@ const Landing = () => {
                 variant="ghost"
                 size="lg"
                 className="rounded-full border border-border/60 bg-background/60 px-8"
-                onClick={() =>
-                  handleNav(
-                    navLinks.find((link) => link.href === "#pre-marketplace") ??
-                      navLinks[0]
-                  )
-                }
+                onClick={() => navigate("/pre-marketplace")}
               >
                 Explore Flow
               </Button>

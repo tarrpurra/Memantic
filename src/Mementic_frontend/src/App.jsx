@@ -9,6 +9,9 @@ import MyPlace from "./Pages/MyPlace";
 import Marketplace from "./Pages/Marketplace";
 import Portfolio from "./Pages/Portfolio";
 import Wallet_Page from "./Pages/Wallet";
+import PreMarketplace from "./Pages/PreMarketplace";
+import Auction from "./Pages/Auction";
+import MemeNFTPlace from "./Pages/MemeNFTPlace";
 import NotFound from "./Pages/NotFound";
 import { ToastContainer } from "./components/Toast";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -42,6 +45,9 @@ function App() {
           <Route path="/landing" element={<Landing />} />
           <Route path="/myplace" element={<MyPlace />} />
           <Route path="/marketplace" element={<Marketplace />} />
+          <Route path="/pre-marketplace" element={<PreMarketplace />} />
+          <Route path="/auction" element={<Auction />} />
+          <Route path="/meme-nft" element={<MemeNFTPlace />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/wallet" element={<Wallet_Page />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
