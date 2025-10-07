@@ -7,6 +7,7 @@ import Login from "./Pages/Login";
 import Landing from "./Pages/Landing";
 import MyPlace from "./Pages/MyPlace";
 import Marketplace from "./Pages/Marketplace";
+import PreMarketplace from "./Pages/PreMarketplace";
 import Portfolio from "./Pages/Portfolio";
 import Wallet_Page from "./Pages/Wallet";
 import NotFound from "./Pages/NotFound";
@@ -43,6 +44,8 @@ function App() {
           <Route path="/create" element={<MyPlace />} />
           <Route path="/myplace" element={<MyPlace />} />
           <Route path="/marketplace" element={<Marketplace />} />
+          <Route path="/nft-marketplace" element={<Marketplace />} />
+          <Route path="/pre-marketplace" element={<PreMarketplace />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/wallet" element={<Wallet_Page />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

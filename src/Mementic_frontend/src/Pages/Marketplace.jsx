@@ -1,864 +1,539 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "../components/ui/Button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/Card";
-import { Input } from "../components/ui/Input";
-import { MemeCard } from "../components/MemeCard";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext";
-import { useToast } from "../hooks/use-toast";
-import backendService from "../services/backendService.js";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  TrendingUp,
+  Activity,
+  ArrowUpDown,
+  BarChart3,
   Crown,
   Filter,
+  Gavel,
+  LayoutGrid,
+  RefreshCw,
   Search,
-  ArrowUp,
-  Timer,
-  User,
   Sparkles,
-  LogIn,
-  Home,
-  Zap,
-  X,
-  Heart,
-  Eye,
-  Coins,
+  SquareStack,
+  Table as TableIcon,
+  Wallet,
 } from "lucide-react";
+import { Button } from "../components/ui/Button";
+import { Card, CardContent, CardTitle } from "../components/ui/Card";
+import { Badge } from "../components/ui/Badge";
+import { Input } from "../components/ui/Input";
+import { useToast } from "../hooks/use-toast";
+import { useAuth } from "../contexts/AuthContext";
+import backendService from "../services/backendService";
 
-// --- Small utilities ---
-const PAGE_SIZE = 12;
+const TIMEFRAME_OPTIONS = [
+  { label: "24h", value: "24h" },
+  { label: "7d", value: "7d" },
+  { label: "30d", value: "30d" },
+];
 
-const ensureArray = (v) => (Array.isArray(v) ? v : v ? Object.values(v) : []);
+const STATUS_OPTIONS = [
+  { label: "All", value: "all" },
+  { label: "On sale", value: "sale" },
+  { label: "Auction", value: "auction" },
+];
 
-/** Safely convert BigInt-ish values to number */
-const safeBigIntToNumber = (value) => {
-  if (typeof value === "bigint") {
-    const MAX = BigInt(Number.MAX_SAFE_INTEGER);
-    const MIN = BigInt(Number.MIN_SAFE_INTEGER);
-    if (value > MAX) return Number.MAX_SAFE_INTEGER;
-    if (value < MIN) return Number.MIN_SAFE_INTEGER;
-    return Number(value);
-  }
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-  if (typeof value === "string" && value.trim() !== "") {
-    try {
-      // handle "123n" style
-      if (/^-?\d+n$/.test(value)) {
-        const bi = BigInt(value.slice(0, -1));
-        return safeBigIntToNumber(bi);
-      }
-      const n = Number(value);
-      return Number.isFinite(n) ? n : 0;
-    } catch {
-      return 0;
-    }
-  }
-  return 0;
+const DENOM_OPTIONS = [
+  { label: "ICP", value: "icp" },
+];
+
+const SORTABLE_COLUMNS = [
+  { key: "floor", label: "Floor" },
+  { key: "supply", label: "Supply" },
+  { key: "topOffer", label: "Top Offer" },
+  { key: "sales24h", label: "Sales 24h" },
+];
+
+const FALLBACK_COLLECTIONS = [
+  {
+    id: "col-1",
+    name: "Cycles Overload",
+    imageUrl: "https://images.unsplash.com/photo-1526498460520-4c246339dccb?auto=format&fit=crop&w=800&q=80",
+    collector: "@cyclesorcerer",
+    creator: "@dfinity",
+    floor: 12.4,
+    supply: 32,
+    topOffer: 11.8,
+    sales24h: 6,
+    change24h: 14,
+    tokenId: "40101",
+  },
+  {
+    id: "col-2",
+    name: "Zero Gas Drip",
+    imageUrl: "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=800&q=80",
+    collector: "@openchattrader",
+    creator: "@memeonaut",
+    floor: 6.9,
+    supply: 18,
+    topOffer: 6.1,
+    sales24h: 4,
+    change24h: -2,
+    tokenId: "40102",
+  },
+  {
+    id: "col-3",
+    name: "Governance Wins",
+    imageUrl: "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=800&q=80",
+    collector: "@daoqueen",
+    creator: "@governor",
+    floor: 18.2,
+    supply: 12,
+    topOffer: 17.5,
+    sales24h: 9,
+    change24h: 21,
+    tokenId: "40103",
+  },
+  {
+    id: "col-4",
+    name: "Motoko Mischief",
+    imageUrl: "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80",
+    collector: "@motokodev",
+    creator: "@icp_party",
+    floor: 4.3,
+    supply: 44,
+    topOffer: 4,
+    sales24h: 5,
+    change24h: 6,
+    tokenId: "40104",
+  },
+];
+
+const formatPrincipal = (principal) => {
+  if (!principal) return "Connect Wallet";
+  if (principal.length <= 12) return principal;
+  return `${principal.slice(0, 5)}…${principal.slice(-3)}`;
 };
 
-/** Safe id string (never React key or URL param with raw BigInt) */
-const toSafeIdString = (v) => {
-  if (typeof v === "bigint") return v.toString(10);
-  if (typeof v === "number")
-    return Number.isFinite(v) ? String(v) : `${Date.now()}`;
-  if (typeof v === "string") return v || `${Date.now()}`;
-  return `${Date.now()}`;
-};
+const numberFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
 
-/** Only create BigInt if id is strictly numeric */
-const toOptionalBigInt = (id) => (/^\d+$/.test(id) ? BigInt(id) : null);
+const LeaderboardStrip = ({ collections }) => {
+  const sorted = [...collections];
+  sorted.sort((a, b) => (b.floor ?? 0) - (a.floor ?? 0));
+  const topFloor = sorted[0];
 
-/** Optional: strip BigInts before logging (avoids console implicit conversions) */
-const stripBigInts = (obj) => {
-  if (typeof obj === "bigint") return obj.toString();
-  if (Array.isArray(obj)) return obj.map(stripBigInts);
-  if (obj && typeof obj === "object") {
-    return Object.fromEntries(
-      Object.entries(obj).map(([k, v]) => [k, stripBigInts(v)])
-    );
-  }
-  return obj;
-};
+  sorted.sort((a, b) => (b.sales24h ?? 0) - (a.sales24h ?? 0));
+  const mostSales = sorted[0];
 
-const normalizeMeme = (m, extra = {}) => {
-  // Supports PublicStoredMeme { id, owner, meme_data{...}, created_at, ... }
-  const md = m?.meme_data || m;
-  const owner = m?.owner ?? md?.owner ?? m?.creator;
+  sorted.sort((a, b) => (b.change24h ?? 0) - (a.change24h ?? 0));
+  const trending = sorted[0];
 
-  // Handle different vote structures
-  const up = safeBigIntToNumber(
-    extra?.votes?.upvotes ?? md?.upvotes ?? m?.upvotes ?? m?.votes ?? 0
-  );
-  const down = safeBigIntToNumber(
-    extra?.votes?.downvotes ?? md?.downvotes ?? m?.downvotes ?? 0
-  );
-  const score = safeBigIntToNumber(m?.votes ?? m?.score ?? up - down);
-
-  // Extract image URL from various possible locations
-  let image_url =
-    md?.image_url || m?.image_url || m?.url || m?.image || md?.url || "";
-
-  // Ensure we have a likely-valid URL
-  if (image_url && !/^https?:\/\//i.test(image_url)) {
-    image_url = "";
-  }
-
-  // Handle owner/principal conversion
-  let creator = "Anonymous";
-  if (owner) {
-    if (typeof owner === "string") {
-      creator = owner;
-    } else if (typeof owner === "object" && owner.toText) {
-      // Handle Principal objects
-      creator = owner.toText();
-    } else {
-      creator = String(owner);
-    }
-    // Truncate long principal IDs for display
-    if (creator.length > 20) {
-      creator = creator.slice(0, 8) + "..." + creator.slice(-6);
-    }
-  }
-
-  return {
-    id: toSafeIdString(m?.id ?? m?.meme_id ?? m?._id ?? m?.uuid ?? Date.now()),
-    title: md?.title || md?.prompt || m?.title || m?.prompt || "Untitled Meme",
-    prompt: md?.prompt || m?.prompt || "",
-    creator,
-    image_url,
-    votes: score,
-    views: safeBigIntToNumber(m?.market_data?.views ?? m?.views ?? 0),
-    created_at: (() => {
-      const raw = safeBigIntToNumber(m?.created_at) || safeBigIntToNumber(md?.created_at) || safeBigIntToNumber(m?.timestamp) || Date.now();
-      // Convert nanoseconds to milliseconds if needed
-      const ms = raw > 1e15 ? Math.floor(raw / 1e6) : raw;
-      return ms > 1000000000000 ? ms : Date.now();
-    })(),
-    rank: safeBigIntToNumber(extra?.rank ?? m?.rank ?? 0),
-    emoji: m?.emoji || "🖼️",
-    market_data: m?.market_data,
-    __raw: m,
-  };
-};
-
-function getWeekEndIST(now = new Date()) {
-  const offsetIST = 330; // +05:30
-  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-  const ist = new Date(utc + offsetIST * 60000);
-
-  const day = ist.getDay(); // 0=Sun ... 6=Sat
-  const daysToSunday = (7 - day) % 7;
-  const end = new Date(ist);
-  end.setDate(ist.getDate() + daysToSunday);
-  end.setHours(23, 59, 59, 999);
-
-  const backUtc = end.getTime() - offsetIST * 60000;
-  return new Date(backUtc - end.getTimezoneOffset() * 60000);
-}
-
-function getWeekStartIST(now = new Date()) {
-  const offsetIST = 330; // +05:30
-  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-  const ist = new Date(utc + offsetIST * 60000);
-
-  const day = ist.getDay(); // 0=Sun
-  const daysToLastSunday = day;
-  const start = new Date(ist);
-  start.setDate(ist.getDate() - daysToLastSunday);
-  start.setHours(0, 0, 0, 0);
-
-  const backUtc = start.getTime() - offsetIST * 60000;
-  return new Date(backUtc - start.getTimezoneOffset() * 60000);
-}
-
-function formatRemaining(ms) {
-  if (ms <= 0) return "0d 0h 0m";
-  const d = Math.floor(ms / (24 * 3600e3));
-  const h = Math.floor((ms % (24 * 3600e3)) / 3600e3);
-  const m = Math.floor((ms % 3600e3) / 60e3);
-  return `${d}d ${h}h ${m}m`;
-}
-
-const SkeletonCard = () => (
-  <Card className="relative overflow-hidden">
-    <CardContent className="p-6 animate-pulse">
-      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted" />
-      <div className="h-5 w-3/4 mx-auto bg-muted rounded mb-2" />
-      <div className="h-4 w-1/2 mx-auto bg-muted rounded mb-6" />
-      <div className="h-9 w-28 mx-auto bg-muted rounded" />
-    </CardContent>
-  </Card>
-);
-
-// --- Preview Modal ---
-function PreviewModal({
-  open,
-  onClose,
-  meme,
-  onLike,
-  isAuthenticated,
-  isOwn,
-}) {
-  const [hasVoted, setHasVoted] = useState(false);
-  const [loadingVoteStatus, setLoadingVoteStatus] = useState(false);
-
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === "Escape") onClose();
-    };
-    if (open) window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  // Check vote status when meme changes
-  useEffect(() => {
-    if (!open || !meme || !isAuthenticated || isOwn) {
-      setHasVoted(false);
-      setLoadingVoteStatus(false);
-      return;
-    }
-
-    const checkVoteStatus = async () => {
-      setLoadingVoteStatus(true);
-      try {
-        const bid = toOptionalBigInt(String(meme.id));
-        if (!bid) {
-          setHasVoted(false);
-        } else {
-          const userVote = await backendService.getUserVote(bid);
-          setHasVoted(!!userVote);
-        }
-      } catch (error) {
-        console.warn("Failed to check vote status:", error);
-        setHasVoted(false);
-      } finally {
-        setLoadingVoteStatus(false);
-      }
-    };
-
-    checkVoteStatus();
-  }, [open, meme, isAuthenticated, isOwn]);
-
-  if (!open || !meme) return null;
-
-  const createdAt = (meme.created_at && !isNaN(Number(meme.created_at)) && Number(meme.created_at) > 1000000000000) ? Number(meme.created_at) : Date.now();
-  const createdDate = new Date(createdAt);
-  const createdStr = createdDate.toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  const cards = [
+    {
+      label: "Top Floor",
+      stat: topFloor ? `${numberFormatter.format(topFloor.floor)} ICP` : "—",
+      sublabel: topFloor ? topFloor.name : "Awaiting listings",
+      icon: Crown,
+    },
+    {
+      label: "Most Sales 24h",
+      stat: mostSales ? `${mostSales.sales24h ?? 0}` : "0",
+      sublabel: mostSales ? mostSales.name : "Bring liquidity",
+      icon: Activity,
+    },
+    {
+      label: "New Collections",
+      stat: `${collections.length}`,
+      sublabel: "Eligible pre-meme winners",
+      icon: Sparkles,
+    },
+  ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-[95vw] max-w-7xl h-[95vh] overflow-hidden">
-        <div className="flex h-full">
-          {/* Left Panel: Image */}
-          <div className="flex-1 flex items-center justify-center bg-muted p-4 overflow-auto ">
-            {meme.image_url ? (
-              <img
-                src={meme.image_url}
-                alt={meme.title}
-                className="max-w-full"
-                loading="lazy"
-              />
-            ) : (
-              <div className="text-9xl">
-                {meme.emoji || "🖼️"}
-              </div>
-            )}
-          </div>
-
-          {/* Right Panel: Info */}
-          <div className="w-96 flex flex-col border-l border-border">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/60 to-primary/30 flex items-center justify-center text-card font-bold">
-                  {meme.creator?.[0]?.toUpperCase() || "U"}
-                </div>
-                <div>
-                  <div className="font-semibold">{meme.creator || "Unknown"}</div>
-                  <div className="text-xs text-muted-foreground">{createdStr}</div>
-                </div>
-              </div>
-              <Button size="icon" variant="ghost" onClick={onClose} title="Close">
-                <X className="w-5 h-5" />
-              </Button>
+    <div className="grid gap-4 md:grid-cols-3">
+      {cards.map(({ icon: Icon, label, stat, sublabel }) => (
+        <Card key={label} className="border-white/10 bg-white/5 backdrop-blur">
+          <CardContent className="flex items-center gap-4 p-4 text-white">
+            <div className="rounded-2xl bg-white/10 p-3">
+              <Icon className="h-5 w-5" />
             </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-lg font-semibold mb-2">{meme.title}</h3>
-                  {meme.prompt && (
-                    <p className="text-sm text-muted-foreground">{meme.prompt}</p>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1">
-                      <Heart className="w-4 h-4 text-red-500" />
-                      <span className="text-sm text-black">{meme.votes}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Eye className="w-4 h-4 text-blue-500" />
-                      <span className="text-sm text-blue-500">{meme.views ?? 0} views</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Coins className="w-4 h-4 text-yellow-500" />
-                      <span className="text-sm text-yellow-500">{meme.stakeAmount || 0} ICP</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-white/50">{label}</p>
+              <p className="text-lg font-semibold">{stat}</p>
+              <p className="text-xs text-white/60">{sublabel}</p>
             </div>
-
-            {/* Actions */}
-            <div className="px-4 py-3 border-t border-border">
-              <Button
-                size="sm"
-                variant={hasVoted ? "secondary" : (isAuthenticated && !isOwn ? "default" : "outline")}
-                onClick={() => {
-                  onLike(meme.id, meme.votes, meme.creator);
-                  setHasVoted(true); // Optimistic update
-                }}
-                disabled={!isAuthenticated || isOwn || hasVoted || loadingVoteStatus}
-                className={(!isAuthenticated || isOwn || hasVoted) ? "opacity-60" : ""}
-                title={
-                  !isAuthenticated
-                    ? "Login to like"
-                    : isOwn
-                    ? "Can't like your own meme"
-                    : hasVoted
-                    ? "You have already voted on this meme"
-                    : loadingVoteStatus
-                    ? "Checking vote status..."
-                    : "Like"
-                }
-              >
-                <Heart className={`w-4 h-4 mr-2 ${hasVoted ? "fill-current" : ""}`} />
-                {loadingVoteStatus ? (
-                  <>
-                    <div className="animate-spin h-3 w-3 border border-current border-t-transparent rounded-full mr-1" />
-                    Loading...
-                  </>
-                ) : isOwn ? (
-                  "Your Meme"
-                ) : hasVoted ? (
-                  `Voted (${meme.votes})`
-                ) : (
-                  `Vote (${meme.votes})`
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
-}
+};
+
+const TableHeaderCell = ({ label, sortable, active, direction, onClick }) => (
+  <th
+    scope="col"
+    className="sticky top-0 z-10 bg-slate-950/80 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-white/60 backdrop-blur"
+  >
+    <button
+      type="button"
+      onClick={sortable ? onClick : undefined}
+      className={`inline-flex items-center gap-1 text-white ${sortable ? "hover:text-cyan-200" : "cursor-default"}`}
+    >
+      {label}
+      {sortable ? <ArrowUpDown className={`h-3.5 w-3.5 ${active ? "text-cyan-300" : "text-white/40"}`} /> : null}
+      {sortable && active ? (
+        <span className="text-[10px] uppercase text-cyan-200/70">{direction === "asc" ? "Asc" : "Desc"}</span>
+      ) : null}
+    </button>
+  </th>
+);
+
+const ActionModal = ({ action, collection, open, onClose, onConfirm, value, setValue, secondaryValue, setSecondaryValue, loading }) => (
+  <AnimatePresence>
+    {open ? (
+      <motion.div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          transition={{ type: "spring", stiffness: 240, damping: 18 }}
+          className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950/95 p-6 text-white shadow-2xl"
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-white/50">{action?.label}</p>
+              <h3 className="mt-2 text-2xl font-semibold">{collection?.name}</h3>
+            </div>
+            <Button variant="ghost" className="h-9 w-9" onClick={onClose}>
+              ✕
+            </Button>
+          </div>
+
+          <div className="mt-5 flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <img src={collection?.imageUrl} alt={collection?.name} className="h-16 w-16 rounded-xl object-cover" />
+            <div>
+              <p className="text-sm text-white/70">Collector</p>
+              <p className="text-base font-semibold">{collection?.collector}</p>
+              <p className="text-xs text-white/50">Token #{collection?.tokenId}</p>
+            </div>
+          </div>
+
+          <label className="mt-6 block text-sm font-medium text-white/80">
+            Amount (ICP)
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+              className="mt-2 bg-slate-900/80 text-white"
+            />
+          </label>
+
+          {action?.requiresExpiry ? (
+            <label className="mt-4 block text-sm font-medium text-white/80">
+              Offer expiry (hours)
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={secondaryValue}
+                onChange={(event) => setSecondaryValue(event.target.value)}
+                className="mt-2 bg-slate-900/80 text-white"
+              />
+            </label>
+          ) : null}
+
+          <div className="mt-6 flex gap-3">
+            <Button className="flex-1" onClick={onConfirm} disabled={loading}>
+              {loading ? "Processing…" : action?.cta}
+            </Button>
+            <Button variant="outline" className="flex-1" onClick={onClose}>
+              Cancel
+            </Button>
+          </div>
+        </motion.div>
+      </motion.div>
+    ) : null}
+  </AnimatePresence>
+);
+
+const DetailsDrawer = ({ collection, onClose, onBuy, onOffer, onList, onAuction, disabled }) => (
+  <AnimatePresence>
+    {collection ? (
+      <motion.aside
+        className="fixed inset-x-0 bottom-0 z-40 max-h-[90vh] overflow-y-auto rounded-t-3xl border border-white/10 bg-slate-950/95 p-6 text-white shadow-[0_-30px_60px_rgba(15,23,42,0.6)] md:right-6 md:bottom-6 md:top-6 md:my-auto md:h-[calc(100vh-3rem)] md:w-[420px] md:rounded-3xl"
+        initial={{ y: 200, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 200, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 220, damping: 22 }}
+      >
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-white/50">NFT Details</p>
+            <h3 className="mt-1 text-2xl font-semibold">{collection.name}</h3>
+            <p className="text-sm text-white/60">Collector {collection.collector}</p>
+          </div>
+          <Button variant="ghost" className="h-9 w-9" onClick={onClose}>
+            ✕
+          </Button>
+        </div>
+
+        <div className="mt-5 overflow-hidden rounded-2xl border border-white/10">
+          <img src={collection.imageUrl} alt={collection.name} className="w-full" loading="lazy" />
+        </div>
+
+        <div className="mt-6 grid grid-cols-2 gap-3 text-xs text-white/70">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">Floor</p>
+            <p className="mt-2 text-2xl font-semibold">{numberFormatter.format(collection.floor)} ICP</p>
+            <p className="text-xs text-white/50">Lowest listing price</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">Top Offer</p>
+            <p className="mt-2 text-2xl font-semibold">{numberFormatter.format(collection.topOffer)} ICP</p>
+            <p className="text-xs text-white/50">Highest incoming bid</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">Supply</p>
+            <p className="mt-2 text-2xl font-semibold">{collection.supply}</p>
+            <p className="text-xs text-white/50">Edition size</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">Sales 24h</p>
+            <p className="mt-2 text-2xl font-semibold">{collection.sales24h}</p>
+            <p className="text-xs text-white/50">Past day volume</p>
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-4 text-sm text-white/70">
+          <p>
+            Recent trades show steady demand. Graduated memes from the pre-marketplace arrive here ready for collectors,
+            auctions, and liquidity events.
+          </p>
+          <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-cyan-100">
+            <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/70">Recent Activity</p>
+            <ul className="mt-2 space-y-2 text-sm">
+              <li>• @icp_dao purchased at {numberFormatter.format(collection.floor)} ICP</li>
+              <li>• @meme_fund placed an offer for {numberFormatter.format(collection.topOffer)} ICP</li>
+              <li>• @auction_master listed supply batch of {collection.supply}</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-3">
+          <Button className="w-full" onClick={() => onBuy(collection)} disabled={disabled}>
+            Buy Now
+          </Button>
+          <div className="grid grid-cols-2 gap-3">
+            <Button variant="outline" className="w-full" onClick={() => onOffer(collection)} disabled={disabled}>
+              Make Offer
+            </Button>
+            <Button variant="outline" className="w-full" onClick={() => onAuction(collection)}>
+              Start Auction
+            </Button>
+          </div>
+          <Button variant="ghost" className="w-full" onClick={() => onList(collection)} disabled={disabled}>
+            List for Sale
+          </Button>
+        </div>
+      </motion.aside>
+    ) : null}
+  </AnimatePresence>
+);
 
 const Marketplace = () => {
-  const { principal, isLoading: authLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isAuthenticated, principal } = useAuth();
 
-  // UI State
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sort, setSort] = useState("trending");
-  const [page, setPage] = useState(1);
+  const [collections, setCollections] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [timeframe, setTimeframe] = useState("24h");
+  const [status, setStatus] = useState("all");
+  const [denom, setDenom] = useState("icp");
+  const [viewMode, setViewMode] = useState("table");
+  const [sortKey, setSortKey] = useState("floor");
+  const [sortDir, setSortDir] = useState("desc");
+  const [selected, setSelected] = useState(null);
+  const [actionConfig, setActionConfig] = useState(null);
+  const [actionTarget, setActionTarget] = useState(null);
+  const [actionValue, setActionValue] = useState("0");
+  const [actionSecondary, setActionSecondary] = useState("24");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  // Data State
-  const [topMemes, setTopMemes] = useState([]);
-  const [memes, setMemes] = useState([]);
-  const [total, setTotal] = useState(0);
-
-  // Loading/Error
-  const [loadingTop, setLoadingTop] = useState(true);
-  const [loadingList, setLoadingList] = useState(true);
-  const [errorMsg, setErrorMsg] = useState("");
-
-  // Week countdown
-  const [now, setNow] = useState(new Date());
-  const weekEnd = useMemo(() => getWeekEndIST(now), [now]);
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(t);
-  }, []);
-  const timeLeft = formatRemaining(weekEnd.getTime() - now.getTime());
+    let isMounted = true;
+    const controller = new AbortController();
 
-  // Preview Modal State
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [selectedMeme, setSelectedMeme] = useState(null);
-
-  // Periodic refresh of vote counts and leaderboard
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const refreshVotes = async () => {
+    const loadCollections = async () => {
+      setLoading(true);
       try {
-        // Always refresh top memes leaderboard
-        const leaderboardRes = await backendService.getCurrentLeaderboard(3);
-        const entries = ensureArray(leaderboardRes?.top_memes);
-        const updatedTopMemes = entries.map((e) => {
-          const pm = Array.isArray(e?.meme_data)
-            ? e.meme_data[0]
-            : e?.meme_data;
-          if (pm) {
-            return normalizeMeme(pm, { rank: e?.rank, votes: e?.votes });
-          }
-          return normalizeMeme(
-            {
-              id: e?.meme_id,
-              title: `Meme #${e?.meme_id ?? "?"}`,
-              owner: e?.owner,
-              meme_data: e?.meme_data,
-            },
-            { rank: e?.rank, votes: e?.votes }
-          );
+        const params = new URLSearchParams({
+          tf: timeframe,
+          status,
+          denom,
+          sort: `${sortKey}_${sortDir}`,
         });
-        setTopMemes(updatedTopMemes);
+        if (search) params.set("q", search);
 
-        // Refresh current page memes with updated vote counts
-        if (memes.length > 0) {
-          const currentMemeIds = memes.map((m) => m.id);
-          const updatedMemes = await Promise.all(
-            currentMemeIds.map(async (memeId) => {
-              try {
-                const bid = toOptionalBigInt(String(memeId));
-                if (!bid) return memes.find((m) => m.id === memeId);
-                const voteData = await backendService.getMemeVotes(bid);
-                if (voteData) {
-                  return {
-                    ...memes.find((m) => m.id === memeId),
-                    votes:
-                      safeBigIntToNumber(voteData.upvotes) -
-                      safeBigIntToNumber(voteData.downvotes),
-                  };
-                }
-                return memes.find((m) => m.id === memeId);
-              } catch (error) {
-                console.warn(`Failed to get votes for meme ${memeId}:`, error);
-                return memes.find((m) => m.id === memeId);
-              }
-            })
-          );
-          setMemes(updatedMemes);
+        const response = await fetch(`/api/nft-market?${params.toString()}`, {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load marketplace data (${response.status})`);
+        }
+
+        const data = await response.json();
+        if (!isMounted) return;
+
+        const normalized = Array.isArray(data)
+          ? data.map((item, index) => ({
+              id: String(item.id ?? index),
+              name: item.name ?? item.collection ?? "Untitled Collection",
+              imageUrl: item.imageUrl ?? item.image_url ?? FALLBACK_COLLECTIONS[index % FALLBACK_COLLECTIONS.length].imageUrl,
+              collector: item.collector ?? item.owner ?? "@anon",
+              creator: item.creator ?? item.artist ?? "@creator",
+              floor: Number(item.floor ?? 0),
+              supply: Number(item.supply ?? 0),
+              topOffer: Number(item.topOffer ?? item.top_offer ?? 0),
+              sales24h: Number(item.sales24h ?? item.sales_24h ?? 0),
+              change24h: Number(item.change24h ?? item.change_24h ?? 0),
+              tokenId: item.tokenId ?? item.token_id ?? String(index),
+            }))
+          : [];
+
+        setCollections(normalized);
+      } catch (error) {
+        if (error.name === "AbortError") return;
+        console.warn("Falling back to mock NFT marketplace data", error);
+        if (isMounted) {
+          setCollections(FALLBACK_COLLECTIONS);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    const loadWalletBalance = async () => {
+      try {
+        const res = await fetch("/api/user", { signal: controller.signal });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!isMounted) return;
+        if (data?.balance_icp != null) {
+          setWalletBalance(Number(data.balance_icp));
         }
       } catch (error) {
-        console.warn("Failed to refresh data:", error);
+        if (error.name === "AbortError") return;
+        // Silent failure: display fallback chip
       }
     };
 
-    // Run initial refresh immediately when component mounts
-    refreshVotes();
-
-    // Set up periodic refresh
-    const refreshInterval = setInterval(refreshVotes, 60000); // Refresh every minute
-
-    // Also refresh when user returns to the tab/window
-    const handleVisibilityChange = () => {
-      if (!document.hidden && isAuthenticated) {
-        refreshVotes();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    loadCollections();
+    loadWalletBalance();
 
     return () => {
-      clearInterval(refreshInterval);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      isMounted = false;
+      controller.abort();
     };
-  }, [isAuthenticated]);
+  }, [timeframe, status, denom, sortKey, sortDir, search, refreshKey]);
 
-  // Debounce search
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setPage(1);
-      setSearchQuery(searchInput.trim());
-    }, 400);
-    return () => clearTimeout(t);
-  }, [searchInput]);
-
-  // Filter memes based on search query
-  const filteredMemes = useMemo(() => {
-    const base = ensureArray(memes);
-    if (!searchQuery.trim()) return base;
-    const query = searchQuery.toLowerCase();
-    return base.filter(
-      (meme) =>
-        (meme.title?.toLowerCase() ?? "").includes(query) ||
-        (meme.prompt?.toLowerCase() ?? "").includes(query)
-    );
-  }, [memes, searchQuery]);
-
-  // Fetch Top 3
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoadingTop(true);
-      setErrorMsg("");
-      try {
-        const res = await backendService.getCurrentLeaderboard(3);
-        const entries = ensureArray(res?.top_memes);
-        const arr = entries.map((e) => {
-          const pm = Array.isArray(e?.meme_data)
-            ? e.meme_data[0]
-            : e?.meme_data;
-          if (pm) {
-            return normalizeMeme(pm, { rank: e?.rank, votes: e?.votes });
-          }
-          return normalizeMeme(
-            { id: e?.meme_id, owner: e?.owner, meme_data: e?.meme_data },
-            { rank: e?.rank, votes: e?.votes }
-          );
-        });
-        // Filter to current week only
-        const weekStart = getWeekStartIST();
-        const filteredArr = arr.filter(m => m.created_at >= weekStart.getTime());
-        if (!cancelled) setTopMemes(filteredArr);
-      } catch (e) {
-        if (!cancelled) setErrorMsg("Failed to load top memes.");
-      } finally {
-        if (!cancelled) setLoadingTop(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Fetch paginated list
-  async function fetchList({ reset = false } = {}) {
-    setLoadingList(true);
-    setErrorMsg("");
-    try {
-      let arr = [];
-      let fetchSource = "";
-
-      try {
-        // Try to get all memes first
-        const rawAll = await backendService.getAllMemes();
-        arr = ensureArray(rawAll).map((m) => normalizeMeme(m));
-        fetchSource = "getAllMemes";
-        // console.log(`Fetched ${arr.length} memes from getAllMemes`, stripBigInts(rawAll));
-      } catch (err) {
-        console.warn("getAllMemes failed, trying getMarketplaceMemes:", err);
-        try {
-          const rawMarketplace = await backendService.getMarketplaceMemes();
-          arr = ensureArray(rawMarketplace).map((m) => normalizeMeme(m));
-          fetchSource = "getMarketplaceMemes";
-        } catch (err2) {
-          console.warn(
-            "getMarketplaceMemes failed, trying getUserMemes:",
-            err2
-          );
-          try {
-            const rawUser = await backendService.getUserMemes();
-            arr = ensureArray(rawUser).map((m) => normalizeMeme(m));
-            fetchSource = "getUserMemes";
-          } catch (err3) {
-            console.warn("All meme fetching methods failed:", err3);
-            // Sample data fallback
-            arr = [
-              normalizeMeme({
-                id: "sample-1",
-                title: "Sample Meme 1",
-                prompt: "A funny sample meme",
-                owner: "SampleUser",
-                image_url: "",
-                votes: 5,
-                views: 10,
-                created_at: Date.now(),
-                emoji: "😂",
-              }),
-              normalizeMeme({
-                id: "sample-2",
-                title: "Sample Meme 2",
-                prompt: "Another sample meme",
-                owner: "SampleUser2",
-                image_url: "",
-                votes: 3,
-                views: 8,
-                created_at: Date.now() - 86400000,
-                emoji: "🤣",
-              }),
-            ];
-            fetchSource = "sample-data";
-          }
-        }
-      }
-
-      // Sort: newest first, tie-breaker by votes (both numeric now)
-      arr.sort((a, b) => {
-        const dateDiff =
-          a.created_at === b.created_at ? 0 : b.created_at - a.created_at;
-        if (dateDiff !== 0) return dateDiff;
-        return (b.votes || 0) - (a.votes || 0);
-      });
-
-      // Filter to current week only (cleanup old memes)
-      const weekStart = getWeekStartIST();
-      arr = arr.filter(m => m.created_at >= weekStart.getTime());
-
-      // Client-side paging
-      const start = (page - 1) * PAGE_SIZE;
-      const slice = arr.slice(start, start + PAGE_SIZE);
-
-      setTotal(arr.length);
-      setMemes((prev) =>
-        page === 1 || reset ? slice : [...ensureArray(prev), ...slice]
+  const filteredCollections = useMemo(() => {
+    const lowerSearch = search.trim().toLowerCase();
+    const filtered = collections.filter((item) => {
+      if (!lowerSearch) return true;
+      return (
+        item.name.toLowerCase().includes(lowerSearch) ||
+        item.collector.toLowerCase().includes(lowerSearch) ||
+        item.creator.toLowerCase().includes(lowerSearch)
       );
+    });
 
-      // Refresh vote counts for newly loaded memes
-      if (slice.length > 0) {
-        setTimeout(async () => {
-          try {
-            const currentMemeIds = slice.map((m) => m.id);
-            const updatedMemes = await Promise.all(
-              currentMemeIds.map(async (memeId) => {
-                try {
-                  const bid = toOptionalBigInt(String(memeId));
-                  if (!bid) return slice.find((m) => m.id === memeId);
-                  const voteData = await backendService.getMemeVotes(bid);
-                  if (voteData) {
-                    return {
-                      ...slice.find((m) => m.id === memeId),
-                      votes:
-                        safeBigIntToNumber(voteData.upvotes) -
-                        safeBigIntToNumber(voteData.downvotes),
-                    };
-                  }
-                  return slice.find((m) => m.id === memeId);
-                } catch (error) {
-                  console.warn(
-                    `Failed to get initial votes for meme ${memeId}:`,
-                    error
-                  );
-                  return slice.find((m) => m.id === memeId);
-                }
-              })
-            );
-            setMemes((prev) =>
-              page === 1 || reset
-                ? updatedMemes
-                : [
-                    ...ensureArray(prev).slice(0, -slice.length),
-                    ...updatedMemes,
-                  ]
-            );
-          } catch (error) {
-            console.warn("Failed to refresh initial vote counts:", error);
-          }
-        }, 500);
-      }
-    } catch (e) {
-      console.error("Failed to load memes:", e);
-      setErrorMsg("Failed to load memes. Please try again.");
-    } finally {
-      setLoadingList(false);
+    const sorted = [...filtered].sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      const aValue = a[sortKey] ?? 0;
+      const bValue = b[sortKey] ?? 0;
+      return dir * (aValue - bValue);
+    });
+
+    return sorted;
+  }, [collections, search, sortKey, sortDir]);
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
     }
-  }
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    fetchList({ reset: page === 1 });
-  }, [page, searchQuery, sort]);
-
-  // Enhanced ownership detection helper
-  const checkMemeOwnership = (meme) => {
-    if (!principal || !meme) return false;
-
-    // Method 1: Check meme.owner
-    if (meme.owner) {
-      const ownerText =
-        typeof meme.owner === "object" && meme.owner.toText
-          ? meme.owner.toText()
-          : String(meme.owner).trim();
-      if (ownerText && principal === ownerText) return true;
-    }
-
-    // Method 2: Check meme.creator (already string-shortened in normalizeMeme)
-    if (meme.creator) {
-      const creatorText = String(meme.creator).trim();
-      if (creatorText && principal === creatorText) return true;
-    }
-
-    // Method 3: Check raw meme data
-    if (meme.__raw) {
-      const raw = meme.__raw;
-      if (raw.owner) {
-        const rawOwnerText =
-          typeof raw.owner === "object" && raw.owner.toText
-            ? raw.owner.toText()
-            : String(raw.owner).trim();
-        if (rawOwnerText && principal === rawOwnerText) return true;
-      }
-      if (raw.meme_data?.owner) {
-        const memeDataOwnerText =
-          typeof raw.meme_data.owner === "object" && raw.meme_data.owner.toText
-            ? raw.meme_data.owner.toText()
-            : String(raw.meme_data.owner).trim();
-        if (memeDataOwnerText && principal === memeDataOwnerText) return true;
-      }
-    }
-
-    return false;
   };
 
-  // Vote
-  const votingLock = useRef(false);
-  const handleVote = async (memeId, currentVotes = 0, memeOwner = null) => {
-    if (!isAuthenticated) {
+  const openAction = (action, collection) => {
+    if (!isAuthenticated && action.requiresAuth !== false) {
       toast({
-        title: "Authentication Required",
-        description: "Please login to vote on memes",
-        variant: "destructive",
-      });
-      navigate("/login");
-      return;
-    }
-
-    // Enhanced self-voting prevention
-    const isOwnMeme = checkMemeOwnership({
-      owner: memeOwner,
-      creator: memeOwner,
-    });
-    if (isOwnMeme) {
-      toast({
-        title: "Cannot Vote on Own Meme",
-        description:
-          "You cannot vote on your own memes to maintain fair competition",
-        variant: "destructive",
+        title: "Connect your wallet",
+        description: "Login with Internet Identity to trade NFTs.",
       });
       return;
     }
 
-    if (votingLock.current) return;
-    votingLock.current = true;
+    setActionConfig(action);
+    setActionTarget(collection);
+    setActionValue(String(collection?.floor ?? 0));
+    setActionSecondary("24");
+  };
 
-    // optimistic update
-    setMemes((prev) =>
-      ensureArray(prev).map((m) =>
-        String(m.id) === String(memeId)
-          ? { ...m, votes: safeBigIntToNumber(m.votes || 0) + 1 }
-          : m
-      )
-    );
+  const closeAction = () => {
+    setActionConfig(null);
+    setActionValue("0");
+    setActionSecondary("24");
+    setActionTarget(null);
+  };
 
-    // Also update top memes if this meme is in the top 3
-    setTopMemes((prev) =>
-      ensureArray(prev).map((m) =>
-        String(m.id) === String(memeId)
-          ? { ...m, votes: safeBigIntToNumber(m.votes || 0) + 1 }
-          : m
-      )
-    );
+  const handleActionConfirm = async () => {
+    if (!actionConfig || !actionTarget) return;
 
-    // Update selected meme in modal
-    setSelectedMeme((prev) =>
-      prev && String(prev.id) === String(memeId)
-        ? { ...prev, votes: safeBigIntToNumber(prev.votes || 0) + 1 }
-        : prev
-    );
+    const amount = Number(actionValue);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast({ title: "Invalid amount", description: "Enter a positive ICP amount." });
+      return;
+    }
 
     try {
-      const bid = toOptionalBigInt(String(memeId));
-      if (!bid) {
-        // Non-numeric/sample ids cannot be voted via backend
-        throw new Error("Invalid meme id (non-numeric) for voting");
+      setActionLoading(true);
+      if (actionConfig.key === "buy") {
+        await backendService.purchaseNFT(actionTarget.tokenId, amount);
+        toast({ title: "Purchase submitted", description: `${actionTarget.name} for ${amount.toFixed(2)} ICP` });
+      } else if (actionConfig.key === "offer") {
+        const expiryHours = Number(actionSecondary);
+        await backendService.makeOffer(actionTarget.tokenId, amount, expiryHours * 3600);
+        toast({
+          title: "Offer placed",
+          description: `Offer of ${amount.toFixed(2)} ICP sent to ${actionTarget.collector}`,
+        });
+      } else if (actionConfig.key === "list") {
+        await backendService.listNFT(actionTarget.tokenId, amount);
+        toast({ title: "Listing created", description: `Listed at ${amount.toFixed(2)} ICP` });
+      } else if (actionConfig.key === "auction") {
+        const durationHours = Number(actionSecondary) || 72;
+        await backendService.startAuction(actionTarget.tokenId, amount, durationHours * 3600);
+        toast({
+          title: "Auction launched",
+          description: `${durationHours}h auction scheduled at ${amount.toFixed(2)} ICP`,
+        });
       }
-
-      await backendService.voteMeme(bid, "Upvote");
-      toast({
-        title: "Voted! 🚀",
-        description: "Your vote has been recorded successfully",
-      });
-
-      // Refresh the leaderboard after successful vote
-      setTimeout(() => {
-        backendService
-          .getCurrentLeaderboard(3)
-          .then((res) => {
-            const entries = ensureArray(res?.top_memes);
-            const arr = entries.map((e) => {
-              const pm = Array.isArray(e?.meme_data)
-                ? e.meme_data[0]
-                : e?.meme_data;
-              if (pm) {
-                return normalizeMeme(pm, { rank: e?.rank, votes: e?.votes });
-              }
-              return normalizeMeme(
-                { id: e?.meme_id, owner: e?.owner, meme_data: e?.meme_data },
-                { rank: e?.rank, votes: e?.votes }
-              );
-            });
-            const weekStart = getWeekStartIST();
-            const filteredArr = arr.filter(m => m.created_at >= weekStart.getTime());
-            setTopMemes(filteredArr);
-          })
-          .catch((err) => console.warn("Failed to refresh leaderboard:", err));
-      }, 1000);
+      closeAction();
+      setRefreshKey((value) => value + 1);
     } catch (error) {
-      console.error("Voting failed:", error);
-
-      // revert optimistic update
-      setMemes((prev) =>
-        ensureArray(prev).map((m) =>
-          String(m.id) === String(memeId) ? { ...m, votes: currentVotes } : m
-        )
-      );
-
-      setTopMemes((prev) =>
-        ensureArray(prev).map((m) =>
-          String(m.id) === String(memeId) ? { ...m, votes: currentVotes } : m
-        )
-      );
-
-      // Provide user-friendly error messages
-      let errorTitle = "Voting Failed";
-      let errorDescription = "Failed to vote on meme";
-
-      if (error?.message) {
-        if (error.message.includes("Cannot vote on your own meme")) {
-          errorTitle = "Cannot Vote";
-          errorDescription = "You cannot vote on your own memes";
-        } else if (
-          error.message.includes("Can only vote on memes from the current week")
-        ) {
-          errorTitle = "Voting Period Ended";
-          errorDescription =
-            "This meme is from a previous week and voting has ended";
-        } else if (
-          error.message.includes("Voting period for the current week has ended")
-        ) {
-          errorTitle = "Voting Period Ended";
-          errorDescription = "The voting period for this week has ended";
-        } else if (error.message.includes("Authentication required")) {
-          errorTitle = "Authentication Required";
-          errorDescription = "Please login to vote on memes";
-        } else {
-          errorDescription = error.message;
-        }
-      }
-
-      toast({
-        title: errorTitle,
-        description: errorDescription,
-        variant: "destructive",
-      });
+      toast({ title: "Action failed", description: error.message, variant: "destructive" });
     } finally {
-      votingLock.current = false;
+      setActionLoading(false);
     }
   };
 
@@ -930,326 +605,379 @@ const Marketplace = () => {
     }
   };
 
-  const canLoadMore = ensureArray(memes).length < total;
+  const openBuy = (collection) => openAction(actionDefinitions.buy, collection);
+  const openOffer = (collection) => openAction(actionDefinitions.offer, collection);
+  const openList = (collection) => openAction(actionDefinitions.list, collection);
+  const openAuction = (collection) => openAction(actionDefinitions.auction, collection);
 
-  // Open preview modal
-  const openPreview = (meme) => {
-    setSelectedMeme(meme);
-    setPreviewOpen(true);
-  };
+  const walletChip = walletBalance != null ? `${walletBalance.toFixed(2)} ICP` : "Wallet";
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <Sparkles className="w-8 h-8 text-primary" />
-                <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                  Meme Marketplace
-                </h1>
-              </div>
-              <p className="text-muted-foreground">
-                Discover and vote on viral content
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" onClick={() => navigate("/")}>
-                <Home className="w-4 h-4 mr-2" />
-                Home
-              </Button>
-
-              {authLoading ? (
-                <div className="text-sm text-muted-foreground">Loading...</div>
-              ) : isAuthenticated ? (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={handleRefreshVotes}
-                    title="Refresh vote counts"
-                  >
-                    <ArrowUp className="w-4 h-4 mr-2" />
-                    Refresh Votes
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate("/portfolio")}
-                  >
-                    <User className="w-4 h-4 mr-2" />
-                    My Portfolio
-                  </Button>
-                  <Button variant="default" onClick={handleCreateMeme}>
-                    <Zap className="w-4 h-4 mr-2" />
-                    Create Meme
-                  </Button>
-                  <div className="text-sm text-muted-foreground hidden sm:block">
-                    {principal
-                      ? `${principal.slice(0, 8)}...`
-                      : "Not logged in"}
-                  </div>
-                </>
-              ) : (
-                <Button variant="default" onClick={() => navigate("/login")}>
-                  <LogIn className="w-4 h-4 mr-2" />
-                  Login to Vote
-                </Button>
-              )}
-            </div>
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
+      <div className="mx-auto w-full max-w-7xl px-6 pb-24 pt-28">
+        <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Trading Board</p>
+            <h1 className="text-3xl font-semibold md:text-4xl">Meme NFT Marketplace</h1>
+            <p className="max-w-2xl text-sm text-white/60">
+              Track floor prices, supply, top offers, and velocity as graduated memes move through ICP's collectible economy.
+            </p>
           </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Authentication Status Alert */}
-        {!isAuthenticated && !authLoading && (
-          <Card className="mb-6 border-yellow-500/20 bg-yellow-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <LogIn className="w-5 h-5 text-yellow-500" />
-                <div>
-                  <p className="text-sm font-medium">Want to participate?</p>
-                  <p className="text-xs text-muted-foreground">
-                    Login to vote on memes and create your own viral content
-                  </p>
-                </div>
-                <Button size="sm" onClick={() => navigate("/login")}>
-                  Login Now
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Search and Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder="Search memes..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          <Button variant="outline">
-            <Filter className="w-4 h-4 mr-2" />
-            Filters
-          </Button>
-        </div>
-
-        {/* Leaderboard Section */}
-        <Card className="mb-8 bg-gradient-glow border-primary/30">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-2xl">
-                <Crown className="w-6 h-6 text-yellow-500" />
-                Weekly Leaderboard
-              </CardTitle>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Timer className="w-4 h-4" />
-                <span>Contest ends in {timeLeft}</span>
-              </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/70">
+              <Wallet className="h-4 w-4 text-cyan-300" />
+              <span>{formatPrincipal(principal)}</span>
+              <Badge className="bg-cyan-500/10 text-xs text-cyan-200">{walletChip}</Badge>
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {ensureArray(topMemes).map((meme, index) => {
-                const rank = meme.rank || (index + 1);
-                const isTop3 = rank <= 3;
-                return (
-                  <div
-                    key={meme.id}
-                    className={`flex items-center gap-4 p-4 rounded-lg border ${
-                      rank === 1
-                        ? "bg-gradient-to-r from-yellow-500/10 to-yellow-600/10 border-yellow-500/30"
-                        : rank === 2
-                        ? "bg-gradient-to-r from-gray-400/10 to-gray-500/10 border-gray-400/30"
-                        : rank === 3
-                        ? "bg-gradient-to-r from-orange-500/10 to-orange-600/10 border-orange-500/30"
-                        : "bg-muted/50 border-border"
-                    }`}
-                  >
-                    {/* Rank Badge */}
-                    <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-lg ${
-                      rank === 1
-                        ? "bg-yellow-500 text-white"
-                        : rank === 2
-                        ? "bg-gray-400 text-white"
-                        : rank === 3
-                        ? "bg-orange-500 text-white"
-                        : "bg-muted text-muted-foreground"
-                    }`}>
-                      {rank === 1 ? "👑" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : rank}
-                    </div>
-
-                    {/* Image */}
-                    <div className="flex-shrink-0">
-                      {meme.image_url ? (
-                        <img
-                          src={meme.image_url}
-                          alt={meme.title}
-                          className="w-16 h-16 object-cover rounded-lg"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="w-16 h-16 flex items-center justify-center text-2xl bg-muted rounded-lg">
-                          {meme.emoji || "🖼️"}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-lg line-clamp-1">{meme.title}</h4>
-                      <p className="text-sm text-muted-foreground">
-                        by {meme.creator}
-                        {checkMemeOwnership(meme) && (
-                          <span className="ml-2 text-xs text-orange-600 font-medium">(You)</span>
-                        )}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(meme.created_at || Date.now()).toLocaleString("en-IN", {
-                          timeZone: "Asia/Kolkata",
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        })}
-                      </p>
-                      <div className="flex items-center gap-4 mt-1">
-                        <div className="flex items-center gap-1 text-sm">
-                          <Heart className="w-4 h-4 text-red-500" />
-                          <span className="text-red-500">{meme.votes}</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-sm">
-                          <Eye className="w-4 h-4 text-blue-500" />
-                          <span className="text-blue-500">{meme.views ?? 0}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Vote Button */}
-                    <div className="flex-shrink-0">
-                      <Button
-                        size="sm"
-                        variant={isAuthenticated ? "outline" : "ghost"}
-                        onClick={() => handleVote(meme.id, meme.votes, meme.creator)}
-                        disabled={!isAuthenticated || checkMemeOwnership(meme)}
-                        className={
-                          !isAuthenticated || checkMemeOwnership(meme)
-                            ? "opacity-50 cursor-not-allowed"
-                            : ""
-                        }
-                      >
-                        <ArrowUp className="w-4 h-4 mr-1" />
-                        {checkMemeOwnership(meme) ? "Yours" : "Vote"}
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* All Memes Grid */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold flex items-center gap-2">
-              <TrendingUp className="w-6 h-6" />
-              All Memes
-            </h2>
-            <div className="flex items-center gap-4">
-              {searchQuery ? (
-                <p className="text-sm text-muted-foreground">
-                  Found {ensureArray(filteredMemes).length} of {total} meme
-                  {ensureArray(filteredMemes).length !== 1 ? "s" : ""}
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {total} meme{total !== 1 ? "s" : ""} available
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {ensureArray(filteredMemes).length === 0 ? (
-          <Card className="text-center py-12">
-            <CardContent>
-              <Search className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-lg font-medium mb-2">No memes found</h3>
-              <p className="text-muted-foreground mb-4">
-                {searchQuery
-                  ? `No results for "${searchQuery}"`
-                  : "No memes available"}
-              </p>
-              {searchQuery && (
-                <Button variant="outline" onClick={() => setSearchQuery("")}>
-                  Clear Search
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {ensureArray(filteredMemes).filter(m => m).map((meme) => (
-              <MemeCard
-                key={meme.id}
-                meme={meme}
-                onVote={(id, votes) => handleVote(id, votes, meme.creator)}
-                onVoteSuccess={(id) => {
-                  // Optional: Could trigger additional actions after successful vote
-                  console.log(`Vote successful for meme ${id}`);
-                }}
-                isAuthenticated={isAuthenticated}
-                currentUserPrincipal={principal}
-                onOpenPreview={openPreview}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Load More */}
-        {ensureArray(filteredMemes).length > 0 && canLoadMore && (
-          <div className="text-center mt-12">
             <Button
               variant="outline"
-              size="lg"
-              onClick={() => setPage((p) => p + 1)}
+              className="h-11 rounded-full border-cyan-400/50 px-6 text-cyan-200 hover:bg-cyan-500/10"
+              onClick={() => navigate("/portfolio#nfts")}
             >
-              <Sparkles className="w-4 h-4 mr-2" />
-              Load More Memes
+              <SquareStack className="mr-2 h-4 w-4" /> My NFTs
             </Button>
           </div>
-        )}
+        </header>
 
-        {/* Create Your Own CTA */}
-        <Card className="mt-12 bg-gradient-card border-primary/30">
-          <CardContent className="text-center py-8">
-            <Zap className="w-12 h-12 mx-auto mb-4 text-primary" />
-            <h3 className="text-2xl font-bold mb-2">
-              Ready to Create Your Own?
-            </h3>
-            <p className="text-muted-foreground mb-6">
-              Join the community and start creating viral memes that earn votes
-            </p>
-            <Button size="lg" onClick={handleCreateMeme}>
-              {isAuthenticated ? "Start Creating" : "Login to Create"}
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="mt-10 grid gap-6 rounded-3xl border border-white/10 bg-slate-900/70 p-6 backdrop-blur">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-center">
+            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4">
+              <Search className="h-4 w-4 text-white/50" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search collection or meme"
+                className="h-11 border-0 bg-transparent text-white placeholder:text-white/40 focus-visible:ring-0"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 justify-end">
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm text-white/70">
+                <Filter className="h-4 w-4 text-white/50" />
+                <select
+                  value={timeframe}
+                  onChange={(event) => setTimeframe(event.target.value)}
+                  className="bg-transparent text-sm text-white focus:outline-none"
+                >
+                  {TIMEFRAME_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value} className="bg-slate-900 text-white">
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm text-white/70">
+                <Gavel className="h-4 w-4 text-white/50" />
+                <select
+                  value={status}
+                  onChange={(event) => setStatus(event.target.value)}
+                  className="bg-transparent text-sm text-white focus:outline-none"
+                >
+                  {STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value} className="bg-slate-900 text-white">
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm text-white/70">
+                <BarChart3 className="h-4 w-4 text-white/50" />
+                <select
+                  value={denom}
+                  onChange={(event) => setDenom(event.target.value)}
+                  className="bg-transparent text-sm text-white focus:outline-none"
+                >
+                  {DENOM_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value} className="bg-slate-900 text-white">
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                variant="outline"
+                className="h-11 rounded-full border-white/20 bg-white/5 text-white"
+                onClick={() => setRefreshKey((value) => value + 1)}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-white/50">
+              <TableIcon className="h-4 w-4" />
+              <span>{filteredCollections.length} Collections</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={viewMode === "table" ? "default" : "outline"}
+                className={`h-10 rounded-full px-4 ${viewMode === "table" ? "bg-white text-black" : "border-white/20 text-white"}`}
+                onClick={() => setViewMode("table")}
+              >
+                <TableIcon className="mr-2 h-4 w-4" /> Table
+              </Button>
+              <Button
+                variant={viewMode === "cards" ? "default" : "outline"}
+                className={`h-10 rounded-full px-4 ${viewMode === "cards" ? "bg-white text-black" : "border-white/20 text-white"}`}
+                onClick={() => setViewMode("cards")}
+              >
+                <LayoutGrid className="mr-2 h-4 w-4" /> Cards
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8 space-y-8">
+          <LeaderboardStrip collections={filteredCollections} />
+
+          {loading ? (
+            <div className="grid gap-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <motion.div
+                  key={index}
+                  className="h-24 animate-pulse rounded-2xl border border-white/10 bg-white/5"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                />
+              ))}
+            </div>
+          ) : filteredCollections.length ? (
+            <>
+              {viewMode === "table" ? (
+                <div className="overflow-hidden rounded-3xl border border-white/10">
+                  <div className="max-h-[640px] overflow-auto">
+                    <table className="min-w-full divide-y divide-white/10 text-sm">
+                      <thead>
+                        <tr>
+                          <TableHeaderCell label="#" />
+                          <TableHeaderCell label="Meme / Collection" />
+                          <TableHeaderCell label="Collector / Creator" />
+                          {SORTABLE_COLUMNS.map(({ key, label }) => (
+                            <TableHeaderCell
+                              key={key}
+                              label={label}
+                              sortable
+                              active={sortKey === key}
+                              direction={sortDir}
+                              onClick={() => handleSort(key)}
+                            />
+                          ))}
+                          <TableHeaderCell label="Actions" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5 bg-slate-950/40">
+                        {filteredCollections.map((collection, index) => (
+                          <motion.tr
+                            key={collection.id}
+                            layout
+                            whileHover={{ backgroundColor: "rgba(148,163,184,0.1)" }}
+                            className="cursor-pointer"
+                            onClick={() => setSelected(collection)}
+                          >
+                            <td className="px-4 py-4 text-xs text-white/50">{index + 1}</td>
+                            <td className="px-4 py-4">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={collection.imageUrl}
+                                  alt={collection.name}
+                                  className="h-12 w-12 rounded-xl object-cover"
+                                />
+                                <div>
+                                  <p className="font-semibold text-white">{collection.name}</p>
+                                  <p className="text-xs text-white/60">Token #{collection.tokenId}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-xs text-white/70">
+                              <div className="space-y-1">
+                                <p>Collector {collection.collector}</p>
+                                <p className="text-white/50">Creator {collection.creator}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 font-semibold text-white">
+                              {numberFormatter.format(collection.floor)} ICP
+                            </td>
+                            <td className="px-4 py-4 text-white/70">{collection.supply}</td>
+                            <td className="px-4 py-4 text-white">
+                              {numberFormatter.format(collection.topOffer)} ICP
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="flex items-center gap-2">
+                                <span>{collection.sales24h}</span>
+                                <Badge
+                                  className={
+                                    collection.change24h >= 0
+                                      ? "bg-emerald-500/15 text-emerald-200"
+                                      : "bg-rose-500/15 text-rose-200"
+                                  }
+                                >
+                                  {collection.change24h >= 0 ? "+" : ""}
+                                  {collection.change24h}%
+                                </Badge>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  className="bg-cyan-400 text-black"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    openBuy(collection);
+                                  }}
+                                >
+                                  Buy
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-white/20 text-white"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    openOffer(collection);
+                                  }}
+                                >
+                                  Offer
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-white/20 text-white"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    openList(collection);
+                                  }}
+                                >
+                                  List
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-cyan-200"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    openAuction(collection);
+                                  }}
+                                >
+                                  Auction
+                                </Button>
+                              </div>
+                            </td>
+                          </motion.tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                  {filteredCollections.map((collection, index) => (
+                    <motion.div
+                      key={collection.id}
+                      layout
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25, delay: index * 0.04 }}
+                      className="flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-900/60 shadow-lg backdrop-blur"
+                    >
+                      <img src={collection.imageUrl} alt={collection.name} className="h-48 w-full object-cover" />
+                      <div className="flex flex-1 flex-col gap-4 p-5">
+                        <div>
+                          <h3 className="text-lg font-semibold text-white">{collection.name}</h3>
+                          <p className="text-xs text-white/60">Collector {collection.collector}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-xs text-white/70">
+                          <div className="rounded-xl border border-white/5 bg-white/5 px-3 py-2">
+                            <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">Floor</p>
+                            <p className="mt-1 text-base font-semibold text-white">
+                              {numberFormatter.format(collection.floor)} ICP
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-white/5 bg-white/5 px-3 py-2">
+                            <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">Top Offer</p>
+                            <p className="mt-1 text-base font-semibold text-white">
+                              {numberFormatter.format(collection.topOffer)} ICP
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-white/5 bg-white/5 px-3 py-2">
+                            <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">Supply</p>
+                            <p className="mt-1 text-base font-semibold text-white">{collection.supply}</p>
+                          </div>
+                          <div className="rounded-xl border border-white/5 bg-white/5 px-3 py-2">
+                            <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">Sales 24h</p>
+                            <p className="mt-1 text-base font-semibold text-white">{collection.sales24h}</p>
+                          </div>
+                        </div>
+                        <div className="mt-auto flex flex-wrap items-center gap-2">
+                          <Button className="flex-1 bg-cyan-400 text-black" onClick={() => openBuy(collection)}>
+                            Buy Now
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="flex-1 border-white/20 text-white"
+                            onClick={() => openOffer(collection)}
+                          >
+                            Offer
+                          </Button>
+                        </div>
+                        <Button variant="ghost" className="mt-2 text-cyan-200" onClick={() => setSelected(collection)}>
+                          View Details
+                        </Button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+                <div>
+                  <p className="text-sm font-semibold">Stay updated</p>
+                  <p className="text-xs text-white/50">Pagination hooks into infinite scroll when connected to live canisters.</p>
+                </div>
+                <Button variant="outline" className="border-white/20 text-white" onClick={() => setRefreshKey((value) => value + 1)}>
+                  Load More
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Card className="border-dashed border-white/20 bg-white/5 py-16 text-center text-white/70">
+              <CardContent className="space-y-4">
+                <Sparkles className="mx-auto h-10 w-10 text-cyan-200" />
+                <CardTitle className="text-xl">No listings yet</CardTitle>
+                <p className="text-sm text-white/60">
+                  Graduated memes will appear here once they are minted. Check the pre-marketplace to support upcoming drops.
+                </p>
+                <Button className="bg-gradient-to-r from-purple-500 via-primary to-cyan-400 text-black" onClick={() => navigate("/pre-marketplace")}>
+                  Browse Pre Meme Marketplace
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
 
-      {/* Preview Modal */}
-      <PreviewModal
-        open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        meme={selectedMeme}
-        onLike={handleVote}
-        isAuthenticated={isAuthenticated}
-        isOwn={selectedMeme ? checkMemeOwnership(selectedMeme) : false}
+      <DetailsDrawer
+        collection={selected}
+        onClose={() => setSelected(null)}
+        onBuy={openBuy}
+        onOffer={openOffer}
+        onList={openList}
+        onAuction={openAuction}
+        disabled={!isAuthenticated}
+      />
+
+      <ActionModal
+        action={actionConfig}
+        collection={actionTarget}
+        open={Boolean(actionConfig)}
+        onClose={closeAction}
+        onConfirm={handleActionConfirm}
+        value={actionValue}
+        setValue={setActionValue}
+        secondaryValue={actionSecondary}
+        setSecondaryValue={setActionSecondary}
+        loading={actionLoading}
       />
     </div>
   );

@@ -473,9 +473,24 @@ class BackendService {
     if (!this.isAuthenticated) {
       throw new Error("Authentication required: Please login to vote on memes");
     }
+    await this.ensureReady();
     const voteVariant = this._toVoteVariant(voteType);
     const result = await this._safeCall('vote_meme', memeId, voteVariant);
     return this._unwrapResult(result, "vote_meme failed");
+  }
+
+  /**
+    * Stake ICP on a meme before minting
+    */
+  async stakeOnMeme(memeId, amountIcp) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login before staking ICP");
+    }
+    await this.ensureReady();
+
+    const stakeAmount = this._toE8s(amountIcp);
+    const result = await this._safeCall('stake_icp', memeId, stakeAmount);
+    return this._unwrapResult(result, "stake_icp failed");
   }
 
   /**
@@ -706,6 +721,25 @@ class BackendService {
     if (voteType === "Upvote") return { Upvote: null };
     if (voteType === "Downvote") return { Downvote: null };
     throw new Error(`Invalid voteType: ${voteType} (expected "Upvote" or "Downvote")`);
+  }
+
+  _toE8s(amount) {
+    const numeric = Number(amount);
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      throw new Error(`Invalid ICP amount: ${amount}`);
+    }
+    return BigInt(Math.round(numeric * 1e8));
+  }
+
+  _normalizeId(value) {
+    if (typeof value === "bigint") return value;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return BigInt(Math.trunc(value));
+    }
+    if (typeof value === "string" && /^\d+$/.test(value)) {
+      return BigInt(value);
+    }
+    return value;
   }
 }
 
