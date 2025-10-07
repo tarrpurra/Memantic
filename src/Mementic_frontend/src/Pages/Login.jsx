@@ -12,8 +12,8 @@ const Login = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
-      console.log("User already authenticated, redirecting to /myplace");
-      navigate("/myplace");
+      console.log("User already authenticated, redirecting to /create");
+      navigate("/create");
     }
   }, [isAuthenticated, isLoading, navigate]);
 
@@ -121,7 +121,7 @@ const Login = () => {
                 variant="hero"
                 size="xl"
                 className="w-full border-2 border-green-200 p-4 hero-button"
-                onClick={() => navigate("/myplace")}
+                onClick={() => navigate("/create")}
               >
                 Continue to App
               </Button>

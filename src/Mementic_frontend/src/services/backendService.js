@@ -473,9 +473,24 @@ class BackendService {
     if (!this.isAuthenticated) {
       throw new Error("Authentication required: Please login to vote on memes");
     }
+    await this.ensureReady();
     const voteVariant = this._toVoteVariant(voteType);
     const result = await this._safeCall('vote_meme', memeId, voteVariant);
     return this._unwrapResult(result, "vote_meme failed");
+  }
+
+  /**
+    * Stake ICP on a meme before minting
+    */
+  async stakeOnMeme(memeId, amountIcp) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login before staking ICP");
+    }
+    await this.ensureReady();
+
+    const stakeAmount = this._toE8s(amountIcp);
+    const result = await this._safeCall('stake_icp', memeId, stakeAmount);
+    return this._unwrapResult(result, "stake_icp failed");
   }
 
   /**
@@ -535,6 +550,81 @@ class BackendService {
     }
     const result = await this._safeCall('publish_meme', memeData);
     return this._unwrapResult(result, "publish_meme failed");
+  }
+
+  /**
+     * Mint a meme as an NFT
+     */
+  async mintMemeNft(memeId) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to mint NFTs");
+    }
+
+    const bigintId = typeof memeId === 'bigint' ? memeId : BigInt(memeId);
+    const result = await this._safeCall('mint_nft', bigintId);
+    return this._unwrapResult(result, "mint_nft failed");
+  }
+
+  /**
+    * Purchase a listed NFT
+    */
+  async purchaseNFT(tokenId, priceIcp) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to purchase NFTs");
+    }
+    await this.ensureReady();
+
+    const price = this._toE8s(priceIcp);
+    const normalizedId = this._normalizeId(tokenId);
+    const result = await this._safeCall('purchase_nft', normalizedId, price);
+    return this._unwrapResult(result, "purchase_nft failed");
+  }
+
+  /**
+    * Place an offer on an NFT
+    */
+  async makeOffer(tokenId, priceIcp, expirySeconds = 86400) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to place offers");
+    }
+    await this.ensureReady();
+
+    const price = this._toE8s(priceIcp);
+    const normalizedId = this._normalizeId(tokenId);
+    const expiry = BigInt(Math.max(0, Math.trunc(expirySeconds)));
+    const result = await this._safeCall('place_bid', normalizedId, price, expiry);
+    return this._unwrapResult(result, "place_bid failed");
+  }
+
+  /**
+    * List an owned NFT on the marketplace
+    */
+  async listNFT(tokenId, priceIcp) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to list NFTs");
+    }
+    await this.ensureReady();
+
+    const price = this._toE8s(priceIcp);
+    const normalizedId = this._normalizeId(tokenId);
+    const result = await this._safeCall('list_nft', normalizedId, price);
+    return this._unwrapResult(result, "list_nft failed");
+  }
+
+  /**
+    * Start an auction for an NFT
+    */
+  async startAuction(tokenId, priceIcp, durationSeconds = 72 * 3600) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to start auctions");
+    }
+    await this.ensureReady();
+
+    const price = this._toE8s(priceIcp);
+    const normalizedId = this._normalizeId(tokenId);
+    const duration = BigInt(Math.max(3600, Math.trunc(durationSeconds)));
+    const result = await this._safeCall('start_auction', normalizedId, price, duration);
+    return this._unwrapResult(result, "start_auction failed");
   }
 
   /**
@@ -693,6 +783,25 @@ class BackendService {
     if (voteType === "Upvote") return { Upvote: null };
     if (voteType === "Downvote") return { Downvote: null };
     throw new Error(`Invalid voteType: ${voteType} (expected "Upvote" or "Downvote")`);
+  }
+
+  _toE8s(amount) {
+    const numeric = Number(amount);
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      throw new Error(`Invalid ICP amount: ${amount}`);
+    }
+    return BigInt(Math.round(numeric * 1e8));
+  }
+
+  _normalizeId(value) {
+    if (typeof value === "bigint") return value;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return BigInt(Math.trunc(value));
+    }
+    if (typeof value === "string" && /^\d+$/.test(value)) {
+      return BigInt(value);
+    }
+    return value;
   }
 }
 
