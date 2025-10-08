@@ -217,6 +217,36 @@ class BackendService {
     this.isAuthenticated = false;
   }
 
+  async useExternalAgent(agent) {
+    if (!agent) {
+      throw new Error("An agent instance is required to use an external identity");
+    }
+
+    if (!idlFactory || !Id) {
+      throw new Error("Backend service not properly configured");
+    }
+
+    console.log("Attaching external agent to backend service");
+    this.agent = agent;
+    this.actor = Actor.createActor(idlFactory, {
+      agent,
+      canisterId: Id,
+    });
+    this.isAuthenticated = true;
+    this.initialized = true;
+  }
+
+  async resetToAnonymous() {
+    console.log("Resetting backend service to anonymous mode");
+    this.agent = null;
+    this.actor = null;
+    this.isAuthenticated = false;
+    this.initialized = false;
+    this.authClient = null;
+    this._initPromise = null;
+    return this.initialize();
+  }
+
   /* ============ AUTHENTICATION METHODS ============ */
 
   /**

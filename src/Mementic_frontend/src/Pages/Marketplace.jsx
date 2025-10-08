@@ -368,7 +368,7 @@ function PreviewModal({
 }
 
 const Marketplace = () => {
-  const { principal, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { principal, username, isLoading: authLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -387,6 +387,9 @@ const Marketplace = () => {
   const [loadingTop, setLoadingTop] = useState(true);
   const [loadingList, setLoadingList] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+
+  const currentDisplayName =
+    username?.trim() || (principal ? `${principal.slice(0, 8)}...` : "Not logged in");
 
   // Week countdown
   const [now, setNow] = useState(new Date());
@@ -985,10 +988,11 @@ const Marketplace = () => {
                     <Zap className="w-4 h-4 mr-2" />
                     Create Meme
                   </Button>
-                  <div className="text-sm text-muted-foreground hidden sm:block">
-                    {principal
-                      ? `${principal.slice(0, 8)}...`
-                      : "Not logged in"}
+                  <div
+                    className="text-sm text-muted-foreground hidden sm:block"
+                    title={username?.trim() || principal || ""}
+                  >
+                    {currentDisplayName}
                   </div>
                 </>
               ) : (

@@ -78,6 +78,7 @@ const Portfolio = () => {
   const { toast } = useToast();
   const {
     principal,
+    username,
     logout,
     isAuthenticated,
     isLoading: authLoading,
@@ -88,6 +89,10 @@ const Portfolio = () => {
   const [nfts, setNfts] = useState([]);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+
+  const displayName =
+    username?.trim() || (principal ? `${principal.slice(0, 8)}...${principal.slice(-6)}` : "Not logged in");
+  const displayTitle = username?.trim() || principal || "";
 
 
   // Redirect if not authenticated
@@ -460,12 +465,10 @@ const Portfolio = () => {
               <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-muted/20 rounded-lg">
                 <User className="w-4 h-4 text-muted-foreground" />
                 <span
-                  className="text-sm font-mono text-muted-foreground"
-                  title={principal || ""}
+                  className="text-sm font-medium text-muted-foreground"
+                  title={displayTitle}
                 >
-                  {principal
-                    ? `${principal.slice(0, 8)}...${principal.slice(-6)}`
-                    : "Not logged in"}
+                  {displayName}
                 </span>
               </div>
 
@@ -524,10 +527,8 @@ const Portfolio = () => {
                 <User className="w-5 h-5 text-muted-foreground" />
                 <div>
                   <p className="text-sm font-medium">Logged in as:</p>
-                  <p className="text-xs font-mono text-muted-foreground">
-                    {principal
-                      ? `${principal.slice(0, 8)}...${principal.slice(-6)}`
-                      : "Not logged in"}
+                  <p className="text-xs text-muted-foreground" title={displayTitle}>
+                    {displayName}
                   </p>
                 </div>
               </div>

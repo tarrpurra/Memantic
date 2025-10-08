@@ -80,16 +80,17 @@ const formatNumber = (value) => {
   }).format(numeric);
 };
 
-const formatPrincipal = (principal) => {
-  if (!principal) return "Creator";
-  if (principal.length <= 10) return principal;
-  return `${principal.slice(0, 5)}…${principal.slice(-3)}`;
+const formatDisplayName = (name, principal) => {
+  const value = name?.trim() || principal;
+  if (!value) return "Creator";
+  if (value.length <= 12) return value;
+  return `${value.slice(0, 5)}…${value.slice(-3)}`;
 };
 
 const Landing = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, principal } = useAuth();
+  const { isAuthenticated, principal, username } = useAuth();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeLink, setActiveLink] = useState(
@@ -198,7 +199,7 @@ const Landing = () => {
   }, []);
 
 
-  const heroName = formatPrincipal(principal);
+  const heroName = formatDisplayName(username, principal);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-background text-foreground">
