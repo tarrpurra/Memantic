@@ -104,12 +104,15 @@ Create a `.env` file in the `src/Mementic_frontend` directory with the following
 
 ```env
 VITE_AGENT_HOST=http://localhost:4943
-VITE_INTERNET_IDENTITY_HOST=http://rdmx6-jaaaa-aaaaa-aaadq-cai.localhost:4943 use -> https://identity.ic0.app  if deploying on mainnet
+VITE_INTERNET_IDENTITY_HOST=https://id.ai/ # override if you run your own Internet Identity instance
 VITE_II_ORIGIN=http://127.0.0.1:4943
 VITE_CANISTER_ID_MEMENTIC_BACKEND=uxrrr-q7777-77774-qaaaq-cai or use <Your-backend-Canister-ID>
 DEV = true for local else false
 ```
 
+#### Google Sign-In via Internet Identity 2.0
+
+Mementic now delegates Google authentication to [Internet Identity 2.0](https://id.ai/). No additional OAuth client configuration is required—when the login popup opens, choose the Google option inside the Internet Identity 2.0 flow. If you self-host Internet Identity or want to target a staging environment, set `VITE_INTERNET_IDENTITY_HOST` to the appropriate URL.
 
 
 Once the job completes, your application will be available at `http://localhost:4943?canisterId={asset_canister_id}`.

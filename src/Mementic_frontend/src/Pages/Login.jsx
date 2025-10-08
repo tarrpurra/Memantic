@@ -1,4 +1,5 @@
 import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Input";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useEffect, useState } from "react";
@@ -6,62 +7,119 @@ import { Sparkles } from "lucide-react";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login, logout, isLoading, isAuthenticated, principal, debugAuth } = useAuth();
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const {
+    login,
+    logout,
+    isLoading,
+    isAuthenticated,
+    principal,
+    username,
+    updateUsername,
+    loginProvider,
+  } = useAuth();
 
-  // Redirect if already logged in
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [usernameInput, setUsernameInput] = useState("");
+  const [showUsernamePrompt, setShowUsernamePrompt] = useState(false);
+  const [usernameError, setUsernameError] = useState("");
+  const [usernameSaved, setUsernameSaved] = useState(false);
+
+  const providerName = loginProvider === "internet-identity" ? "Internet Identity 2.0" : "";
+
   useEffect(() => {
-    if (isAuthenticated && !isLoading) {
-      console.log("User already authenticated, redirecting to /myplace");
-      navigate("/myplace");
+    if (isAuthenticated) {
+      setUsernameInput(username || "");
+      setShowUsernamePrompt(!username);
+      setUsernameSaved(false);
+      setUsernameError("");
+    } else {
+      setUsernameInput("");
+      setShowUsernamePrompt(false);
+      setUsernameSaved(false);
+      setUsernameError("");
     }
-  }, [isAuthenticated, isLoading, navigate]);
+  }, [isAuthenticated, username]);
 
   const handleLogin = async () => {
-    if (isLoggingIn) return;
+    if (isLoggingIn || isLoading) {
+      return;
+    }
 
     try {
       setIsLoggingIn(true);
-      console.log("Starting login process...");
-
       const success = await login();
 
-      if (success) {
-        console.log("Login successful, will redirect via useEffect");
-      } else {
-        console.log("Login failed or was cancelled");
-        alert("Login failed or was cancelled. Please try again.");
+      if (!success) {
+        alert("Login was cancelled or failed. Try again and ensure pop-ups are allowed.");
       }
     } catch (error) {
-      console.error("Login error:", error);
-      alert("An error occurred during login. Please try again.");
+      console.error("Internet Identity login error:", error);
+      const detail = error?.message ? ` ${error.message}` : "";
+      alert(`An error occurred while connecting to Internet Identity.${detail}`);
     } finally {
       setIsLoggingIn(false);
     }
   };
-  
 
   const handleLogout = async () => {
     try {
-      console.log("Logging out...");
-      const success = await logout();
-      if (success) {
-        console.log("Logout successful");
-      }
+      await logout();
     } catch (error) {
       console.error("Logout error:", error);
     }
+    setUsernameSaved(false);
+    setShowUsernamePrompt(false);
+    setUsernameError("");
   };
 
-  // Show loading state while checking authentication
-  if (isLoading) {
+  const handleUsernameSubmit = (event) => {
+    event.preventDefault();
+    const trimmed = usernameInput.trim();
+
+    if (trimmed.length < 3) {
+      setUsernameError("Username must be at least 3 characters long.");
+      return;
+    }
+
+    if (trimmed.length > 32) {
+      setUsernameError("Username must be 32 characters or fewer.");
+      return;
+    }
+
+    updateUsername(trimmed);
+    setShowUsernamePrompt(false);
+    setUsernameSaved(true);
+    setUsernameError("");
+  };
+
+  const handleUsernameEdit = () => {
+    setShowUsernamePrompt(true);
+    setUsernameSaved(false);
+    setUsernameInput(username || "");
+    setUsernameError("");
+  };
+
+  const handleUsernameCancel = () => {
+    if (username) {
+      setShowUsernamePrompt(false);
+      setUsernameInput(username);
+    } else {
+      setUsernameInput("");
+    }
+    setUsernameError("");
+  };
+
+  const hasUsername = Boolean(username && username.trim().length > 0);
+  const continueDisabled = !hasUsername || isLoading;
+  const principalPreview = principal ? `${principal.slice(0, 6)}...${principal.slice(-4)}` : null;
+  const isAnyLoading = isLoading || isLoggingIn;
+
+  if (isLoading && !isAuthenticated) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-6 bg-[url('/back2.gif')] bg-cover bg-center">
         <div className="absolute inset-0 backdrop-blur-md bg-black/20"></div>
         <div className="relative z-10 text-center">
-          <div className="text-2xl text-foreground mb-4">
-            Checking authentication...
-          </div>
+          <div className="text-2xl text-foreground mb-4">Checking authentication...</div>
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
         </div>
       </div>
@@ -72,114 +130,156 @@ const Login = () => {
     <div className="min-h-screen bg-background flex items-center justify-center px-6 bg-[url('/back2.gif')] bg-cover bg-center">
       <div className="absolute inset-0 backdrop-blur-md bg-black/20"></div>
       <div className="relative z-10 max-w-md w-full text-center">
-        {/* Logo/Brand Section */}
         <div className="mb-12">
           <div className="flex items-center justify-center mb-4">
             <Sparkles className="w-16 h-16 text-primary mr-4" />
-            <h1 className="text-6xl font-black bg-gradient-hero bg-clip-text text-transparent">
-              MEMENTIC
-            </h1>
+            <h1 className="text-6xl font-black bg-gradient-hero bg-clip-text text-transparent">MEMENTIC</h1>
           </div>
-          <p className="text-xl text-muted-foreground">
-            Enter the Decentralized Meme Economy
-          </p>
+          <p className="text-xl text-muted-foreground">Enter the Decentralized Meme Economy</p>
         </div>
 
-        {/* Login Gateway */}
         <div className="bg-gradient-card border-4 border-primary p-8 rounded-xl shadow-glow">
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-foreground mb-2">
-              {isAuthenticated ? "Welcome Back!" : "Welcome Creator"}
+              {isAuthenticated
+                ? hasUsername
+                  ? `Welcome back${username ? `, ${username}` : "!"}`
+                  : "Create your username"
+                : "Welcome Creator"}
             </h2>
             <p className="text-muted-foreground">
               {isAuthenticated
-                ? "You're already logged in. Continue to the app or logout."
-                : "Access your digital identity to start creating viral content"}
+                ? hasUsername
+                  ? `You're connected with ${providerName || "Internet Identity"}. Update your preferences or continue to the app.`
+                  : "Pick a username so other creators can recognize you before continuing."
+                : "Sign in with Internet Identity 2.0 to choose Google, passkeys, or your existing anchor."}
             </p>
           </div>
 
           {!isAuthenticated ? (
-            <Button
-              variant="hero"
-              size="xl"
-              className="w-full mb-6 border-2 border-purple-200 p-4 hero-button"
-              onClick={handleLogin}
-              disabled={isLoggingIn || isLoading}
-            >
-              {isLoggingIn ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                  Logging in...
-                </>
-              ) : (
-                "Login with Internet Identity"
-              )}
-            </Button>
-          ) : (
             <div className="space-y-4">
               <Button
                 variant="hero"
                 size="xl"
-                className="w-full border-2 border-green-200 p-4 hero-button"
-                onClick={() => navigate("/myplace")}
+                className="w-full border-2 border-purple-200 p-4 hero-button"
+                onClick={handleLogin}
+                disabled={isAnyLoading}
               >
-                Continue to App
+                {isAnyLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Connecting to Internet Identity...
+                  </>
+                ) : (
+                  "Continue with Internet Identity"
+                )}
               </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                className="w-full border-2 border-red-200 p-2"
-                onClick={handleLogout}
-                disabled={isLoading}
-              >
-                {isLoading ? "Logging out..." : "Logout"}
-              </Button>
+              <div className="rounded-lg border border-white/10 bg-black/30 p-4 text-sm text-left text-muted-foreground">
+                <p className="font-semibold text-foreground">What's new in Internet Identity 2.0?</p>
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  <li>Choose Google as an authentication option at <code className="font-mono text-xs">id.ai</code>.</li>
+                  <li>Passkeys and traditional anchors continue to work side-by-side.</li>
+                  <li>No custom OAuth configuration is required in the frontend.</li>
+                </ul>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6 text-left">
+              <div className="bg-black/20 border border-white/10 rounded-lg p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-primary/80">Connected as</p>
+                    <p className="text-lg font-semibold text-foreground">{username || "No username yet"}</p>
+                  </div>
+                  <span className="text-xs font-medium px-3 py-1 rounded-full bg-white/10 text-muted-foreground">
+                    {providerName || "Internet Identity"}
+                  </span>
+                </div>
+                {principalPreview && (
+                  <p className="mt-3 text-xs text-muted-foreground break-all">Principal: {principalPreview}</p>
+                )}
+                {!hasUsername && (
+                  <p className="mt-3 text-sm text-yellow-200/80">
+                    Add a username to replace your principal across the marketplace.
+                  </p>
+                )}
+                {usernameSaved && hasUsername && (
+                  <p className="mt-3 text-xs text-emerald-300">Username saved!</p>
+                )}
+              </div>
+
+              {showUsernamePrompt || !hasUsername ? (
+                <form onSubmit={handleUsernameSubmit} className="space-y-3">
+                  <div className="text-sm text-muted-foreground">
+                    Choose a public-facing name. This will appear instead of your Internet Identity.
+                  </div>
+                  <Input
+                    value={usernameInput}
+                    onChange={(event) => setUsernameInput(event.target.value)}
+                    placeholder="Enter a username"
+                    maxLength={32}
+                    disabled={isLoading}
+                  />
+                  {usernameError && <div className="text-xs text-red-300">{usernameError}</div>}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button type="submit" className="flex-1" disabled={isLoading}>
+                      Save Username
+                    </Button>
+                    {hasUsername && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="flex-1"
+                        onClick={handleUsernameCancel}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </form>
+              ) : (
+                <Button variant="ghost" className="w-full" onClick={handleUsernameEdit}>
+                  Change Username
+                </Button>
+              )}
+
+              <div className="space-y-3">
+                <Button
+                  variant="hero"
+                  size="xl"
+                  className="w-full border-2 border-green-200 p-4 hero-button"
+                  onClick={() => navigate("/myplace")}
+                  disabled={continueDisabled}
+                >
+                  {continueDisabled ? "Add a username to continue" : "Continue to App"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="w-full border-2 border-red-200 p-2"
+                  onClick={handleLogout}
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Logging out..." : "Logout"}
+                </Button>
+              </div>
             </div>
           )}
 
-
           <div className="text-sm text-muted-foreground mt-6">
-            Secure • Decentralized • Anonymous
+            Usernames replace your principal • Secure • Decentralized
           </div>
         </div>
 
-        {/* Back to Landing Link */}
         <div className="mt-6">
           <Button
             variant="ghost"
             onClick={() => navigate("/")}
             className="text-muted-foreground hover:text-foreground"
           >
-            ← Back to Landing Page
+            ← Back to landing
           </Button>
         </div>
-
-        {/* Visual Elements */}
-        <div className="mt-12 flex justify-center space-x-4">
-          <div className="w-4 h-4 bg-primary rounded-full animate-pulse-glow"></div>
-          <div
-            className="w-4 h-4 bg-secondary rounded-full animate-pulse-glow"
-            style={{ animationDelay: "0.2s" }}
-          ></div>
-          <div
-            className="w-4 h-4 bg-accent rounded-full animate-pulse-glow"
-            style={{ animationDelay: "0.4s" }}
-          ></div>
-        </div>
-
-        {/* Debug info in development */}
-        {process.env.NODE_ENV === "development" && (
-          <div className="mt-4 p-2 bg-black/20 rounded text-xs text-muted-foreground">
-            Debug: isLoading={isLoading.toString()}, isAuthenticated=
-            {isAuthenticated.toString()}, principal={principal || "null"}
-            <button
-              onClick={() => debugAuth()}
-              className="ml-2 px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
-            >
-              Debug Auth
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
