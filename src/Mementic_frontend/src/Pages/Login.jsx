@@ -7,11 +7,9 @@ import {
   LogIn,
   ShieldCheck,
   Sparkles,
-  UserPlus,
   Zap,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui/Input";
 import { useAuth } from "../contexts/AuthContext";
 import Navigation from "../components/Navigation";
 
@@ -36,10 +34,10 @@ const LOGIN_FEATURES = [
 const TRUST_POINTS = [
   "No passwords stored — only decentralized identities are used to sign in.",
   "Automatic agent configuration keeps your backend calls authenticated.",
-  "Saved usernames replace long principals everywhere in the UI.",
+  "Saved usernames live in your profile and follow you across the UI.",
 ];
 
-const VALUE_PILLS = ["NFID ready", "Internet Identity native", "Username personalization"];
+const VALUE_PILLS = ["NFID ready", "Internet Identity native", "Profile personalization"];
 
 const Login = () => {
   const navigate = useNavigate();
@@ -55,19 +53,13 @@ const Login = () => {
     isAuthenticated,
     principal,
     username,
-    updateUsername,
     loginProvider,
   } = useAuth();
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [usernameInput, setUsernameInput] = useState("");
-  const [showUsernamePrompt, setShowUsernamePrompt] = useState(false);
-  const [usernameError, setUsernameError] = useState("");
-  const [usernameSaved, setUsernameSaved] = useState(false);
 
-  const hasUsername = Boolean(
-    username && typeof username === "string" && username.trim().length > 0
-  );
+  const trimmedUsername = typeof username === "string" ? username.trim() : "";
+  const hasUsername = trimmedUsername.length > 0;
 
   const providerName =
     loginProvider === "internet-identity"
@@ -78,32 +70,28 @@ const Login = () => {
 
   const redirectHandledRef = useRef(false);
   const redirectMessage = requireUsername
-    ? "Choose a username to finish setting up before entering the marketplace."
+    ? "Finish your profile so the community can recognize you across Memantic."
     : fromPath
     ? "Sign in to continue to your destination."
     : "";
 
   useEffect(() => {
-    if (isAuthenticated) {
-      setUsernameInput(typeof username === "string" ? username : "");
-      setShowUsernamePrompt(!hasUsername || requireUsername);
-      setUsernameSaved(false);
-      setUsernameError("");
-    } else {
-      setUsernameInput("");
-      setShowUsernamePrompt(false);
-      setUsernameSaved(false);
-      setUsernameError("");
+    if (!isAuthenticated) {
+      redirectHandledRef.current = false;
+      return;
     }
-  }, [isAuthenticated, username, hasUsername, requireUsername]);
 
-  useEffect(() => {
-    if (
-      !redirectHandledRef.current &&
-      isAuthenticated &&
-      hasUsername &&
-      fromPath
-    ) {
+    if (!hasUsername) {
+      redirectHandledRef.current = true;
+      const nextState = { requireUsername: true };
+      if (fromPath) {
+        nextState.from = fromPath;
+      }
+      navigate("/portfolio", { replace: true, state: nextState });
+      return;
+    }
+
+    if (!redirectHandledRef.current && fromPath) {
       redirectHandledRef.current = true;
       navigate(fromPath, { replace: true, state: undefined });
     }
@@ -163,54 +151,20 @@ const Login = () => {
     } catch (error) {
       console.error("Logout error:", error);
     }
-    setUsernameSaved(false);
-    setShowUsernamePrompt(false);
-    setUsernameError("");
   };
 
-  const handleUsernameSubmit = async (event) => {
-    event.preventDefault();
-    const trimmed = typeof usernameInput === "string" ? usernameInput.trim() : "";
-
-    if (trimmed.length < 3) {
-      setUsernameError("Username must be at least 3 characters long.");
-      return;
+  const handleOpenProfile = () => {
+    const nextState = hasUsername ? {} : { requireUsername: true };
+    if (fromPath) {
+      nextState.from = fromPath;
     }
-
-    if (trimmed.length > 32) {
-      setUsernameError("Username must be 32 characters or fewer.");
-      return;
-    }
-
-    try {
-      await updateUsername(trimmed);
-      setShowUsernamePrompt(false);
-      setUsernameSaved(true);
-      setUsernameError("");
-    } catch (error) {
-      setUsernameError("Failed to save username. Please try again.");
-      console.error("Username update failed:", error);
-    }
+    navigate("/portfolio", { state: Object.keys(nextState).length ? nextState : undefined });
   };
 
-  const handleUsernameEdit = () => {
-    setShowUsernamePrompt(true);
-    setUsernameSaved(false);
-    setUsernameInput(username || "");
-    setUsernameError("");
+  const handleOpenCreatorStudio = () => {
+    navigate("/myplace");
   };
 
-  const handleUsernameCancel = () => {
-    if (username) {
-      setShowUsernamePrompt(false);
-      setUsernameInput(username);
-    } else {
-      setUsernameInput("");
-    }
-    setUsernameError("");
-  };
-
-  const continueDisabled = !hasUsername || isLoading;
   const principalPreview = principal ? `${principal.slice(0, 6)}...${principal.slice(-4)}` : null;
   const isAnyLoading = isLoading || isLoggingIn;
 
@@ -315,15 +269,15 @@ const Login = () => {
                   <h2 className="text-3xl font-semibold text-foreground sm:text-4xl">
                     {isAuthenticated
                       ? hasUsername
-                        ? `Welcome back${username ? `, ${username}` : "!"}`
-                        : "Pick a username to finish setup"
+                        ? `Welcome back${trimmedUsername ? `, ${trimmedUsername}` : "!"}`
+                        : "Finish setting up your profile"
                       : "Access your creator control center"}
                   </h2>
                   <p className="text-sm text-muted-foreground sm:text-base">
                     {isAuthenticated
                       ? hasUsername
-                        ? `You're connected with ${providerName || "Internet Identity"}. Customize your profile or jump right into creation.`
-                        : "Add a username so the community sees your chosen identity instead of a principal."
+                        ? `You're connected with ${providerName || "Internet Identity"}. Jump into creation or review your profile settings.`
+                        : "Complete your profile once so your alias shows everywhere you build and trade."
                       : "Sign in with NFID or Internet Identity to sync your profile, credits, and publishing permissions."}
                   </p>
                 </div>
@@ -380,7 +334,7 @@ const Login = () => {
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Connected as</p>
-                          <p className="text-lg font-semibold text-foreground">{username || "No username yet"}</p>
+                          <p className="text-lg font-semibold text-foreground">{hasUsername ? trimmedUsername : "No username yet"}</p>
                         </div>
                         <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/60 px-3 py-1 text-xs font-medium text-muted-foreground">
                           <ShieldCheck className="h-3.5 w-3.5 text-primary" />
@@ -392,69 +346,61 @@ const Login = () => {
                       )}
                       {!hasUsername && (
                         <p className="mt-3 text-sm text-amber-200/80">
-                          Add a username to replace your principal across the marketplace.
+                          Choose a username from your profile so the community sees your alias instead of a principal ID.
                         </p>
-                      )}
-                      {usernameSaved && hasUsername && (
-                        <p className="mt-3 text-xs text-emerald-300">Username saved!</p>
                       )}
                     </div>
 
-                    {showUsernamePrompt || !hasUsername ? (
-                      <form onSubmit={handleUsernameSubmit} className="space-y-3">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <UserPlus className="h-4 w-4 text-primary" />
-                          <span>Choose a public-facing username</span>
-                        </div>
-                        <Input
-                          value={usernameInput}
-                          onChange={(event) => setUsernameInput(event.target.value)}
-                          placeholder="Enter a username"
-                          maxLength={32}
-                          disabled={isLoading}
-                        />
-                        {usernameError && <div className="text-xs text-red-300">{usernameError}</div>}
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                          <Button type="submit" className="flex-1" disabled={isLoading}>
-                            Save Username
-                          </Button>
-                          {hasUsername && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              className="flex-1"
-                              onClick={handleUsernameCancel}
-                            >
-                              Cancel
-                            </Button>
-                          )}
-                        </div>
-                      </form>
-                    ) : (
-                      <Button variant="ghost" className="w-full" onClick={handleUsernameEdit}>
-                        Change Username
-                      </Button>
-                    )}
-
                     <div className="space-y-3">
-                      <Button
-                        variant="hero"
-                        size="xl"
-                        className="w-full hero-button border border-emerald-300/60"
-                        onClick={() => navigate("/myplace")}
-                        disabled={continueDisabled}
-                      >
-                        {continueDisabled ? "Add a username to continue" : "Continue to creator studio"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="lg"
-                        className="w-full border border-border/50"
-                        onClick={handleLogout}
-                        disabled={isLoading}
-                      >
-                        {isLoading ? "Logging out…" : "Logout"}
-                      </Button>
+                      {!hasUsername ? (
+                        <>
+                          <Button
+                            variant="hero"
+                            size="xl"
+                            className="w-full hero-button border border-emerald-300/60"
+                            onClick={handleOpenProfile}
+                          >
+                            Go to profile setup
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="lg"
+                            className="w-full border border-border/50"
+                            onClick={handleLogout}
+                            disabled={isAnyLoading}
+                          >
+                            {isAnyLoading ? "Logging out…" : "Logout"}
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            variant="hero"
+                            size="xl"
+                            className="w-full hero-button border border-emerald-300/60"
+                            onClick={handleOpenCreatorStudio}
+                          >
+                            Continue to creator studio
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="lg"
+                            className="w-full"
+                            onClick={handleOpenProfile}
+                          >
+                            Manage profile
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="lg"
+                            className="w-full border border-border/50"
+                            onClick={handleLogout}
+                            disabled={isAnyLoading}
+                          >
+                            {isAnyLoading ? "Logging out…" : "Logout"}
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}

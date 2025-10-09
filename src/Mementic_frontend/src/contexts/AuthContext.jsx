@@ -189,20 +189,39 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const extractStoredUsername = (value) => {
+    if (!value) return "";
+
+    if (typeof value === "string") {
+      return value.trim();
+    }
+
+    if (Array.isArray(value)) {
+      const candidate = value.find((entry) => typeof entry === "string" && entry.trim().length > 0);
+      return candidate ? candidate.trim() : "";
+    }
+
+    if (typeof value === "object") {
+      const direct = value.username ?? value.displayName ?? value.display_name;
+      return extractStoredUsername(direct);
+    }
+
+    return "";
+  };
+
   const loadUserProfile = async (fallbackUsername = "") => {
     try {
       const profile = await backendService.getUserProfile();
-      const nextUsername =
-        profile?.username && typeof profile.username === "string"
-          ? profile.username
-          : fallbackUsername;
+      const profileUsername = extractStoredUsername(profile?.username ?? profile);
+      const nextUsername = profileUsername || extractStoredUsername(fallbackUsername) || "";
 
       setUsername(nextUsername);
       return nextUsername;
     } catch (error) {
       console.error("Failed to load user profile:", error);
-      setUsername(fallbackUsername);
-      return fallbackUsername;
+      const normalizedFallback = extractStoredUsername(fallbackUsername);
+      setUsername(normalizedFallback);
+      return normalizedFallback;
     }
   };
 
@@ -302,7 +321,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateUsername = async (value) => {
-    const normalized = (typeof value === 'string' ? value.trim() : '');
+    const normalized = typeof value === "string" ? value.trim() : "";
     try {
       await backendService.updateUserProfile(normalized, null);
       setUsername(normalized);

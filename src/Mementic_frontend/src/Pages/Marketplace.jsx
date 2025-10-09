@@ -427,7 +427,7 @@ const Marketplace = () => {
         title: "Complete your profile",
         description: "Choose a username before exploring the marketplace.",
       });
-      navigate("/login", {
+      navigate("/portfolio", {
         replace: true,
         state: { from: location.pathname, requireUsername: true },
       });
@@ -796,7 +796,7 @@ const Marketplace = () => {
         title: "Set a username first",
         description: "Choose a username before interacting with marketplace memes.",
       });
-      navigate("/login", {
+      navigate("/portfolio", {
         state: { from: location.pathname, requireUsername: true },
       });
       return;
@@ -942,7 +942,7 @@ const Marketplace = () => {
     }
 
     if (!hasProfileName) {
-      navigate("/login", {
+      navigate("/portfolio", {
         state: { from: location.pathname, requireUsername: true },
       });
       return;
