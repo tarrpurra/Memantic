@@ -34,7 +34,7 @@ const ACTION_CARDS = [
     description:
       "Join weekly brackets, earn votes, and climb the on-chain leaderboard.",
     icon: Trophy,
-    href: "/marketplace",
+    href: "/pre-marketplace",
     accent: "from-cyan-400/50 to-sky-400/40",
   },
   {
@@ -42,7 +42,7 @@ const ACTION_CARDS = [
     description:
       "Mint as NFTs, stake ICP, and list in the marketplace you control.",
     icon: ShieldCheck,
-    href: "/marketplace",
+    href: "/pre-marketplace",
     accent: "from-sky-400/40 to-purple-500/50",
   },
 ];

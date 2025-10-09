@@ -40,8 +40,8 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/landing" element={<Landing />} />
             <Route path="/myplace" element={<MyPlace />} />
-            <Route path="/marketplace" element={<Marketplace />} />
-            <Route path="/pre-marketplace" element={<PreMarketplace />} />
+            <Route path="/pre-marketplace" element={<Marketplace />} />
+            <Route path="/marketplace" element={<PreMarketplace />} />
             <Route path="/auction" element={<Auction />} />
             <Route path="/meme-nft" element={<MemeNFTPlace />} />
             <Route path="/portfolio" element={<Portfolio />} />

@@ -112,7 +112,7 @@ const MyPlace = () => {
       if (!generatedMeme || !generatedMeme.image_url) {
         toast({
           title: "No Meme to Post",
-          description: "Generate a meme first before posting to marketplace.",
+          description: "Generate a meme first before posting to pre-market place.",
           variant: "destructive",
         });
         return;
@@ -157,15 +157,15 @@ const MyPlace = () => {
       const created = await backendService.publishMeme(memeData);
 
       toast({
-        title: "Posted to Marketplace! 🚀",
+        title: "Posted to Pre-Market Place! 🚀",
         description: `Meme #${created?.id ?? ""} is now live for votes.`,
       });
-      navigate("/marketplace");
+      navigate("/pre-marketplace");
     } catch (error) {
       console.error("Failed to publish meme:", error);
       toast({
         title: "Publish Failed",
-        description: error?.message || "Could not post meme to marketplace",
+        description: error?.message || "Could not post meme to pre-market place",
         variant: "destructive",
       });
     }
@@ -391,7 +391,7 @@ const MyPlace = () => {
                         onClick={handlePostToMarketplace}
                       >
                         <Send className="w-4 h-4 mr-2" />
-                        Post to Marketplace
+                        Post to Pre-Market Place
                       </Button>
                       <Button
                         variant="outline"
@@ -513,7 +513,7 @@ const MyPlace = () => {
               </Button>
               <Button variant="hero" onClick={handlePostToMarketplace}>
                 <Send className="w-4 h-4 mr-2" />
-                Post to Marketplace
+                Post to Pre-Market Place
               </Button>
             </div>
           </div>
