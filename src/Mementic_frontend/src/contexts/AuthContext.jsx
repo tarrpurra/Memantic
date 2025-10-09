@@ -3,7 +3,51 @@ import { HttpAgent } from "@dfinity/agent";
 import { AuthClient } from "@dfinity/auth-client";
 import { useIdentityKit } from "@nfid/identitykit/react";
 import backendService from "../services/backendService";
-import { getIdentityProvider } from "../config/environment";
+import { getAgentHost, getIdentityProvider, isDevMode } from "../config/environment";
+
+const AUTH_STORAGE_KEY = "mementic-auth-state";
+const isBrowser = typeof window !== "undefined";
+
+const readFromStorage = (key) => {
+  if (!isBrowser) return null;
+
+  try {
+    const fromLocal = window.localStorage.getItem(key);
+    if (fromLocal) {
+      return JSON.parse(fromLocal);
+    }
+
+    const fromSession = window.sessionStorage.getItem(key);
+    if (fromSession) {
+      return JSON.parse(fromSession);
+    }
+  } catch (error) {
+    console.warn("Failed to parse stored auth state:", error);
+  }
+
+  return null;
+};
+
+const writeToStorage = (key, value) => {
+  if (!isBrowser) return;
+
+  try {
+    if (value === null || value === undefined) {
+      window.localStorage.removeItem(key);
+      window.sessionStorage.removeItem(key);
+      return;
+    }
+
+    const serialized = JSON.stringify(value);
+    window.localStorage.setItem(key, serialized);
+    window.sessionStorage.setItem(key, serialized);
+  } catch (error) {
+    console.warn("Failed to persist auth state:", error);
+  }
+};
+
+const loadStoredAuthState = () => readFromStorage(AUTH_STORAGE_KEY);
+const persistAuthState = (value) => writeToStorage(AUTH_STORAGE_KEY, value);
 
 // User profiles are now stored in the backend
 
@@ -29,6 +73,30 @@ export const AuthProvider = ({ children }) => {
 
   const loginProvider = activeProvider;
 
+  const attachIdentityToBackend = async (identity) => {
+    if (!identity) return;
+
+    const agent = new HttpAgent({ identity, host: getAgentHost() });
+
+    if (isDevMode()) {
+      try {
+        await agent.fetchRootKey();
+      } catch (error) {
+        console.warn("Failed to fetch root key for development:", error);
+      }
+    }
+
+    await backendService.useExternalAgent(agent);
+  };
+
+  const clearBackendAuth = async () => {
+    try {
+      await backendService.resetToAnonymous();
+    } catch (error) {
+      console.warn("Failed to reset backend authentication state:", error);
+    }
+  };
+
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -47,12 +115,18 @@ export const AuthProvider = ({ children }) => {
 
           setIsAuthenticated(true);
           setPrincipal(principalText);
-          setUsername(storedUsername);
           setActiveProvider("nfid");
-          persistAuthState({ principal: principalText, username: storedUsername, provider: "nfid" });
+          setUsername(storedUsername);
 
           // Update backend service with NFID identity
-          await backendService.useExternalAgent(new HttpAgent({ identity: nfidIdentity }));
+          await attachIdentityToBackend(nfidIdentity);
+
+          const resolvedUsername = await loadUserProfile(storedUsername);
+          persistAuthState({
+            principal: principalText,
+            username: resolvedUsername,
+            provider: "nfid",
+          });
 
           await loadUserData();
         }
@@ -66,12 +140,18 @@ export const AuthProvider = ({ children }) => {
 
           setIsAuthenticated(true);
           setPrincipal(principalText);
-          setUsername(storedUsername);
           setActiveProvider("internet-identity");
-          persistAuthState({ principal: principalText, username: storedUsername, provider: "internet-identity" });
+          setUsername(storedUsername);
 
           // Update backend service with identity
-          await backendService.useExternalAgent(new HttpAgent({ identity }));
+          await attachIdentityToBackend(identity);
+
+          const resolvedUsername = await loadUserProfile(storedUsername);
+          persistAuthState({
+            principal: principalText,
+            username: resolvedUsername,
+            provider: "internet-identity",
+          });
 
           await loadUserData();
         } else {
@@ -81,6 +161,7 @@ export const AuthProvider = ({ children }) => {
           setActiveProvider(null);
           setRemainingCalls(0);
           persistAuthState(null);
+          await clearBackendAuth();
         }
       } catch (error) {
         console.error("Failed to initialize authentication:", error);
@@ -90,6 +171,7 @@ export const AuthProvider = ({ children }) => {
         setActiveProvider(null);
         setRemainingCalls(0);
         persistAuthState(null);
+        await clearBackendAuth();
       } finally {
         setIsLoading(false);
       }
@@ -107,17 +189,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const loadUserProfile = async () => {
+  const loadUserProfile = async (fallbackUsername = "") => {
     try {
       const profile = await backendService.getUserProfile();
-      if (profile?.username && typeof profile.username === 'string') {
-        setUsername(profile.username);
-      } else {
-        setUsername("");
-      }
+      const nextUsername =
+        profile?.username && typeof profile.username === "string"
+          ? profile.username
+          : fallbackUsername;
+
+      setUsername(nextUsername);
+      return nextUsername;
     } catch (error) {
       console.error("Failed to load user profile:", error);
-      setUsername("");
+      setUsername(fallbackUsername);
+      return fallbackUsername;
     }
   };
 
@@ -135,6 +220,7 @@ export const AuthProvider = ({ children }) => {
       setActiveProvider(null);
       setRemainingCalls(0);
       persistAuthState(null);
+      await clearBackendAuth();
       throw error;
     } finally {
       setIsLoading(false);
@@ -149,23 +235,28 @@ export const AuthProvider = ({ children }) => {
       }
 
       // AuthClient.login() opens a popup and returns a Promise that resolves when login is complete
-      await authClient.login({
-        identityProvider: getIdentityProvider(),
+        await authClient.login({
+          identityProvider: getIdentityProvider(),
+        });
+
+        // After successful login, update state
+        const identity = authClient.getIdentity();
+        const principalText = identity.getPrincipal().toText();
+
+        setIsAuthenticated(true);
+        setPrincipal(principalText);
+        setActiveProvider("internet-identity");
+
+        // Update backend service with identity
+        await attachIdentityToBackend(identity);
+
+        // Load user profile from backend
+        const resolvedUsername = await loadUserProfile();
+      persistAuthState({
+        principal: principalText,
+        username: resolvedUsername,
+        provider: "internet-identity",
       });
-
-      // After successful login, update state
-      const identity = authClient.getIdentity();
-      const principalText = identity.getPrincipal().toText();
-
-      setIsAuthenticated(true);
-      setPrincipal(principalText);
-      setActiveProvider("internet-identity");
-
-      // Update backend service with identity
-      await backendService.useExternalAgent(new HttpAgent({ identity }));
-
-      // Load user profile from backend
-      await loadUserProfile();
 
       await loadUserData();
       return true;
@@ -177,6 +268,7 @@ export const AuthProvider = ({ children }) => {
       setActiveProvider(null);
       setRemainingCalls(0);
       persistAuthState(null);
+      await clearBackendAuth();
       throw error;
     } finally {
       setIsLoading(false);
@@ -197,6 +289,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error("Logout failed:", error);
     } finally {
+      await clearBackendAuth();
       setIsAuthenticated(false);
       setPrincipal(null);
       setUsername("");
@@ -213,6 +306,13 @@ export const AuthProvider = ({ children }) => {
     try {
       await backendService.updateUserProfile(normalized, null);
       setUsername(normalized);
+      if (principal) {
+        persistAuthState({
+          principal,
+          username: normalized,
+          provider: activeProvider,
+        });
+      }
     } catch (error) {
       console.error("Failed to update username:", error);
       throw error;
@@ -268,10 +368,16 @@ export const AuthProvider = ({ children }) => {
         }
       });
 
+      if (isBrowser) {
+        window.localStorage.removeItem(AUTH_STORAGE_KEY);
+        window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+      }
+
       setIsAuthenticated(false);
       setPrincipal(null);
       setUsername("");
       setRemainingCalls(0);
+      await clearBackendAuth();
       return true;
     } catch (error) {
       console.error("Failed to clear auth data:", error);

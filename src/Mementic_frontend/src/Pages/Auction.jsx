@@ -2,7 +2,6 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import {
   Activity,
-  ArrowLeft,
   ArrowRight,
   Clock,
   Gavel,
@@ -12,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import Navigation from "../components/Navigation";
 
 const liveAuctions = [
   {
@@ -70,30 +70,7 @@ const Auction = () => {
         <div className="hero-sparkles" />
       </div>
 
-      <header className="relative z-20 border-b border-border/40 bg-background/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
-          <Link
-            to="/pre-marketplace"
-            className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to pre-market flow
-          </Link>
-
-          <div className="hidden items-center gap-3 sm:flex">
-            <Link to="/meme-nft">
-              <Button variant="ghost" className="rounded-full border border-border/60 bg-background/70">
-                Mint NFTs
-              </Button>
-            </Link>
-            <Link to="/marketplace">
-              <Button variant="hero" size="lg" className="rounded-full px-6">
-                View Marketplace
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </header>
+      <Navigation />
 
       <main className="relative z-10">
         <section className="px-5 py-16 sm:px-8">
