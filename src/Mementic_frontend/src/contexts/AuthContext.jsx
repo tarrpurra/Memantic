@@ -5,6 +5,50 @@ import { useIdentityKit } from "@nfid/identitykit/react";
 import backendService from "../services/backendService";
 import { getIdentityProvider } from "../config/environment";
 
+const AUTH_STORAGE_KEY = "mementic-auth-state";
+const isBrowser = typeof window !== "undefined";
+
+const readFromStorage = (key) => {
+  if (!isBrowser) return null;
+
+  try {
+    const fromLocal = window.localStorage.getItem(key);
+    if (fromLocal) {
+      return JSON.parse(fromLocal);
+    }
+
+    const fromSession = window.sessionStorage.getItem(key);
+    if (fromSession) {
+      return JSON.parse(fromSession);
+    }
+  } catch (error) {
+    console.warn("Failed to parse stored auth state:", error);
+  }
+
+  return null;
+};
+
+const writeToStorage = (key, value) => {
+  if (!isBrowser) return;
+
+  try {
+    if (value === null || value === undefined) {
+      window.localStorage.removeItem(key);
+      window.sessionStorage.removeItem(key);
+      return;
+    }
+
+    const serialized = JSON.stringify(value);
+    window.localStorage.setItem(key, serialized);
+    window.sessionStorage.setItem(key, serialized);
+  } catch (error) {
+    console.warn("Failed to persist auth state:", error);
+  }
+};
+
+const loadStoredAuthState = () => readFromStorage(AUTH_STORAGE_KEY);
+const persistAuthState = (value) => writeToStorage(AUTH_STORAGE_KEY, value);
+
 // User profiles are now stored in the backend
 
 const AuthContext = createContext();
@@ -47,12 +91,18 @@ export const AuthProvider = ({ children }) => {
 
           setIsAuthenticated(true);
           setPrincipal(principalText);
-          setUsername(storedUsername);
           setActiveProvider("nfid");
-          persistAuthState({ principal: principalText, username: storedUsername, provider: "nfid" });
+          setUsername(storedUsername);
 
           // Update backend service with NFID identity
           await backendService.useExternalAgent(new HttpAgent({ identity: nfidIdentity }));
+
+          const resolvedUsername = await loadUserProfile(storedUsername);
+          persistAuthState({
+            principal: principalText,
+            username: resolvedUsername,
+            provider: "nfid",
+          });
 
           await loadUserData();
         }
@@ -66,12 +116,18 @@ export const AuthProvider = ({ children }) => {
 
           setIsAuthenticated(true);
           setPrincipal(principalText);
-          setUsername(storedUsername);
           setActiveProvider("internet-identity");
-          persistAuthState({ principal: principalText, username: storedUsername, provider: "internet-identity" });
+          setUsername(storedUsername);
 
           // Update backend service with identity
           await backendService.useExternalAgent(new HttpAgent({ identity }));
+
+          const resolvedUsername = await loadUserProfile(storedUsername);
+          persistAuthState({
+            principal: principalText,
+            username: resolvedUsername,
+            provider: "internet-identity",
+          });
 
           await loadUserData();
         } else {
@@ -107,17 +163,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const loadUserProfile = async () => {
+  const loadUserProfile = async (fallbackUsername = "") => {
     try {
       const profile = await backendService.getUserProfile();
-      if (profile?.username && typeof profile.username === 'string') {
-        setUsername(profile.username);
-      } else {
-        setUsername("");
-      }
+      const nextUsername =
+        profile?.username && typeof profile.username === "string"
+          ? profile.username
+          : fallbackUsername;
+
+      setUsername(nextUsername);
+      return nextUsername;
     } catch (error) {
       console.error("Failed to load user profile:", error);
-      setUsername("");
+      setUsername(fallbackUsername);
+      return fallbackUsername;
     }
   };
 
@@ -165,7 +224,12 @@ export const AuthProvider = ({ children }) => {
       await backendService.useExternalAgent(new HttpAgent({ identity }));
 
       // Load user profile from backend
-      await loadUserProfile();
+      const resolvedUsername = await loadUserProfile();
+      persistAuthState({
+        principal: principalText,
+        username: resolvedUsername,
+        provider: "internet-identity",
+      });
 
       await loadUserData();
       return true;
@@ -213,6 +277,13 @@ export const AuthProvider = ({ children }) => {
     try {
       await backendService.updateUserProfile(normalized, null);
       setUsername(normalized);
+      if (principal) {
+        persistAuthState({
+          principal,
+          username: normalized,
+          provider: activeProvider,
+        });
+      }
     } catch (error) {
       console.error("Failed to update username:", error);
       throw error;
@@ -267,6 +338,11 @@ export const AuthProvider = ({ children }) => {
           sessionStorage.removeItem(key);
         }
       });
+
+      if (isBrowser) {
+        window.localStorage.removeItem(AUTH_STORAGE_KEY);
+        window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+      }
 
       setIsAuthenticated(false);
       setPrincipal(null);
