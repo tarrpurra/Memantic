@@ -15,13 +15,14 @@ import {
   User,
   Sparkles,
   Image as ImageIcon,
-  ArrowLeft,
   Send,
+  ArrowLeft,
   Loader2,
   X
 } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { useMemeGeneration } from "../hooks/useMemeGeneration";
+import Navigation from "../components/Navigation";
 import backendService from "../services/backendService";
 
 const MyPlace = () => {
@@ -189,42 +190,7 @@ const MyPlace = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate("/marketplace")}
-              aria-label="Go back to marketplace"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Sparkles className="w-6 h-6 text-primary" />
-                <h1 className="text-2xl font-bold">My Creative Space</h1>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                AI-Powered Meme Generation
-                {remainingCalls !== undefined && (
-                  <span className="ml-2 text-primary font-medium">
-                    • {remainingCalls} calls remaining
-                  </span>
-                )}
-              </p>
-            </div>
-          </div>
-          <div
-            className="px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-sm cursor-pointer hover:bg-secondary/80 transition-colors"
-            onClick={() => navigate("/portfolio")}
-          >
-            <User className="w-4 h-4 mr-2 inline" />
-            Portfolio
-          </div>
-        </div>
-      </div>
+      <Navigation />
 
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">

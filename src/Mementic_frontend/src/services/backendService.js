@@ -654,6 +654,40 @@ class BackendService {
     }
   }
 
+  /* ============ USER PROFILE METHODS ============ */
+
+  /**
+    * Update user profile
+    */
+  async updateUserProfile(username, displayName) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required to update profile");
+    }
+    const usernameOpt = username ? [username] : [];
+    const displayNameOpt = displayName ? [displayName] : [];
+    const result = await this._safeCall('update_user_profile', usernameOpt, displayNameOpt);
+    return this._unwrapResult(result, "update_user_profile failed");
+  }
+
+  /**
+    * Get user profile
+    */
+  async getUserProfile() {
+    if (!this.isAuthenticated) {
+      return null;
+    }
+    const result = await this._safeCall('get_user_profile');
+    return this._fromOpt(result);
+  }
+
+  /**
+    * Get user profile by principal
+    */
+  async getUserProfileByPrincipal(principal) {
+    const result = await this._safeCall('get_user_profile_by_principal', principal);
+    return this._fromOpt(result);
+  }
+
   /* ============ UTILITY METHODS ============ */
 
   /**

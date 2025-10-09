@@ -32,8 +32,12 @@ export const getIdentityProvider = () => {
   if (import.meta.env.VITE_INTERNET_IDENTITY_HOST) {
     return import.meta.env.VITE_INTERNET_IDENTITY_HOST;
   }
+  // For local development, use local Internet Identity canister
+  if (isDevMode()) {
+    return "http://127.0.0.1:4943/?canisterId=rdmx6-jaaaa-aaaaa-aaadq-cai";
+  }
 
-  // Internet Identity 2.0 lives at id.ai and provides Google and passkey flows
+  // Use Internet Identity 2.0 with Google support for production
   return "https://id.ai/";
 };
 

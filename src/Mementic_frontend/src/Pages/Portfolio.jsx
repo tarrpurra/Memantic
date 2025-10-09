@@ -20,6 +20,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../hooks/use-toast";
 import { FeedbackForm } from "../components/FeedbackForm";
+import Navigation from "../components/Navigation";
 
 import backendService from "../services/backendService";
 
@@ -430,8 +431,10 @@ const Portfolio = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-gradient-to-r from-background via-card/50 to-background backdrop-blur-sm sticky top-0 z-10">
+      <Navigation />
+
+      {/* Page Header */}
+      <div className="border-b border-border bg-gradient-to-r from-background via-card/50 to-background backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-6">

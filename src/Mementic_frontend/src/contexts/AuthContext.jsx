@@ -1,36 +1,11 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { HttpAgent } from "@dfinity/agent";
+import { AuthClient } from "@dfinity/auth-client";
+import { useIdentityKit } from "@nfid/identitykit/react";
 import backendService from "../services/backendService";
+import { getIdentityProvider } from "../config/environment";
 
-const AUTH_STORAGE_KEY = "mementic:auth-state";
-
-const loadStoredAuthState = () => {
-  try {
-    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : null;
-  } catch (error) {
-    console.warn("Failed to parse stored auth state:", error);
-    return null;
-  }
-};
-
-const persistAuthState = (state) => {
-  try {
-    if (!state?.principal) {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-      return;
-    }
-
-    localStorage.setItem(
-      AUTH_STORAGE_KEY,
-      JSON.stringify({
-        provider: "internet-identity",
-        ...state,
-      })
-    );
-  } catch (error) {
-    console.warn("Failed to persist auth state:", error);
-  }
-};
+// User profiles are now stored in the backend
 
 const AuthContext = createContext();
 
@@ -43,50 +18,76 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
+  const { user, identity: nfidIdentity, connect: nfidConnect, disconnect: nfidDisconnect, isConnecting: nfidConnecting } = useIdentityKit();
+  const [authClient, setAuthClient] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [principal, setPrincipal] = useState(null);
   const [remainingCalls, setRemainingCalls] = useState(0);
   const [username, setUsername] = useState("");
+  const [activeProvider, setActiveProvider] = useState(null); // "nfid" or "internet-identity"
 
-  const loginProvider = isAuthenticated ? "internet-identity" : null;
+  const loginProvider = activeProvider;
 
   useEffect(() => {
     const initAuth = async () => {
       try {
         setIsLoading(true);
-        const storedAuth = loadStoredAuthState();
 
-        await backendService.initialize();
+        // Initialize AuthClient for direct Internet Identity
+        const client = await AuthClient.create();
+        setAuthClient(client);
 
-        const isAuth = backendService.isUserAuthenticated();
-        if (isAuth && backendService.authClient) {
-          const identity = backendService.authClient.getIdentity();
-          const principalText = identity.getPrincipal().toText();
+        // Check NFID first
+        if (nfidIdentity && user) {
+          const principalText = nfidIdentity.getPrincipal().toText();
+          const storedAuth = loadStoredAuthState();
+          const storedUsername =
+            storedAuth?.principal === principalText ? storedAuth.username || "" : "";
 
-          if (principalText !== "2vxsx-fae") {
-            const storedUsername =
-              storedAuth?.principal === principalText ? storedAuth.username || "" : "";
+          setIsAuthenticated(true);
+          setPrincipal(principalText);
+          setUsername(storedUsername);
+          setActiveProvider("nfid");
+          persistAuthState({ principal: principalText, username: storedUsername, provider: "nfid" });
 
-            setIsAuthenticated(true);
-            setPrincipal(principalText);
-            setUsername(storedUsername);
-            persistAuthState({ principal: principalText, username: storedUsername });
-            await loadUserData();
-            return;
-          }
+          // Update backend service with NFID identity
+          await backendService.useExternalAgent(new HttpAgent({ identity: nfidIdentity }));
+
+          await loadUserData();
         }
+        // Check direct AuthClient
+        else if (await client.isAuthenticated()) {
+          const identity = client.getIdentity();
+          const principalText = identity.getPrincipal().toText();
+          const storedAuth = loadStoredAuthState();
+          const storedUsername =
+            storedAuth?.principal === principalText ? storedAuth.username || "" : "";
 
-        setIsAuthenticated(false);
-        setPrincipal(null);
-        setUsername("");
-        setRemainingCalls(0);
-        persistAuthState(null);
+          setIsAuthenticated(true);
+          setPrincipal(principalText);
+          setUsername(storedUsername);
+          setActiveProvider("internet-identity");
+          persistAuthState({ principal: principalText, username: storedUsername, provider: "internet-identity" });
+
+          // Update backend service with identity
+          await backendService.useExternalAgent(new HttpAgent({ identity }));
+
+          await loadUserData();
+        } else {
+          setIsAuthenticated(false);
+          setPrincipal(null);
+          setUsername("");
+          setActiveProvider(null);
+          setRemainingCalls(0);
+          persistAuthState(null);
+        }
       } catch (error) {
         console.error("Failed to initialize authentication:", error);
         setIsAuthenticated(false);
         setPrincipal(null);
         setUsername("");
+        setActiveProvider(null);
         setRemainingCalls(0);
         persistAuthState(null);
       } finally {
@@ -95,8 +96,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     initAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [nfidIdentity, user]);
 
   const loadUserData = async () => {
     try {
@@ -107,47 +107,32 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const loginWithInternetIdentity = async () => {
+  const loadUserProfile = async () => {
+    try {
+      const profile = await backendService.getUserProfile();
+      if (profile?.username && typeof profile.username === 'string') {
+        setUsername(profile.username);
+      } else {
+        setUsername("");
+      }
+    } catch (error) {
+      console.error("Failed to load user profile:", error);
+      setUsername("");
+    }
+  };
+
+  const loginWithNFID = async () => {
     try {
       setIsLoading(true);
-      const success = await backendService.login();
-
-      if (!success || !backendService.authClient) {
-        setIsAuthenticated(false);
-        setPrincipal(null);
-        setUsername("");
-        setRemainingCalls(0);
-        persistAuthState(null);
-        return false;
-      }
-
-      const identity = backendService.authClient.getIdentity();
-      const principalText = identity.getPrincipal().toText();
-
-      if (!principalText || principalText === "2vxsx-fae") {
-        setIsAuthenticated(false);
-        setPrincipal(null);
-        setUsername("");
-        setRemainingCalls(0);
-        persistAuthState(null);
-        return false;
-      }
-
-      const storedAuth = loadStoredAuthState();
-      const storedUsername =
-        storedAuth?.principal === principalText ? storedAuth.username || "" : "";
-
-      setIsAuthenticated(true);
-      setPrincipal(principalText);
-      setUsername(storedUsername);
-      persistAuthState({ principal: principalText, username: storedUsername });
-      await loadUserData();
+      await nfidConnect();
+      // NFID will trigger the useEffect when identity/user changes
       return true;
     } catch (error) {
-      console.error("Login failed:", error);
+      console.error("NFID login failed:", error);
       setIsAuthenticated(false);
       setPrincipal(null);
       setUsername("");
+      setActiveProvider(null);
       setRemainingCalls(0);
       persistAuthState(null);
       throw error;
@@ -156,16 +141,66 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const loginWithInternetIdentity = async () => {
+    try {
+      setIsLoading(true);
+      if (!authClient) {
+        throw new Error("Auth client not initialized");
+      }
+
+      // AuthClient.login() opens a popup and returns a Promise that resolves when login is complete
+      await authClient.login({
+        identityProvider: getIdentityProvider(),
+      });
+
+      // After successful login, update state
+      const identity = authClient.getIdentity();
+      const principalText = identity.getPrincipal().toText();
+
+      setIsAuthenticated(true);
+      setPrincipal(principalText);
+      setActiveProvider("internet-identity");
+
+      // Update backend service with identity
+      await backendService.useExternalAgent(new HttpAgent({ identity }));
+
+      // Load user profile from backend
+      await loadUserProfile();
+
+      await loadUserData();
+      return true;
+    } catch (error) {
+      console.error("Internet Identity login failed:", error);
+      setIsAuthenticated(false);
+      setPrincipal(null);
+      setUsername("");
+      setActiveProvider(null);
+      setRemainingCalls(0);
+      persistAuthState(null);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Keep backward compatibility
+  const login = loginWithInternetIdentity;
+
   const logout = async () => {
     try {
       setIsLoading(true);
-      await backendService.logout();
+      if (activeProvider === "nfid") {
+        await nfidDisconnect();
+      } else if (activeProvider === "internet-identity" && authClient) {
+        await authClient.logout();
+      }
     } catch (error) {
       console.error("Logout failed:", error);
     } finally {
       setIsAuthenticated(false);
       setPrincipal(null);
       setUsername("");
+      setActiveProvider(null);
       setRemainingCalls(0);
       persistAuthState(null);
       setIsLoading(false);
@@ -173,11 +208,14 @@ export const AuthProvider = ({ children }) => {
     return true;
   };
 
-  const updateUsername = (value) => {
-    const normalized = value.trim();
-    setUsername(normalized);
-    if (principal) {
-      persistAuthState({ principal, username: normalized });
+  const updateUsername = async (value) => {
+    const normalized = (typeof value === 'string' ? value.trim() : '');
+    try {
+      await backendService.updateUserProfile(normalized, null);
+      setUsername(normalized);
+    } catch (error) {
+      console.error("Failed to update username:", error);
+      throw error;
     }
   };
 
@@ -210,19 +248,26 @@ export const AuthProvider = ({ children }) => {
     try {
       const localKeys = Object.keys(localStorage);
       localKeys.forEach((key) => {
-        if (key.includes("internet_identity") || key.includes("authClient") || key.includes("delegation")) {
+        if (
+          key.includes("internet_identity") ||
+          key.includes("authClient") ||
+          key.includes("delegation")
+        ) {
           localStorage.removeItem(key);
         }
       });
 
       const sessionKeys = Object.keys(sessionStorage);
       sessionKeys.forEach((key) => {
-        if (key.includes("internet_identity") || key.includes("authClient") || key.includes("delegation")) {
+        if (
+          key.includes("internet_identity") ||
+          key.includes("authClient") ||
+          key.includes("delegation")
+        ) {
           sessionStorage.removeItem(key);
         }
       });
 
-      persistAuthState(null);
       setIsAuthenticated(false);
       setPrincipal(null);
       setUsername("");
@@ -241,7 +286,8 @@ export const AuthProvider = ({ children }) => {
     remainingCalls,
     loginProvider,
     username,
-    login: loginWithInternetIdentity,
+    login,
+    loginWithNFID,
     loginWithInternetIdentity,
     logout,
     refreshUserData,

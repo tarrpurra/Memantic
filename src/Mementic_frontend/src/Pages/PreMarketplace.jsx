@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import Navigation from "../components/Navigation";
 
 const featureCards = [
   {
@@ -93,6 +94,9 @@ const PreMarketplace = () => {
         <div className="hero-sparkles" />
       </div>
 
+      <Navigation />
+
+      {/* Page Header */}
       <header className="relative z-20 border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
           <Link

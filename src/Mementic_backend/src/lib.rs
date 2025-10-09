@@ -2,6 +2,7 @@ mod http_outcall;
 mod voting;
 mod nft_module;
 mod feedback;
+mod user_profiles;
 
 use candid::{CandidType, Nat, Principal, Decode, Encode};
 use ic_cdk::api::management_canister::http_request::TransformArgs;
@@ -32,6 +33,10 @@ pub use nft_module::{
 pub use feedback::{
     Feedback, submit_feedback, get_approved_feedback, get_all_feedback,
     approve_feedback, delete_feedback, get_feedback_stats, init_feedback_data,
+};
+
+pub use user_profiles::{
+    UserProfile, update_user_profile, get_user_profile, get_user_profile_by_principal, get_all_user_profiles,
 };
 
 #[query]

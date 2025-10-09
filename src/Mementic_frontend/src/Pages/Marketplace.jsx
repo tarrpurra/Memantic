@@ -11,6 +11,7 @@ import { MemeCard } from "../components/MemeCard";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../hooks/use-toast";
+import Navigation from "../components/Navigation";
 import backendService from "../services/backendService.js";
 import {
   TrendingUp,
@@ -22,7 +23,6 @@ import {
   User,
   Sparkles,
   LogIn,
-  Home,
   Zap,
   X,
   Heart,
@@ -943,68 +943,7 @@ const Marketplace = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <Sparkles className="w-8 h-8 text-primary" />
-                <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                  Meme Marketplace
-                </h1>
-              </div>
-              <p className="text-muted-foreground">
-                Discover and vote on viral content
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" onClick={() => navigate("/")}>
-                <Home className="w-4 h-4 mr-2" />
-                Home
-              </Button>
-
-              {authLoading ? (
-                <div className="text-sm text-muted-foreground">Loading...</div>
-              ) : isAuthenticated ? (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={handleRefreshVotes}
-                    title="Refresh vote counts"
-                  >
-                    <ArrowUp className="w-4 h-4 mr-2" />
-                    Refresh Votes
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate("/portfolio")}
-                  >
-                    <User className="w-4 h-4 mr-2" />
-                    My Portfolio
-                  </Button>
-                  <Button variant="default" onClick={handleCreateMeme}>
-                    <Zap className="w-4 h-4 mr-2" />
-                    Create Meme
-                  </Button>
-                  <div
-                    className="text-sm text-muted-foreground hidden sm:block"
-                    title={username?.trim() || principal || ""}
-                  >
-                    {currentDisplayName}
-                  </div>
-                </>
-              ) : (
-                <Button variant="default" onClick={() => navigate("/login")}>
-                  <LogIn className="w-4 h-4 mr-2" />
-                  Login to Vote
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <Navigation />
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Authentication Status Alert */}

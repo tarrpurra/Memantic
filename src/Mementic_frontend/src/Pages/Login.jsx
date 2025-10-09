@@ -8,7 +8,8 @@ import { Sparkles } from "lucide-react";
 const Login = () => {
   const navigate = useNavigate();
   const {
-    login,
+    loginWithNFID,
+    loginWithInternetIdentity,
     logout,
     isLoading,
     isAuthenticated,
@@ -24,11 +25,11 @@ const Login = () => {
   const [usernameError, setUsernameError] = useState("");
   const [usernameSaved, setUsernameSaved] = useState(false);
 
-  const providerName = loginProvider === "internet-identity" ? "Internet Identity 2.0" : "";
+  const providerName = loginProvider === "internet-identity" ? "Internet Identity" : "";
 
   useEffect(() => {
     if (isAuthenticated) {
-      setUsernameInput(username || "");
+      setUsernameInput(typeof username === 'string' ? username : "");
       setShowUsernamePrompt(!username);
       setUsernameSaved(false);
       setUsernameError("");
@@ -40,17 +41,38 @@ const Login = () => {
     }
   }, [isAuthenticated, username]);
 
-  const handleLogin = async () => {
+  const handleNFIDLogin = async () => {
     if (isLoggingIn || isLoading) {
       return;
     }
 
     try {
       setIsLoggingIn(true);
-      const success = await login();
+      const success = await loginWithNFID();
 
       if (!success) {
-        alert("Login was cancelled or failed. Try again and ensure pop-ups are allowed.");
+        alert("NFID login was cancelled or failed. Try again and ensure pop-ups are allowed.");
+      }
+    } catch (error) {
+      console.error("NFID login error:", error);
+      const detail = error?.message ? ` ${error.message}` : "";
+      alert(`An error occurred while connecting to NFID.${detail}`);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleInternetIdentityLogin = async () => {
+    if (isLoggingIn || isLoading) {
+      return;
+    }
+
+    try {
+      setIsLoggingIn(true);
+      const success = await loginWithInternetIdentity();
+
+      if (!success) {
+        alert("Internet Identity login was cancelled or failed. Try again and ensure pop-ups are allowed.");
       }
     } catch (error) {
       console.error("Internet Identity login error:", error);
@@ -72,9 +94,9 @@ const Login = () => {
     setUsernameError("");
   };
 
-  const handleUsernameSubmit = (event) => {
+  const handleUsernameSubmit = async (event) => {
     event.preventDefault();
-    const trimmed = usernameInput.trim();
+    const trimmed = typeof usernameInput === 'string' ? usernameInput.trim() : '';
 
     if (trimmed.length < 3) {
       setUsernameError("Username must be at least 3 characters long.");
@@ -86,10 +108,15 @@ const Login = () => {
       return;
     }
 
-    updateUsername(trimmed);
-    setShowUsernamePrompt(false);
-    setUsernameSaved(true);
-    setUsernameError("");
+    try {
+      await updateUsername(trimmed);
+      setShowUsernamePrompt(false);
+      setUsernameSaved(true);
+      setUsernameError("");
+    } catch (error) {
+      setUsernameError("Failed to save username. Please try again.");
+      console.error("Username update failed:", error);
+    }
   };
 
   const handleUsernameEdit = () => {
@@ -109,7 +136,7 @@ const Login = () => {
     setUsernameError("");
   };
 
-  const hasUsername = Boolean(username && username.trim().length > 0);
+  const hasUsername = Boolean(username && typeof username === 'string' && username.trim().length > 0);
   const continueDisabled = !hasUsername || isLoading;
   const principalPreview = principal ? `${principal.slice(0, 6)}...${principal.slice(-4)}` : null;
   const isAnyLoading = isLoading || isLoggingIn;
@@ -152,38 +179,48 @@ const Login = () => {
                 ? hasUsername
                   ? `You're connected with ${providerName || "Internet Identity"}. Update your preferences or continue to the app.`
                   : "Pick a username so other creators can recognize you before continuing."
-                : "Sign in with Internet Identity 2.0 to choose Google, passkeys, or your existing anchor."}
+                : "Choose your preferred authentication method to access your decentralized identity."}
             </p>
           </div>
 
           {!isAuthenticated ? (
-            <div className="space-y-4">
-              <Button
-                variant="hero"
-                size="xl"
-                className="w-full border-2 border-purple-200 p-4 hero-button"
-                onClick={handleLogin}
-                disabled={isAnyLoading}
-              >
-                {isAnyLoading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                    Connecting to Internet Identity...
-                  </>
-                ) : (
-                  "Continue with Internet Identity"
-                )}
-              </Button>
-              <div className="rounded-lg border border-white/10 bg-black/30 p-4 text-sm text-left text-muted-foreground">
-                <p className="font-semibold text-foreground">What's new in Internet Identity 2.0?</p>
-                <ul className="list-disc list-inside mt-2 space-y-1">
-                  <li>Choose Google as an authentication option at <code className="font-mono text-xs">id.ai</code>.</li>
-                  <li>Passkeys and traditional anchors continue to work side-by-side.</li>
-                  <li>No custom OAuth configuration is required in the frontend.</li>
-                </ul>
-              </div>
-            </div>
-          ) : (
+             <div className="space-y-4">
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                 <Button
+                   variant="hero"
+                   size="xl"
+                   className="border-2 border-purple-200 p-4 hero-button"
+                   onClick={handleNFIDLogin}
+                   disabled={isAnyLoading}
+                 >
+                   {isAnyLoading ? (
+                     <>
+                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                       Connecting...
+                     </>
+                   ) : (
+                     "Continue with NFID"
+                   )}
+                 </Button>
+                 <Button
+                   variant="hero"
+                   size="xl"
+                   className="border-2 border-cyan-200 p-4 hero-button"
+                   onClick={handleInternetIdentityLogin}
+                   disabled={isAnyLoading}
+                 >
+                   {isAnyLoading ? (
+                     <>
+                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                       Connecting...
+                     </>
+                   ) : (
+                     "Continue with Internet Identity"
+                   )}
+                 </Button>
+               </div>
+             </div>
+           ) : (
             <div className="space-y-6 text-left">
               <div className="bg-black/20 border border-white/10 rounded-lg p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
