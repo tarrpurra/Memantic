@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Activity,
@@ -43,6 +43,10 @@ const VALUE_PILLS = ["NFID ready", "Internet Identity native", "Username persona
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const locationState = location.state ?? {};
+  const fromPath = locationState?.from;
+  const requireUsername = Boolean(locationState?.requireUsername);
   const {
     loginWithNFID,
     loginWithInternetIdentity,
@@ -61,6 +65,10 @@ const Login = () => {
   const [usernameError, setUsernameError] = useState("");
   const [usernameSaved, setUsernameSaved] = useState(false);
 
+  const hasUsername = Boolean(
+    username && typeof username === "string" && username.trim().length > 0
+  );
+
   const providerName =
     loginProvider === "internet-identity"
       ? "Internet Identity"
@@ -68,10 +76,17 @@ const Login = () => {
       ? "NFID"
       : "";
 
+  const redirectHandledRef = useRef(false);
+  const redirectMessage = requireUsername
+    ? "Choose a username to finish setting up before entering the marketplace."
+    : fromPath
+    ? "Sign in to continue to your destination."
+    : "";
+
   useEffect(() => {
     if (isAuthenticated) {
       setUsernameInput(typeof username === "string" ? username : "");
-      setShowUsernamePrompt(!username);
+      setShowUsernamePrompt(!hasUsername || requireUsername);
       setUsernameSaved(false);
       setUsernameError("");
     } else {
@@ -80,7 +95,25 @@ const Login = () => {
       setUsernameSaved(false);
       setUsernameError("");
     }
-  }, [isAuthenticated, username]);
+  }, [isAuthenticated, username, hasUsername, requireUsername]);
+
+  useEffect(() => {
+    if (
+      !redirectHandledRef.current &&
+      isAuthenticated &&
+      hasUsername &&
+      fromPath
+    ) {
+      redirectHandledRef.current = true;
+      navigate(fromPath, { replace: true, state: undefined });
+    }
+  }, [fromPath, hasUsername, isAuthenticated, navigate]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      redirectHandledRef.current = false;
+    }
+  }, [isAuthenticated]);
 
   const handleNFIDLogin = async () => {
     if (isLoggingIn || isLoading) {
@@ -177,7 +210,6 @@ const Login = () => {
     setUsernameError("");
   };
 
-  const hasUsername = Boolean(username && typeof username === "string" && username.trim().length > 0);
   const continueDisabled = !hasUsername || isLoading;
   const principalPreview = principal ? `${principal.slice(0, 6)}...${principal.slice(-4)}` : null;
   const isAnyLoading = isLoading || isLoggingIn;
@@ -295,6 +327,12 @@ const Login = () => {
                       : "Sign in with NFID or Internet Identity to sync your profile, credits, and publishing permissions."}
                   </p>
                 </div>
+
+                {redirectMessage && (
+                  <div className="rounded-2xl border border-amber-300/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                    {redirectMessage}
+                  </div>
+                )}
 
                 {!isAuthenticated ? (
                   <div className="space-y-4">

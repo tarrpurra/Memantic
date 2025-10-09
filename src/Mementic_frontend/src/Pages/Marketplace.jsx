@@ -8,7 +8,7 @@ import {
 } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { MemeCard } from "../components/MemeCard";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../hooks/use-toast";
 import Navigation from "../components/Navigation";
@@ -331,7 +331,7 @@ function PreviewModal({
                   onLike(meme.id, meme.votes, meme.creator);
                   setHasVoted(true); // Optimistic update
                 }}
-                disabled={!isAuthenticated || isOwn || hasVoted || loadingVoteStatus}
+                disabled={!isAuthenticated || !hasProfileName || isOwn || hasVoted || loadingVoteStatus}
                 className={(!isAuthenticated || isOwn || hasVoted) ? "opacity-60" : ""}
                 title={
                   !isAuthenticated
@@ -370,7 +370,11 @@ function PreviewModal({
 const Marketplace = () => {
   const { principal, username, isLoading: authLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+
+  const sanitizedUsername = typeof username === "string" ? username.trim() : "";
+  const hasProfileName = sanitizedUsername.length > 0;
 
   // UI State
   const [searchInput, setSearchInput] = useState("");
@@ -389,7 +393,7 @@ const Marketplace = () => {
   const [errorMsg, setErrorMsg] = useState("");
 
   const currentDisplayName =
-    username?.trim() || (principal ? `${principal.slice(0, 8)}...` : "Not logged in");
+    sanitizedUsername || (principal ? `${principal.slice(0, 8)}...` : "Not logged in");
 
   // Week countdown
   const [now, setNow] = useState(new Date());
@@ -400,13 +404,43 @@ const Marketplace = () => {
   }, []);
   const timeLeft = formatRemaining(weekEnd.getTime() - now.getTime());
 
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      toast({
+        title: "Login required",
+        description: "Sign in to access the marketplace.",
+        variant: "destructive",
+      });
+      navigate("/login", {
+        replace: true,
+        state: { from: location.pathname },
+      });
+      return;
+    }
+
+    if (!hasProfileName) {
+      toast({
+        title: "Complete your profile",
+        description: "Choose a username before exploring the marketplace.",
+      });
+      navigate("/login", {
+        replace: true,
+        state: { from: location.pathname, requireUsername: true },
+      });
+    }
+  }, [authLoading, hasProfileName, isAuthenticated, location.pathname, navigate, toast]);
+
   // Preview Modal State
   const [previewOpen, setPreviewOpen] = useState(false);
   const [selectedMeme, setSelectedMeme] = useState(null);
 
   // Periodic refresh of vote counts and leaderboard
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !hasProfileName) return;
 
     const refreshVotes = async () => {
       try {
@@ -471,7 +505,7 @@ const Marketplace = () => {
 
     // Also refresh when user returns to the tab/window
     const handleVisibilityChange = () => {
-      if (!document.hidden && isAuthenticated) {
+      if (!document.hidden && isAuthenticated && hasProfileName) {
         refreshVotes();
       }
     };
@@ -482,7 +516,7 @@ const Marketplace = () => {
       clearInterval(refreshInterval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [isAuthenticated]);
+  }, [hasProfileName, isAuthenticated]);
 
   // Debounce search
   useEffect(() => {
@@ -507,6 +541,12 @@ const Marketplace = () => {
 
   // Fetch Top 3
   useEffect(() => {
+    if (!isAuthenticated || !hasProfileName) {
+      setTopMemes([]);
+      setLoadingTop(false);
+      return () => undefined;
+    }
+
     let cancelled = false;
     (async () => {
       setLoadingTop(true);
@@ -539,10 +579,22 @@ const Marketplace = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hasProfileName, isAuthenticated]);
 
   // Fetch paginated list
   async function fetchList({ reset = false } = {}) {
+    if (authLoading || !isAuthenticated || !hasProfileName) {
+      if (reset) {
+        setMemes([]);
+        setTotal(0);
+      }
+      setLoadingList(false);
+      if (!authLoading && (!isAuthenticated || !hasProfileName)) {
+        setErrorMsg("Please login to view the marketplace.");
+      }
+      return;
+    }
+
     setLoadingList(true);
     setErrorMsg("");
     try {
@@ -678,6 +730,13 @@ const Marketplace = () => {
     fetchList({ reset: page === 1 });
   }, [page, searchQuery, sort]);
 
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && hasProfileName) {
+      fetchList({ reset: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, hasProfileName, isAuthenticated]);
+
   // Enhanced ownership detection helper
   const checkMemeOwnership = (meme) => {
     if (!principal || !meme) return false;
@@ -729,6 +788,17 @@ const Marketplace = () => {
         variant: "destructive",
       });
       navigate("/login");
+      return;
+    }
+
+    if (!hasProfileName) {
+      toast({
+        title: "Set a username first",
+        description: "Choose a username before interacting with marketplace memes.",
+      });
+      navigate("/login", {
+        state: { from: location.pathname, requireUsername: true },
+      });
       return;
     }
 
@@ -866,12 +936,23 @@ const Marketplace = () => {
   };
 
   const handleCreateMeme = () => {
-    if (!isAuthenticated) navigate("/login");
-    else navigate("/myplace");
+    if (!isAuthenticated) {
+      navigate("/login", { state: { from: location.pathname } });
+      return;
+    }
+
+    if (!hasProfileName) {
+      navigate("/login", {
+        state: { from: location.pathname, requireUsername: true },
+      });
+      return;
+    }
+
+    navigate("/myplace");
   };
 
   const handleRefreshVotes = async () => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !hasProfileName) return;
 
     try {
       // Refresh top memes leaderboard
@@ -940,6 +1021,28 @@ const Marketplace = () => {
     setSelectedMeme(meme);
     setPreviewOpen(true);
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <div className="mx-auto max-w-4xl px-6 py-24 text-center text-muted-foreground">
+          Checking your session…
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !hasProfileName) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <div className="mx-auto max-w-4xl px-6 py-24 text-center text-muted-foreground">
+          Redirecting to login…
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -1078,7 +1181,7 @@ const Marketplace = () => {
                         size="sm"
                         variant={isAuthenticated ? "outline" : "ghost"}
                         onClick={() => handleVote(meme.id, meme.votes, meme.creator)}
-                        disabled={!isAuthenticated || checkMemeOwnership(meme)}
+                        disabled={!isAuthenticated || !hasProfileName || checkMemeOwnership(meme)}
                         className={
                           !isAuthenticated || checkMemeOwnership(meme)
                             ? "opacity-50 cursor-not-allowed"

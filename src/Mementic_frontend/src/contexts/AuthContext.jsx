@@ -3,7 +3,7 @@ import { HttpAgent } from "@dfinity/agent";
 import { AuthClient } from "@dfinity/auth-client";
 import { useIdentityKit } from "@nfid/identitykit/react";
 import backendService from "../services/backendService";
-import { getIdentityProvider } from "../config/environment";
+import { getAgentHost, getIdentityProvider, isDevMode } from "../config/environment";
 
 const AUTH_STORAGE_KEY = "mementic-auth-state";
 const isBrowser = typeof window !== "undefined";
@@ -73,6 +73,30 @@ export const AuthProvider = ({ children }) => {
 
   const loginProvider = activeProvider;
 
+  const attachIdentityToBackend = async (identity) => {
+    if (!identity) return;
+
+    const agent = new HttpAgent({ identity, host: getAgentHost() });
+
+    if (isDevMode()) {
+      try {
+        await agent.fetchRootKey();
+      } catch (error) {
+        console.warn("Failed to fetch root key for development:", error);
+      }
+    }
+
+    await backendService.useExternalAgent(agent);
+  };
+
+  const clearBackendAuth = async () => {
+    try {
+      await backendService.resetToAnonymous();
+    } catch (error) {
+      console.warn("Failed to reset backend authentication state:", error);
+    }
+  };
+
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -95,7 +119,7 @@ export const AuthProvider = ({ children }) => {
           setUsername(storedUsername);
 
           // Update backend service with NFID identity
-          await backendService.useExternalAgent(new HttpAgent({ identity: nfidIdentity }));
+          await attachIdentityToBackend(nfidIdentity);
 
           const resolvedUsername = await loadUserProfile(storedUsername);
           persistAuthState({
@@ -120,7 +144,7 @@ export const AuthProvider = ({ children }) => {
           setUsername(storedUsername);
 
           // Update backend service with identity
-          await backendService.useExternalAgent(new HttpAgent({ identity }));
+          await attachIdentityToBackend(identity);
 
           const resolvedUsername = await loadUserProfile(storedUsername);
           persistAuthState({
@@ -137,6 +161,7 @@ export const AuthProvider = ({ children }) => {
           setActiveProvider(null);
           setRemainingCalls(0);
           persistAuthState(null);
+          await clearBackendAuth();
         }
       } catch (error) {
         console.error("Failed to initialize authentication:", error);
@@ -146,6 +171,7 @@ export const AuthProvider = ({ children }) => {
         setActiveProvider(null);
         setRemainingCalls(0);
         persistAuthState(null);
+        await clearBackendAuth();
       } finally {
         setIsLoading(false);
       }
@@ -194,6 +220,7 @@ export const AuthProvider = ({ children }) => {
       setActiveProvider(null);
       setRemainingCalls(0);
       persistAuthState(null);
+      await clearBackendAuth();
       throw error;
     } finally {
       setIsLoading(false);
@@ -208,23 +235,23 @@ export const AuthProvider = ({ children }) => {
       }
 
       // AuthClient.login() opens a popup and returns a Promise that resolves when login is complete
-      await authClient.login({
-        identityProvider: getIdentityProvider(),
-      });
+        await authClient.login({
+          identityProvider: getIdentityProvider(),
+        });
 
-      // After successful login, update state
-      const identity = authClient.getIdentity();
-      const principalText = identity.getPrincipal().toText();
+        // After successful login, update state
+        const identity = authClient.getIdentity();
+        const principalText = identity.getPrincipal().toText();
 
-      setIsAuthenticated(true);
-      setPrincipal(principalText);
-      setActiveProvider("internet-identity");
+        setIsAuthenticated(true);
+        setPrincipal(principalText);
+        setActiveProvider("internet-identity");
 
-      // Update backend service with identity
-      await backendService.useExternalAgent(new HttpAgent({ identity }));
+        // Update backend service with identity
+        await attachIdentityToBackend(identity);
 
-      // Load user profile from backend
-      const resolvedUsername = await loadUserProfile();
+        // Load user profile from backend
+        const resolvedUsername = await loadUserProfile();
       persistAuthState({
         principal: principalText,
         username: resolvedUsername,
@@ -241,6 +268,7 @@ export const AuthProvider = ({ children }) => {
       setActiveProvider(null);
       setRemainingCalls(0);
       persistAuthState(null);
+      await clearBackendAuth();
       throw error;
     } finally {
       setIsLoading(false);
@@ -261,6 +289,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error("Logout failed:", error);
     } finally {
+      await clearBackendAuth();
       setIsAuthenticated(false);
       setPrincipal(null);
       setUsername("");
@@ -348,6 +377,7 @@ export const AuthProvider = ({ children }) => {
       setPrincipal(null);
       setUsername("");
       setRemainingCalls(0);
+      await clearBackendAuth();
       return true;
     } catch (error) {
       console.error("Failed to clear auth data:", error);
