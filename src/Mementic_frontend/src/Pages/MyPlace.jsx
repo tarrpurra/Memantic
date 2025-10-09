@@ -47,6 +47,9 @@ const MyPlace = () => {
     remainingCalls,
   } = useMemeGeneration();
 
+  const normalizedRemainingCalls = Number.isFinite(remainingCalls) ? remainingCalls : 0;
+  const hasCalls = normalizedRemainingCalls > 0;
+
   // bump key whenever a new image_url appears
   useEffect(() => {
     if (generatedMeme?.image_url) {
@@ -193,6 +196,28 @@ const MyPlace = () => {
       <Navigation />
 
       <div className="max-w-6xl mx-auto px-6 py-8">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Creator studio</h1>
+            <p className="text-sm text-muted-foreground">
+              Generate and publish memes with your daily AI call allotment.
+            </p>
+          </div>
+          <div
+            className={`flex items-center gap-3 rounded-full border px-4 py-2 text-sm font-medium ${
+              hasCalls
+                ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
+                : "border-amber-400/40 bg-amber-500/10 text-amber-100"
+            }`}
+            title="Remaining meme generation calls"
+          >
+            <Sparkles className="h-4 w-4" />
+            {hasCalls
+              ? `${normalizedRemainingCalls} call${normalizedRemainingCalls === 1 ? "" : "s"} left today`
+              : "No calls remaining today"}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           {/* Creation Panel */}
           <div className="space-y-8">
