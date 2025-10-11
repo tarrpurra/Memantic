@@ -96,32 +96,6 @@ const PreMarketplace = () => {
 
       <Navigation />
 
-      {/* Page Header */}
-      <header className="relative z-20 border-b border-border/40 bg-background/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to landing
-          </Link>
-
-          <div className="hidden items-center gap-3 sm:flex">
-            <Link to="/auction">
-              <Button variant="ghost" className="rounded-full border border-border/60 bg-background/70">
-                Auction Hub
-              </Button>
-            </Link>
-            <Link to="/meme-nft">
-              <Button variant="hero" size="lg" className="rounded-full px-6">
-                Launch NFT Drop
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </header>
-
       <main className="relative z-10">
         <section className="px-5 py-16 sm:px-8">
           <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
