@@ -6,7 +6,6 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/Card";
-import { Input } from "../components/ui/Input";
 import { MemeCard } from "../components/MemeCard";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
@@ -16,12 +15,9 @@ import backendService from "../services/backendService.js";
 import {
   TrendingUp,
   Crown,
-  Filter,
-  Search,
   Timer,
   User,
   Sparkles,
-  Zap,
   X,
   Heart,
   Eye,
@@ -288,7 +284,7 @@ function PreviewModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center w-screen">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-[95vw] max-w-7xl h-[95vh] overflow-hidden">
         <div className="flex h-full">
@@ -1240,299 +1236,241 @@ const Marketplace = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#050B1C] text-slate-100">
+    <div className="min-h-screen bg-background text-foreground">
       <Navigation />
 
-      <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-10 px-4 py-10 lg:px-6">
-        <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-3">
-            <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-100">
-              <Sparkles className="h-3 w-3" />
-              Weekly marketplace
-            </span>
-            <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-              Discover the memes steering culture this week
-            </h1>
-            <p className="max-w-xl text-sm text-slate-400">
-              Welcome back, {currentDisplayName}. Vote, collect, and champion the creations from {selectedCreatorLabel}.
-            </p>
-          </div>
-          <div className="w-full space-y-3 lg:max-w-md">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                placeholder="Search memes, creators, or themes..."
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                className="h-11 rounded-xl border-white/10 bg-white/5 pl-10 text-slate-100 placeholder:text-slate-500 focus-visible:border-primary/60"
-              />
-            </div>
-            <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 shadow-inner shadow-primary/10">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-slate-400">Voting resets in</p>
-                <p className="text-xl font-semibold text-white">{timeLeft}</p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleRefreshVotes}
-                className="flex items-center gap-2 rounded-xl border-primary/40 bg-primary/10 text-white hover:bg-primary/20"
-              >
-                <Timer className="h-4 w-4" />
-                Refresh votes
-              </Button>
-            </div>
-          </div>
-        </header>
+      <div className="w-screen flex flex-col gap-10 px-4 py-10 lg:px-6">
 
-        <div className="grid gap-6 lg:grid-cols-[260px_1fr_320px]">
-        <aside className="space-y-6">
-          <Card className="border-white/10 bg-white/5 shadow-lg shadow-primary/10">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
-                <Filter className="h-4 w-4" />
-                Filtering
-              </CardTitle>
-              <p className="text-xs text-slate-400">
-                Tune the feed to match your vibe for this week's drop.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-3">
-                <p className="text-xs uppercase tracking-wide text-slate-400">Momentum</p>
-                <div className="space-y-2">
-                  {sortOptions.map((option) => {
-                    const Icon = option.icon;
-                    const isActive = sort === option.value;
-                    return (
-                      <Button
-                        key={option.value}
-                        variant="ghost"
-                        onClick={() => {
-                          setSort(option.value);
-                          setPage(1);
-                        }}
-                        className={`w-full justify-between rounded-xl border transition ${
-                          isActive
-                            ? "border-primary/60 bg-primary/80 text-white shadow-lg shadow-primary/40"
-                            : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <Icon className="h-4 w-4" />
-                          {option.label}
-                        </span>
-                        <span className="text-xs text-slate-300">{option.meta}</span>
-                      </Button>
-                    );
-                  })}
-                </div>
-              </div>
+        <div className="grid gap-6">
 
-              <div className="space-y-3">
-                <p className="text-xs uppercase tracking-wide text-slate-400">Creator focus</p>
-                <div className="space-y-2">
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setSelectedCreator("all");
-                      setPage(1);
-                    }}
-                    className={`w-full justify-between rounded-xl border ${
-                      selectedCreator === "all"
-                        ? "border-primary/60 bg-primary/70 text-white"
-                        : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      All creators
-                    </span>
-                    <span className="text-xs text-slate-300">{formatNumber(uniqueCreators)}</span>
-                  </Button>
-                  {creatorStats.map((creator) => (
+        <main className="w-full w- max-w-[200rem] space-y-6">
+          <Card className="overflow-hidden border-border bg-gradient-to-br from-primary/20 via-card/80 to-transparent w-full">
+            <CardContent className="p-6 lg:p-8 w-full mx-auto">
+              <div className="flex flex-col gap-8">
+                <div className="flex items-center justify-between">
+                  <div className="inline-flex items-center gap-2 text-sm text-primary">
+                    <Crown className="h-5 w-5" />
+                    <span className="text-lg font-semibold text-foreground">Weekly Leaderboard</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-center">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Voting resets in</p>
+                      <p className="text-xl font-semibold text-foreground">{timeLeft}</p>
+                    </div>
                     <Button
-                      key={creator.creator}
-                      variant="ghost"
-                      onClick={() => {
-                        setSelectedCreator(creator.creator);
-                        setPage(1);
-                      }}
-                      className={`w-full justify-between rounded-xl border ${
-                        selectedCreator === creator.creator
-                          ? "border-primary/60 bg-primary/70 text-white"
-                          : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-                      }`}
+                      variant="outline"
+                      onClick={handleRefreshVotes}
+                      className="rounded-xl border-border/40 px-4 text-foreground hover:bg-accent/10"
                     >
-                      <span className="flex items-center gap-2">
-                        <User className="h-4 w-4" />
-                        {creator.creator}
-                      </span>
-                      <span className="text-xs text-slate-300">
-                        {formatNumber(creator.votes)} votes
-                      </span>
+                      Refresh
                     </Button>
-                  ))}
-                </div>
-              </div>
-
-              {priceRange && (
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-slate-400">Price range</p>
-                  <p className="text-sm text-slate-200">
-                    {priceRange.min} – {priceRange.max} ICP
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    {formatNumber(priceRange.count)} listed memes this week
-                  </p>
-                </div>
-              )}
-
-              {marketplaceTags.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-slate-400">Marketplace signals</p>
-                  <div className="flex flex-wrap gap-2">
-                    {marketplaceTags.map((tag) => (
-                      <span
-                        key={tag.value}
-                        className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs text-primary-100"
-                      >
-                        {tag.label}
-                      </span>
-                    ))}
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </aside>
 
-        <main className="space-y-6">
-          <Card className="overflow-hidden border-white/10 bg-gradient-to-br from-primary/20 via-white/5 to-transparent">
-            <CardContent className="flex flex-col gap-6 p-6 lg:flex-row lg:items-center lg:p-8">
-              <div className="flex-1 space-y-4">
-                <div className="inline-flex items-center gap-2 text-sm text-primary-100">
-                  <Crown className="h-4 w-4" />
-                  Weekly leaders
-                </div>
-                <h2 className="text-2xl font-semibold text-white sm:text-3xl">
-                  {topTrending[0]?.title || "The leaderboard is warming up"}
-                </h2>
-                <p className="max-w-xl text-sm text-slate-200">
-                  {topTrending[0]
-                    ? `Holding ${formatNumber(topTrending[0]?.votes || 0)} votes and ${formatNumber(topTrending[0]?.views || 0)} views.`
-                    : "Publish your meme to claim the first spot on this week's board."}
-                </p>
-                <div className="flex flex-wrap gap-4 text-sm text-slate-200">
-                  <span className="flex items-center gap-2">
-                    <Heart className="h-4 w-4 text-pink-300" />
-                    {formatNumber(topTrending[0]?.votes || 0)} votes
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <Eye className="h-4 w-4 text-blue-300" />
-                    {formatNumber(topTrending[0]?.views || 0)} views
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-emerald-300" />
-                    {topTrending[0]?.creator || "—"}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    onClick={() => topTrending[0] && openPreview(topTrending[0])}
-                    disabled={!topTrending[0]}
-                    className="rounded-xl bg-primary/80 px-5 text-white hover:bg-primary"
-                  >
-                    View meme
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleRefreshVotes}
-                    className="rounded-xl border-white/30 px-5 text-white hover:bg-white/10"
-                  >
-                    Refresh leaderboard
-                  </Button>
+                <div className="grid gap-8 lg:grid-cols-2">
+                  {/* Left Side: Main Leaderboard Content */}
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <h2 className="text-4xl font-bold text-foreground leading-tight">
+                        {topTrending[0]?.title || "The leaderboard is warming up"}
+                      </h2>
+                      <p className="text-base text-muted-foreground">
+                        {topTrending[0]
+                          ? `Holding ${formatNumber(topTrending[0]?.votes || 0)} votes and ${formatNumber(topTrending[0]?.views || 0)} views.`
+                          : "Publish your meme to claim the first spot on this week's board."}
+                      </p>
+                      <div className="flex flex-wrap gap-6 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-2">
+                          <Heart className="h-5 w-5 text-pink-300" />
+                          <span className="font-semibold">{formatNumber(topTrending[0]?.votes || 0)}</span> votes
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <Eye className="h-5 w-5 text-blue-300" />
+                          <span className="font-semibold">{formatNumber(topTrending[0]?.views || 0)}</span> views
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <User className="h-5 w-5 text-emerald-300" />
+                          <span className="font-semibold">{topTrending[0]?.creator || "—"}</span>
+                        </span>
+                      </div>
+                      <Button
+                        onClick={() => topTrending[0] && openPreview(topTrending[0])}
+                        disabled={!topTrending[0]}
+                        className="rounded-xl bg-primary/80 px-6 py-3 text-white hover:bg-primary text-lg"
+                      >
+                        View meme
+                      </Button>
+                    </div>
+
+                    {/* Market Stats Table */}
+                    <div className="bg-card/50 rounded-xl border border-border/40 overflow-hidden">
+                      <table className="w-full">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Metric</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Value</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/20">
+                          <tr>
+                            <td className="px-4 py-3 text-sm text-foreground/80">Total Memes</td>
+                            <td className="px-4 py-3 text-lg font-semibold text-foreground">{formatNumber(total)}</td>
+                            <td className="px-4 py-3 text-sm text-emerald-500">Active</td>
+                          </tr>
+                          <tr>
+                            <td className="px-4 py-3 text-sm text-foreground/80">Active Creators</td>
+                            <td className="px-4 py-3 text-lg font-semibold text-foreground">{formatNumber(uniqueCreators)}</td>
+                            <td className="px-4 py-3 text-sm text-blue-500">Growing</td>
+                          </tr>
+                          <tr>
+                            <td className="px-4 py-3 text-sm text-foreground/80">Top Share</td>
+                            <td className="px-4 py-3 text-lg font-semibold text-foreground">{shareOfTop}%</td>
+                            <td className="px-4 py-3 text-sm text-purple-500">Leading</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Right Side: Featured Meme + Top 3 Trending */}
+                  <div className="space-y-6">
+                    {/* Featured Meme Image */}
+                    {topTrending[0]?.image_url && (
+                      <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-card/20 aspect-square">
+                        <img
+                          src={topTrending[0].image_url}
+                          alt={topTrending[0].title}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
+
+                    {/* Top 3 Trending Memes */}
+                    <div className="bg-y rounded-xl border border-border/40 p-4 ">
+                      <h3 className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2 ">
+                        <Crown className="h-5 w-5 text-primary" />
+                        Top 3 Trending
+                      </h3>
+                      <div className="space-y-3">
+                        {loadingTop ? (
+                          [...Array(3).keys()].map((index) => (
+                            <div key={`top-loading-${index}`} className="rounded-xl border border-border/40 bg-card/50 p-3 animate-pulse">
+                              <div className="flex gap-3">
+                                <div className="w-12 h-12 bg-muted/50 rounded-lg flex-shrink-0"></div>
+                                <div className="flex-1 space-y-2">
+                                  <div className="h-3 bg-muted/50 rounded"></div>
+                                  <div className="h-2 bg-muted/50 rounded w-3/4"></div>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        ) : topTrending.length === 0 ? (
+                          <div className="text-center py-6">
+                            <p className="text-muted-foreground text-sm">No trending memes yet</p>
+                          </div>
+                        ) : (
+                          topTrending.slice(0, 3).map((meme, index) => (
+                            <div
+                              key={meme.id}
+                              className="group rounded-xl border border-border/40 bg-card/50 p-3 cursor-pointer transition hover:border-primary/50 hover:bg-primary/5"
+                              onClick={() => openPreview(meme)}
+                            >
+                              <div className="flex gap-3">
+                                <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-muted/20 flex-shrink-0">
+                                  {meme.image_url ? (
+                                    <img
+                                      src={meme.image_url}
+                                      alt={meme.title}
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-lg">
+                                      {meme.emoji || "🖼️"}
+                                    </div>
+                                  )}
+                                  <div className="absolute -top-1 -left-1 bg-primary text-primary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                                    {index + 1}
+                                  </div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="font-semibold text-foreground line-clamp-1 text-sm mb-1">
+                                    {meme.title}
+                                  </h4>
+                                  <p className="text-xs text-muted-foreground mb-1">
+                                    by {meme.creator}
+                                  </p>
+                                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                    <span className="flex items-center gap-1">
+                                      <Heart className="h-3 w-3 text-red-500" />
+                                      {formatNumber(meme.votes || 0)}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <Eye className="h-3 w-3 text-blue-500" />
+                                      {formatNumber(meme.views || 0)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              {topTrending[0]?.image_url && (
-                <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-black/40">
-                  <img
-                    src={topTrending[0].image_url}
-                    alt={topTrending[0].title}
-                    className="aspect-square w-full object-cover"
-                    loading="lazy"
-                  />
-                </div>
-              )}
             </CardContent>
           </Card>
 
-          <Card className="border-white/10 bg-white/5">
-            <CardHeader className="flex flex-col gap-1 pb-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-white">
-                  <TrendingUp className="h-5 w-5 text-primary-200" />
-                  Trending collections
-                </CardTitle>
-                <p className="text-xs text-slate-400">
-                  The most active drops across the community this week.
-                </p>
-              </div>
-              <span className="text-xs text-slate-400">
-                Share of weekly votes · {shareOfTop}% lead
-              </span>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-3">
-              {loadingTop
-                ? [...Array(3).keys()].map((index) => <SkeletonCard key={`leader-skeleton-${index}`} />)
-                : topTrending.length === 0
-                ? (
-                  <p className="col-span-full text-sm text-slate-400">
-                    Leaderboard data will appear once memes start receiving votes.
-                  </p>
-                )
-                : topTrending.map((meme, index) => (
-                  <button
-                    key={meme.id}
-                    type="button"
-                    onClick={() => openPreview(meme)}
-                    className="group rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-primary/50 hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                  >
-                    <div className="flex items-center justify-between text-xs text-slate-400">
-                      <span>#{index + 1}</span>
-                      <span>
-                        {new Date(meme.created_at || Date.now()).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <h3 className="mt-2 line-clamp-2 text-base font-semibold text-white">
-                      {meme.title}
-                    </h3>
-                    <p className="mt-1 text-xs text-slate-400">by {meme.creator}</p>
-                    <div className="mt-4 flex items-center gap-4 text-sm text-slate-200">
-                      <span className="flex items-center gap-1">
-                        <Heart className="h-4 w-4 text-pink-300" />
-                        {formatNumber(meme.votes || 0)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Eye className="h-4 w-4 text-blue-300" />
-                        {formatNumber(meme.views || 0)}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-            </CardContent>
-          </Card>
-
-          <Card className="border-white/10 bg-white/5">
+          <Card className="border-border bg-card/80">
             <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg font-semibold text-white">
-                <TrendingUp className="h-5 w-5 text-primary-200" />
-                Marketplace feed
-              </CardTitle>
-              <p className="text-xs text-slate-400">
-                {searchQuery
-                  ? `Showing ${ensureArray(filteredMemes).length} result${ensureArray(filteredMemes).length === 1 ? "" : "s"} for “${searchQuery}”.`
-                  : `${total} meme${total === 1 ? "" : "s"} live for voting.`}
-              </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                    Marketplace feed
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {searchQuery
+                      ? `Showing ${ensureArray(filteredMemes).length} result${ensureArray(filteredMemes).length === 1 ? "" : "s"} for "${searchQuery}".`
+                      : `${total} meme${total === 1 ? "" : "s"} live for voting.`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <select
+                    value={sort}
+                    onChange={(e) => {
+                      setSort(e.target.value);
+                      setPage(1);
+                    }}
+                    className="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-slate-100 focus:outline-none focus:border-primary/60"
+                  >
+                    {sortOptions.map((option) => (
+                      <option key={option.value} value={option.value} className="bg-slate-800 text-white">
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={selectedCreator}
+                    onChange={(e) => {
+                      setSelectedCreator(e.target.value);
+                      setPage(1);
+                    }}
+                    className="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-slate-100 focus:outline-none focus:border-primary/60"
+                  >
+                    <option value="all" className="bg-slate-800 text-white">All creators</option>
+                    {creatorStats.map((creator) => (
+                      <option key={creator.creator} value={creator.creator} className="bg-slate-800 text-white">
+                        {creator.creator}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               {errorMsg && (
@@ -1542,18 +1480,18 @@ const Marketplace = () => {
               )}
 
               {loadingList && ensureArray(memes).length === 0 ? (
-                <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2">
                   {[...Array(6).keys()].map((index) => (
                     <SkeletonCard key={`feed-skeleton-${index}`} />
                   ))}
                 </div>
               ) : ensureArray(filteredMemes).length === 0 ? (
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 py-16 text-center">
-                  <Search className="h-10 w-10 text-slate-500" />
+                  <Sparkles className="h-10 w-10 text-slate-500" />
                   <p className="mt-4 text-base font-semibold text-white">No memes found</p>
                   <p className="mt-2 text-sm text-slate-400">
                     {searchQuery
-                      ? "Try adjusting your search terms or filters."
+                      ? "Try adjusting your filters."
                       : "Be the first to publish a meme this week."}
                   </p>
                   {searchQuery && (
@@ -1562,7 +1500,7 @@ const Marketplace = () => {
                       onClick={() => setSearchQuery("")}
                       className="mt-4 rounded-xl border-white/20 text-white hover:bg-white/10"
                     >
-                      Clear search
+                      Clear filters
                     </Button>
                   )}
                 </div>
@@ -1600,134 +1538,9 @@ const Marketplace = () => {
             </CardContent>
           </Card>
 
-          <Card className="border-primary/30 bg-gradient-to-r from-primary/30 to-primary/10">
-            <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
-              <Zap className="h-10 w-10 text-white" />
-              <h3 className="text-2xl font-semibold text-white">Launch your own drop</h3>
-              <p className="max-w-md text-sm text-slate-200">
-                Turn your ideas into meme culture and publish straight to the marketplace for this week’s competition.
-              </p>
-              <Button
-                size="lg"
-                onClick={handleCreateMeme}
-                className="rounded-xl bg-white px-6 text-primary hover:bg-slate-100"
-              >
-                {isAuthenticated ? "Open meme studio" : "Login to create"}
-              </Button>
-            </CardContent>
-          </Card>
         </main>
 
         <aside className="space-y-6">
-          <Card className="border-white/10 bg-white/5">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-base font-semibold text-white">Market pulse</CardTitle>
-              <p className="text-xs text-slate-400">
-                Snapshot of this week's marketplace activity.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-xs text-slate-400">Memes</p>
-                  <p className="text-lg font-semibold text-white">{formatNumber(total)}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-xs text-slate-400">Active creators</p>
-                  <p className="text-lg font-semibold text-white">{formatNumber(uniqueCreators)}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-xs text-slate-400">Total votes</p>
-                  <p className="text-lg font-semibold text-white">{formatNumber(totalVotes)}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-xs text-slate-400">Total views</p>
-                  <p className="text-lg font-semibold text-white">{formatNumber(totalViews)}</p>
-                </div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-gradient-to-r from-emerald-500/20 to-emerald-400/10 p-4 text-sm text-slate-200">
-                <p className="text-xs uppercase tracking-wide text-emerald-200">Top share</p>
-                <p className="mt-1 text-lg font-semibold text-white">{shareOfTop}% of weekly votes</p>
-                <p className="text-xs text-slate-300">
-                  {topTrending[0]
-                    ? `${topTrending[0].title} is leading the pack.`
-                    : "Awaiting the first leaderboard entry."}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-white/10 bg-white/5">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-base font-semibold text-white">Featured collections</CardTitle>
-              <p className="text-xs text-slate-400">Curated highlights from the leaderboard.</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {topTrending.length === 0 ? (
-                <p className="text-sm text-slate-400">Publish a meme to see it featured here.</p>
-              ) : (
-                topTrending.map((meme) => (
-                  <div
-                    key={meme.id}
-                    className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3"
-                  >
-                    {meme.image_url ? (
-                      <img
-                        src={meme.image_url}
-                        alt={meme.title}
-                        className="h-12 w-12 rounded-lg object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/10 text-lg">
-                        {meme.emoji}
-                      </div>
-                    )}
-                    <div className="flex-1">
-                      <p className="line-clamp-1 text-sm font-semibold text-white">{meme.title}</p>
-                      <p className="text-xs text-slate-400">by {meme.creator}</p>
-                    </div>
-                    <div className="text-right text-xs text-slate-300">
-                      <div>{formatNumber(meme.votes || 0)} votes</div>
-                      <div>{formatNumber(meme.views || 0)} views</div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-white/10 bg-white/5">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-base font-semibold text-white">Recently added</CardTitle>
-              <p className="text-xs text-slate-400">Fresh drops from the community.</p>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {recentMemes.length === 0 ? (
-                <p className="text-sm text-slate-400">Nothing yet—kick off the week with your meme.</p>
-              ) : (
-                recentMemes.map((meme) => (
-                  <button
-                    key={meme.id}
-                    type="button"
-                    onClick={() => openPreview(meme)}
-                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-slate-200 transition hover:border-primary/40 hover:bg-primary/10"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="line-clamp-1 font-semibold text-white">{meme.title}</span>
-                      <span className="text-xs text-slate-400">
-                        {new Date(meme.created_at || Date.now()).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400">by {meme.creator}</p>
-                  </button>
-                ))
-              )}
-            </CardContent>
-          </Card>
         </aside>
       </div>
     </div>
@@ -1746,3 +1559,4 @@ const Marketplace = () => {
 };
 
 export default Marketplace;
+
