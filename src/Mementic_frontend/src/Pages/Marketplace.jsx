@@ -98,7 +98,60 @@ const normalizeMeme = (m, extra = {}) => {
   // Supports PublicStoredMeme { id, owner, meme_data{...}, created_at, ... }
   const md = m?.meme_data || m;
   const owner = m?.owner ?? md?.owner ?? m?.creator;
-  const unwrapOptional = (value) => (Array.isArray(value) ? value[0] : value);
+  const unwrapOptional = (value) =>
+    Array.isArray(value) ? value[0] : value ?? null;
+
+  const normalizeTimestampToMs = (candidate) => {
+    if (candidate == null) return 0;
+    if (Array.isArray(candidate)) {
+      return normalizeTimestampToMs(candidate[0]);
+    }
+
+    if (typeof candidate === "bigint") {
+      if (candidate <= 0n) return 0;
+      if (candidate > 1_000_000_000_000_000n) {
+        return Number(candidate / 1_000_000n);
+      }
+      if (candidate > 1_000_000_000_000n) {
+        return Number(candidate);
+      }
+      if (candidate > 1_000_000_000n) {
+        return Number(candidate * 1000n);
+      }
+      if (candidate > 1_000_000n) {
+        return Number(candidate / 1000n);
+      }
+      return Number(candidate);
+    }
+
+    if (typeof candidate === "number") {
+      if (!Number.isFinite(candidate) || candidate <= 0) return 0;
+      if (candidate > 1e15) return Math.floor(candidate / 1e6);
+      if (candidate > 1e12) return Math.floor(candidate);
+      if (candidate > 1e9) return Math.floor(candidate * 1000);
+      if (candidate > 1e6) return Math.floor(candidate / 1000);
+      return Math.floor(candidate);
+    }
+
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim();
+      if (!trimmed) return 0;
+      try {
+        if (/^-?\d+n$/.test(trimmed)) {
+          return normalizeTimestampToMs(BigInt(trimmed.slice(0, -1)));
+        }
+        if (/^-?\d+$/.test(trimmed)) {
+          return normalizeTimestampToMs(BigInt(trimmed));
+        }
+        const num = Number(trimmed);
+        return normalizeTimestampToMs(num);
+      } catch {
+        return 0;
+      }
+    }
+
+    return 0;
+  };
 
   // Handle different vote structures
   const up = safeBigIntToNumber(
@@ -148,6 +201,20 @@ const normalizeMeme = (m, extra = {}) => {
       ? m.prompt
       : "";
 
+  const metadata = unwrapOptional(md?.metadata ?? m?.metadata);
+  const metadataTimestamp = metadata
+    ? normalizeTimestampToMs(unwrapOptional(metadata?.timestamp))
+    : 0;
+  const createdAtCandidates = [
+    metadataTimestamp,
+    normalizeTimestampToMs(m?.created_at),
+    normalizeTimestampToMs(md?.created_at),
+    normalizeTimestampToMs(m?.timestamp),
+    normalizeTimestampToMs(md?.timestamp),
+  ];
+  const createdAt =
+    createdAtCandidates.find((value) => value && value > 0) ?? Date.now();
+
   return {
     id: toSafeIdString(m?.id ?? m?.meme_id ?? m?._id ?? m?.uuid ?? Date.now()),
     title:
@@ -162,12 +229,7 @@ const normalizeMeme = (m, extra = {}) => {
     image_url,
     votes: score,
     views: safeBigIntToNumber(m?.market_data?.views ?? m?.views ?? 0),
-    created_at: (() => {
-      const raw = safeBigIntToNumber(m?.created_at) || safeBigIntToNumber(md?.created_at) || safeBigIntToNumber(m?.timestamp) || Date.now();
-      // Convert nanoseconds to milliseconds if needed
-      const ms = raw > 1e15 ? Math.floor(raw / 1e6) : raw;
-      return ms > 1000000000000 ? ms : Date.now();
-    })(),
+    created_at: createdAt,
     rank: safeBigIntToNumber(extra?.rank ?? m?.rank ?? 0),
     emoji: m?.emoji || "🖼️",
     market_data: m?.market_data,
