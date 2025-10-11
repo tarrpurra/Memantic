@@ -1344,11 +1344,11 @@ const Marketplace = () => {
                       <div className="flex flex-wrap gap-6 text-sm text-muted-foreground">
                         <span className="flex items-center gap-2">
                           <Heart className="h-5 w-5 text-pink-300" />
-                          <span className="font-semibold">{formatNumber(topTrending[0]?.votes || 0)}</span> votes
+                          <span className="font-semibold">0</span> votes
                         </span>
                         <span className="flex items-center gap-2">
                           <Eye className="h-5 w-5 text-blue-300" />
-                          <span className="font-semibold">{formatNumber(topTrending[0]?.views || 0)}</span> views
+                          <span className="font-semibold">0</span> views
                         </span>
                         <span className="flex items-center gap-2">
                           <User className="h-5 w-5 text-emerald-300" />
@@ -1377,17 +1377,17 @@ const Marketplace = () => {
                         <tbody className="divide-y divide-border/20">
                           <tr>
                             <td className="px-4 py-3 text-sm text-foreground/80">Total Memes</td>
-                            <td className="px-4 py-3 text-lg font-semibold text-foreground">{formatNumber(total)}</td>
+                            <td className="px-4 py-3 text-lg font-semibold text-foreground">0</td>
                             <td className="px-4 py-3 text-sm text-emerald-500">Active</td>
                           </tr>
                           <tr>
                             <td className="px-4 py-3 text-sm text-foreground/80">Active Creators</td>
-                            <td className="px-4 py-3 text-lg font-semibold text-foreground">{formatNumber(uniqueCreators)}</td>
+                            <td className="px-4 py-3 text-lg font-semibold text-foreground">0</td>
                             <td className="px-4 py-3 text-sm text-blue-500">Growing</td>
                           </tr>
                           <tr>
                             <td className="px-4 py-3 text-sm text-foreground/80">Top Share</td>
-                            <td className="px-4 py-3 text-lg font-semibold text-foreground">{shareOfTop}%</td>
+                            <td className="px-4 py-3 text-lg font-semibold text-foreground">0%</td>
                             <td className="px-4 py-3 text-sm text-purple-500">Leading</td>
                           </tr>
                         </tbody>
@@ -1467,11 +1467,11 @@ const Marketplace = () => {
                                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
                                     <span className="flex items-center gap-1">
                                       <Heart className="h-3 w-3 text-red-500" />
-                                      {formatNumber(meme.votes || 0)}
+                                      0
                                     </span>
                                     <span className="flex items-center gap-1">
                                       <Eye className="h-3 w-3 text-blue-500" />
-                                      {formatNumber(meme.views || 0)}
+                                      0
                                     </span>
                                   </div>
                                 </div>
@@ -1498,7 +1498,7 @@ const Marketplace = () => {
                   <p className="text-xs text-muted-foreground mt-1">
                     {searchQuery
                       ? `Showing ${ensureArray(filteredMemes).length} result${ensureArray(filteredMemes).length === 1 ? "" : "s"} for "${searchQuery}".`
-                      : `${total} meme${total === 1 ? "" : "s"} live for voting.`}
+                      : `0 memes live for voting.`}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">

@@ -535,11 +535,11 @@ const Auction = () => {
                   <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-2 rounded-full border border-border/60 px-3 py-1">
                       <Activity className="h-3.5 w-3.5 text-primary" />
-                      {formatNumber(liveAuctions.length)} active auctions
+                      0 active auctions
                     </span>
                     <span className="inline-flex items-center gap-2 rounded-full border border-border/60 px-3 py-1">
                       <Users className="h-3.5 w-3.5 text-primary" />
-                      {formatNumber(aggregateStats.totalVotes)} votes in play
+                      0 votes in play
                     </span>
                     <span className="inline-flex items-center gap-2 rounded-full border border-border/60 px-3 py-1">
                       <Clock className="h-3.5 w-3.5 text-primary" />
@@ -580,21 +580,19 @@ const Auction = () => {
                     <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
                       <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em]">
                         <span>Total volume</span>
-                        <span className="text-primary">{formatIcp(aggregateStats.totalVolume)}</span>
+                        <span className="text-primary">Not listed</span>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                         <div className="rounded-xl border border-border/60 bg-background/60 p-3">
                           <p className="uppercase tracking-[0.3em]">Avg bid</p>
                           <p className="mt-1 text-lg font-semibold text-foreground">
-                            {aggregateStats.averageBid > 0
-                              ? formatIcp(aggregateStats.averageBid)
-                              : "—"}
+                            —
                           </p>
                         </div>
                         <div className="rounded-xl border border-border/60 bg-background/60 p-3">
                           <p className="uppercase tracking-[0.3em]">Views</p>
                           <p className="mt-1 text-lg font-semibold text-foreground">
-                            {formatNumber(aggregateStats.totalViews)}
+                            0
                           </p>
                         </div>
                       </div>

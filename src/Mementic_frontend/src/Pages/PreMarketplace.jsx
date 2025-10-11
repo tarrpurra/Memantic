@@ -241,7 +241,7 @@ const PreMarketplace = () => {
                       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-primary">
                         <BarChart3 className="h-4 w-4" /> Snapshot
                       </div>
-                      <p className="mt-3 text-lg font-semibold text-foreground">74.2% of active bids are trending upward.</p>
+                      <p className="mt-3 text-lg font-semibold text-foreground">0% of active bids are trending upward.</p>
                       <p className="mt-3 text-xs">
                         Momentum accelerated in the last 24h across ordinal-backed drops with premium artwork and remix utility.
                       </p>
@@ -250,15 +250,15 @@ const PreMarketplace = () => {
                       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-primary">
                         <Activity className="h-4 w-4" /> Market Pulse
                       </div>
-                      <p className="mt-3 text-lg font-semibold text-foreground">Average time to flip is now 38 minutes.</p>
+                      <p className="mt-3 text-lg font-semibold text-foreground">Average time to flip is now 0 minutes.</p>
                       <div className="mt-4 grid gap-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">
                         <div className="flex items-center justify-between rounded-xl border border-border/60 bg-background/70 px-3 py-2">
                           <span>Hot Offers</span>
-                          <span className="text-primary">+26%</span>
+                          <span className="text-primary">0%</span>
                         </div>
                         <div className="flex items-center justify-between rounded-xl border border-border/60 bg-background/70 px-3 py-2">
                           <span>Whale Activity</span>
-                          <span className="text-primary">+18%</span>
+                          <span className="text-primary">0%</span>
                         </div>
                       </div>
                     </div>

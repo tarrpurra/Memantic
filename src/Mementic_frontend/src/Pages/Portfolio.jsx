@@ -114,6 +114,56 @@ const Portfolio = () => {
     ? `${principal.slice(0, 8)}...${principal.slice(-6)}`
     : "";
 
+  // Calculate portfolio stats
+  const totalVotes = nfts.reduce((sum, nft) => sum + nft.votes, 0);
+  const totalEarnings = nfts.reduce((sum, nft) => sum + nft.earnedIcp, 0);
+  const totalViews = nfts.reduce((sum, nft) => sum + nft.views, 0);
+  const avgEarningsPerVote = totalVotes > 0 ? totalEarnings / totalVotes : 0;
+
+  const generatedCount = nfts.length;
+  const mintedCount = nfts.filter(nft => nft.isMinted).length;
+  const listedCount = nfts.filter(nft => nft.isListed).length;
+  const totalSales = nfts.reduce((sum, nft) => sum + (nft.totalSales || 0), 0);
+
+  const mintedProgress = generatedCount > 0 ? Math.round((mintedCount / generatedCount) * 100) : 0;
+  const listedProgress = generatedCount > 0 ? Math.round((listedCount / generatedCount) * 100) : 0;
+
+  const generatedMemes = nfts.filter(nft => !nft.isMinted);
+  const mintedNFTs = nfts.filter(nft => nft.isMinted);
+
+  const handleSell = async (id) => {
+    try {
+      // List for 1 ICP (100000000 e8s)
+      const priceE8s = BigInt(100000000);
+      await backendService.listMemeForSale(BigInt(id), priceE8s);
+      toast({
+        title: "Meme listed for sale",
+        description: "Your meme is now available on the marketplace for 1 ICP.",
+      });
+      // Refresh the portfolio to show updated status
+      await fetchData();
+    } catch (error) {
+      console.error('Failed to list meme for sale:', error);
+      toast({
+        title: "Listing failed",
+        description: "Could not list your meme for sale. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleKeep = (id) => {
+    toast({
+      title: "Meme kept",
+      description: "Your meme will continue earning votes and may be minted as an NFT.",
+    });
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
+  };
+
   // Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -297,7 +347,7 @@ const Portfolio = () => {
             market_data: {
               is_listed: false,
               listing_price: null,
-              views: 25,
+              views: 0,
               total_sales: 0,
               total_earned: 0
             }
@@ -393,52 +443,98 @@ const Portfolio = () => {
     // Set up periodic refresh every 30 seconds
     const refreshInterval = setInterval(refreshPortfolio, 30000);
 
-  
+    return () => {
+      clearTimeout(initialRefreshTimer);
+      clearInterval(refreshInterval);
+    };
+  }, [isAuthenticated, loading, nfts]);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#060714] via-[#0a0f27] to-[#190924] text-slate-100">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 text-foreground">
       <Navigation />
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 pb-16 pt-10">
-        <div className="grid gap-6 lg:grid-cols-[1.75fr,1fr]">
-          <Card className="border-indigo-500/20 bg-gradient-to-br from-indigo-900/40 via-indigo-900/20 to-purple-900/30 text-slate-100 shadow-lg shadow-indigo-500/20">
-            <CardContent className="flex flex-col gap-6 p-8">
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-secondary/10 text-foreground shadow-lg shadow-primary/10">
+          <CardContent className="p-8">
+            <div className="flex flex-col gap-8">
+              {/* Header Section */}
               <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
                 <div className="space-y-2">
-                  <p className="text-xs font-medium uppercase tracking-[0.3em] text-indigo-200/70">Creator Profile</p>
+                  <p className="text-xs font-medium uppercase tracking-[0.3em] text-primary/70 pt-3">Creator Profile</p>
                   <h1 className="text-3xl font-semibold md:text-4xl">
                     {displayName || "Anonymous"}
                   </h1>
-                  <p className="max-w-md text-sm text-indigo-100/70">
+                  <p className="max-w-md text-sm text-foreground/80">
                     Track your meme creations, earnings, and momentum across the Mementic universe.
                   </p>
                 </div>
-                <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-indigo-500/20 text-4xl font-semibold uppercase shadow-inner shadow-indigo-500/30">
-                  {sanitizedUsername ? sanitizedUsername.charAt(0) : "🪄"}
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-2xl border border-primary/30 bg-primary/10 p-4 text-center">
+                  <div className="flex items-center justify-center mb-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                  </div>
+                  <p className="text-xs uppercase tracking-wide text-primary/70">Voting Power</p>
+                  <p className="mt-2 text-2xl font-semibold text-primary">0</p>
+                  <p className="text-xs text-primary/60 mt-1">Total upvotes</p>
+                </div>
+
+                <div className="rounded-2xl border border-secondary/30 bg-secondary/10 p-4 text-center">
+                  <div className="flex items-center justify-center mb-2">
+                    <Crown className="h-5 w-5 text-secondary" />
+                  </div>
+                  <p className="text-xs uppercase tracking-wide text-secondary/70">Memes Created</p>
+                  <p className="mt-2 text-2xl font-semibold text-secondary">0</p>
+                  <p className="text-xs text-secondary/60 mt-1">Total generated</p>
+                </div>
+
+                <div className="rounded-2xl border border-accent/30 bg-accent/10 p-4 text-center">
+                  <div className="flex items-center justify-center mb-2">
+                    <TrendingUp className="h-5 w-5 text-accent" />
+                  </div>
+                  <p className="text-xs uppercase tracking-wide text-accent/70">Minted NFTs</p>
+                  <p className="mt-2 text-2xl font-semibold text-accent">0</p>
+                  <p className="text-xs text-accent/60 mt-1">On-chain assets</p>
+                </div>
+
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-center">
+                  <div className="flex items-center justify-center mb-2">
+                    <Coins className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <p className="text-xs uppercase tracking-wide text-amber-600/70">Total Sales</p>
+                  <p className="mt-2 text-2xl font-semibold text-amber-600">0</p>
+                  <p className="text-xs text-amber-600/60 mt-1">Marketplace transactions</p>
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-indigo-400/30 bg-indigo-500/10 p-4 text-sm text-indigo-100">
-                  <span className="text-xs uppercase tracking-wide text-indigo-200/70">Principal</span>
-                  <span className="mt-2 block text-base font-semibold" title={principal}>
-                    {principal ? principalPreview : "Not connected"}
-                  </span>
-                </div>
-                <div className="rounded-2xl border border-purple-400/30 bg-purple-500/10 p-4 text-sm text-indigo-100">
-                  <span className="text-xs uppercase tracking-wide text-indigo-200/70">Memes Created</span>
-                  <span className="mt-2 block text-2xl font-semibold text-purple-100">{nfts.length}</span>
+              {/* Principal Info */}
+              <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs uppercase tracking-wide text-primary/70">Principal ID</span>
+                    <span className="mt-2 block text-sm font-mono text-foreground" title={principal}>
+                      {principal ? principalPreview : "Not connected"}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-primary/70">Marketplace Listings</p>
+                    <p className="text-lg font-semibold text-primary">0</p>
+                  </div>
                 </div>
               </div>
 
+              {/* Username Editor */}
               {usernameSaved && !showUsernameEditor && (
-                <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200">
+                <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-200">
                   Username updated successfully.
                 </div>
               )}
 
               {showUsernameEditor ? (
                 <form onSubmit={handleUsernameSubmit} className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-indigo-100/70">
-                    <User className="h-4 w-4 text-indigo-200" />
+                  <div className="flex items-center gap-2 text-sm text-foreground/80">
+                    <User className="h-4 w-4 text-primary" />
                     <span>Choose how you appear to other creators</span>
                   </div>
                   <Input
@@ -451,9 +547,9 @@ const Portfolio = () => {
                     placeholder="e.g. MemeMaestro"
                     maxLength={32}
                     disabled={savingUsername}
-                    className="bg-slate-950/60 text-slate-100 placeholder:text-slate-400"
+                    className="bg-background text-foreground placeholder:text-muted-foreground"
                   />
-                  {usernameError && <p className="text-xs text-rose-300">{usernameError}</p>}
+                  {usernameError && <p className="text-xs text-destructive">{usernameError}</p>}
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Button type="submit" disabled={savingUsername} className="sm:flex-1">
                       {savingUsername ? "Saving…" : "Save username"}
@@ -472,8 +568,8 @@ const Portfolio = () => {
                   </div>
                 </form>
               ) : (
-                <div className="flex flex-col gap-3 text-sm text-indigo-100/70 sm:flex-row sm:items-center sm:justify-between">
-                  <p>
+                <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-foreground/80">
                     {hasUsername
                       ? "Your username is visible everywhere instead of your principal."
                       : "Pick a username so your principal stays private."}
@@ -493,11 +589,12 @@ const Portfolio = () => {
                 </div>
               )}
 
+              {/* Action Buttons */}
               <div className="flex flex-wrap gap-3">
                 <Button
                   variant="secondary"
                   onClick={() => navigate("/myplace")}
-                  className="bg-indigo-500/30 hover:bg-indigo-500/40"
+                  className="bg-primary hover:bg-primary"
                 >
                   <Sparkles className="mr-2 h-4 w-4" />
                   Create meme
@@ -505,7 +602,7 @@ const Portfolio = () => {
                 <Button
                   variant="outline"
                   onClick={() => navigate("/marketplace")}
-                  className="border-indigo-400/40 text-indigo-100 hover:bg-indigo-500/10"
+                  className="border-primary/40 text-foreground hover:bg-primary"
                 >
                   Browse marketplace
                 </Button>
@@ -530,7 +627,7 @@ const Portfolio = () => {
                     }
                   }}
                   disabled={refreshing || loading}
-                  className="border-indigo-400/40 text-indigo-100 hover:bg-indigo-500/10"
+                  className="border-primary/40 text-foreground hover:bg-primary/10"
                 >
                   {refreshing ? (
                     <div className="mr-2 h-4 w-4 animate-spin rounded-full border border-current border-t-transparent" />
@@ -542,173 +639,186 @@ const Portfolio = () => {
                 <Button
                   variant="ghost"
                   onClick={handleLogout}
-                  className="text-rose-300 hover:bg-rose-500/10"
+                  className="text-rose-800 hover:bg-rose-500"
                 >
                   <ArrowDown className="mr-2 h-4 w-4" />
                   Logout
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-6">
-            <Card className="border-transparent bg-gradient-to-br from-amber-500/20 via-orange-500/10 to-pink-500/20 text-amber-100 shadow-lg shadow-orange-500/10">
-              <CardContent className="flex flex-col gap-4 p-6">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.35em] text-amber-200/80">Voting Power</p>
-                    <p className="mt-3 text-4xl font-semibold text-amber-100">
-                      {totalVotes.toLocaleString()}
-                    </p>
-                  </div>
-                  <Sparkles className="h-8 w-8 text-amber-200" />
-                </div>
-                <p className="text-sm text-amber-100/70">
-                  Total upvotes earned across every meme you've shared with the community.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border border-indigo-500/20 bg-[#101532]/70 text-slate-100 shadow-lg shadow-indigo-900/20">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg font-semibold text-slate-100">Creator Stats</CardTitle>
-                <p className="text-xs uppercase tracking-[0.25em] text-indigo-200/70">
-                  Snapshot of your portfolio
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {[{
-                  label: "Generated Memes",
-                  value: generatedCount,
-                  icon: Sparkles,
-                  accent: "bg-indigo-500/10 text-indigo-100"
-                }, {
-                  label: "Minted NFTs",
-                  value: mintedCount,
-                  icon: Crown,
-                  accent: "bg-purple-500/10 text-purple-100"
-                }, {
-                  label: "Marketplace Listings",
-                  value: listedCount,
-                  icon: TrendingUp,
-                  accent: "bg-sky-500/10 text-sky-100"
-                }, {
-                  label: "Total Sales",
-                  value: totalSales,
-                  icon: Coins,
-                  accent: "bg-amber-500/10 text-amber-100"
-                }].map(({ label, value, icon: Icon, accent }) => (
-                  <div key={label} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 p-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-indigo-200/70">{label}</p>
-                      <p className="mt-1 text-xl font-semibold">{value.toLocaleString()}</p>
-                    </div>
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${accent}`}>
-                      <Icon className="h-5 w-5" />
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        <Card className="border-transparent bg-gradient-to-br from-[#111738]/70 via-[#0a0f27]/60 to-[#210b2f]/60 text-slate-100 shadow-xl shadow-purple-500/10">
-          <CardHeader className="pb-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-2xl font-semibold text-slate-100">Performance Metrics</CardTitle>
-                <p className="text-sm text-indigo-200/70">
-                  Understand how your creations perform across the ecosystem.
-                </p>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-8">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-              {[{
-                label: "ICP Earned",
-                value: `${totalEarnings.toFixed(2)} ICP`,
-                icon: Coins,
-              }, {
-                label: "Total Views",
-                value: totalViews.toLocaleString(),
-                icon: Sparkles,
-              }, {
-                label: "Average ICP / Vote",
-                value: `${avgEarningsPerVote.toFixed(3)} ICP`,
-                icon: TrendingUp,
-              }, {
-                label: "Listed Share",
-                value: `${listedProgress}%`,
-                icon: ArrowUp,
-              }].map(({ label, value, icon: Icon }) => (
-                <div key={label} className="rounded-2xl border border-white/5 bg-white/5 p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-indigo-200/70">{label}</p>
-                      <p className="mt-3 text-2xl font-semibold text-slate-100">{value}</p>
-                    </div>
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900/60">
-                      <Icon className="h-5 w-5 text-indigo-100" />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid gap-8 lg:grid-cols-[auto,1fr]">
-              <div className="flex items-center justify-center">
-                <div className="relative h-32 w-32">
-                  <div className="absolute inset-0 rounded-full bg-slate-900/70" />
-                  <div
-                    className="relative flex h-full w-full items-center justify-center rounded-full p-1"
-                    style={{
-                      background: `conic-gradient(rgba(168,85,247,0.95) ${mintedProgress * 3.6}deg, rgba(30,41,59,0.35) 0deg)`,
-                    }}
-                  >
-                    <div className="flex h-full w-full items-center justify-center rounded-full bg-[#090d21]">
-                      <span className="text-2xl font-semibold text-purple-100">{mintedProgress}%</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-4 text-sm text-slate-200/80">
-                <div className="flex items-center justify-between">
-                  <span className="uppercase tracking-wide text-xs text-indigo-200/80">Minted Share</span>
-                  <span className="text-base font-semibold text-purple-100">{mintedCount} / {nfts.length}</span>
-                </div>
-                <p className="text-slate-300/70">
-                  Portion of your generated memes that have reached NFT status.
-                </p>
-                <div className="flex items-center justify-between pt-2">
-                  <span className="uppercase tracking-wide text-xs text-indigo-200/80">Marketplace Ready</span>
-                  <span className="text-base font-semibold text-indigo-100">{listedCount.toLocaleString()} listed</span>
-                </div>
-                <p className="text-slate-300/70">
-                  {listedCount === 0
-                    ? "None of your memes are currently listed for bidding."
-                    : "Your memes are live on the marketplace and ready for new collectors."}
-                </p>
-              </div>
             </div>
           </CardContent>
         </Card>
 
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Performance Overview */}
+          <Card className="border-primary/20 bg-gradient-to-br from-card/80 to-card/60 text-card-foreground shadow-lg shadow-primary/10">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-xl font-semibold text-card-foreground flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                Performance Overview
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Visual breakdown of your portfolio metrics
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Custom Bar Chart */}
+              <div className="space-y-4">
+                <div className="h-64 w-full">
+                  <svg viewBox="0 0 400 200" className="w-full h-full">
+                    {/* Grid lines */}
+                    <defs>
+                      <pattern id="grid" width="40" height="20" patternUnits="userSpaceOnUse">
+                        <path d="M 40 0 L 0 0 0 20" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.1"/>
+                      </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#grid)" />
+
+                    {/* Bars */}
+                    {[
+                      { label: 'ICP Earned', value: 0, max: 10, color: 'hsl(var(--primary))', icon: Coins },
+                      { label: 'Total Views', value: 0, max: 1000, color: 'hsl(var(--secondary))', icon: Sparkles },
+                      { label: 'Avg ICP/Vote', value: 0, max: 1, color: 'hsl(var(--accent))', icon: TrendingUp },
+                      { label: 'Listed %', value: 0, max: 100, color: 'hsl(45 86% 58%)', icon: ArrowUp }
+                    ].map((metric, index) => {
+                      const barHeight = (metric.value / metric.max) * 120;
+                      const x = 60 + index * 80;
+                      const y = 160 - barHeight;
+
+                      return (
+                        <g key={metric.label}>
+                          {/* Bar */}
+                          <rect
+                            x={x}
+                            y={y}
+                            width="40"
+                            height={barHeight}
+                            fill={metric.color}
+                            rx="4"
+                            className="transition-all duration-500 hover:opacity-80"
+                          />
+
+                          {/* Value label on top of bar */}
+                          <text
+                            x={x + 20}
+                            y={y - 8}
+                            textAnchor="middle"
+                            className="text-xs font-semibold fill-current"
+                          >
+                            {metric.label === 'ICP Earned' ? `${metric.value.toFixed(1)}` :
+                             metric.label === 'Total Views' ? `${(metric.value / 1000).toFixed(0)}K` :
+                             metric.label === 'Avg ICP/Vote' ? `${(metric.value / 1000).toFixed(2)}` :
+                             `${metric.value}%`}
+                          </text>
+
+                          {/* X-axis label */}
+                          <text
+                            x={x + 20}
+                            y={180}
+                            textAnchor="middle"
+                            className="text-xs fill-muted-foreground"
+                          >
+                            {metric.label.split(' ')[0]}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+
+                {/* Legend */}
+                <div className="flex flex-wrap justify-center gap-4 text-xs">
+                  {[
+                    { label: 'ICP Earned', color: 'bg-primary', icon: Coins },
+                    { label: 'Total Views', color: 'bg-secondary', icon: Sparkles },
+                    { label: 'Avg ICP/Vote', color: 'bg-accent', icon: TrendingUp },
+                    { label: 'Listed Share', color: 'bg-amber-500', icon: ArrowUp }
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center gap-1">
+                      <div className={`w-3 h-3 rounded ${item.color}`} />
+                      <span className="text-muted-foreground">{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Portfolio Progress */}
+          <Card className="border-secondary/20 bg-gradient-to-br from-card/80 to-card/60 text-card-foreground shadow-lg shadow-secondary/10">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-xl font-semibold text-card-foreground flex items-center gap-2">
+                <Crown className="h-5 w-5 text-secondary" />
+                Portfolio Progress
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Track your journey from creation to NFT
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Minting Progress */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-card-foreground">NFT Minting Progress</span>
+                  <span className="text-sm text-secondary font-semibold">{mintedProgress}%</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-gradient-to-r from-secondary to-accent h-2 rounded-full transition-all duration-500"
+                    style={{ width: `0%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  0 of 0 memes minted as NFTs
+                </p>
+              </div>
+
+              {/* Marketplace Progress */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-card-foreground">Marketplace Activity</span>
+                  <span className="text-sm text-primary font-semibold">{listedCount} listed</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-gradient-to-r from-primary to-accent h-2 rounded-full transition-all duration-500"
+                    style={{ width: `0%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  No memes currently listed for sale
+                </p>
+              </div>
+
+              {/* Quick Stats */}
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="text-center p-3 rounded-lg bg-muted/50">
+                  <p className="text-2xl font-bold text-primary">0</p>
+                  <p className="text-xs text-muted-foreground">Created</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-muted/50">
+                  <p className="text-2xl font-bold text-secondary">0</p>
+                  <p className="text-xs text-muted-foreground">Minted</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         <section className="space-y-10">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-100">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/20 text-primary-foreground">
                 <Sparkles className="h-6 w-6" />
               </div>
               <div>
-                <h2 className="text-2xl font-semibold text-slate-100">Generated Memes</h2>
-                <p className="text-sm text-indigo-200/70">
+                <h2 className="text-2xl font-semibold text-foreground">Generated Memes</h2>
+                <p className="text-sm text-foreground/80">
                   Keep your meme factory buzzing and convert momentum into NFTs.
                 </p>
               </div>
             </div>
-            <Button onClick={() => navigate("/myplace")} className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/20">
+            <Button onClick={() => navigate("/myplace")} className="bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg shadow-primary/20">
               <Sparkles className="mr-2 h-4 w-4" />
               Create new meme
             </Button>
@@ -721,13 +831,13 @@ const Portfolio = () => {
               ))}
             </div>
           ) : generatedMemes.length === 0 ? (
-            <Card className="border border-dashed border-indigo-400/40 bg-slate-900/40 py-16 text-center text-indigo-100">
+            <Card className="border border-dashed border-primary/40 bg-muted/40 py-16 text-center text-foreground">
               <CardContent>
                 <CardTitle className="text-xl">No generated memes yet</CardTitle>
-                <p className="mt-3 text-sm text-indigo-200/70">
+                <p className="mt-3 text-sm text-foreground/80">
                   Launch your first meme to start earning votes and collector attention.
                 </p>
-                <Button onClick={() => navigate("/myplace")} className="mt-6 bg-indigo-500 text-white">
+                <Button onClick={() => navigate("/myplace")} className="mt-6 bg-primary text-primary-foreground">
                   Start creating
                 </Button>
               </CardContent>
@@ -735,7 +845,7 @@ const Portfolio = () => {
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {generatedMemes.map((nft) => (
-                <Card key={nft.id} className="border border-indigo-500/20 bg-[#0c1128]/80 shadow-lg shadow-indigo-900/30">
+                <Card key={nft.id} className="border border-primary/20 bg-card shadow-lg shadow-primary/10">
                   <CardHeader>
                     <div className="flex items-start justify-between gap-4">
                       {nft.imageUrl ? (
@@ -745,17 +855,17 @@ const Portfolio = () => {
                           className="h-16 w-16 rounded-xl object-cover"
                         />
                       ) : (
-                        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-indigo-500/20 text-3xl">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary/20 text-3xl">
                           {nft.emoji}
                         </div>
                       )}
                       <div className="flex-1 space-y-1">
-                        <h3 className="text-lg font-semibold text-slate-100 line-clamp-2">{nft.title}</h3>
-                        <p className="text-xs uppercase tracking-wide text-indigo-200/70">#{nft.id}</p>
+                        <h3 className="text-lg font-semibold text-card-foreground line-clamp-2">{nft.title}</h3>
+                        <p className="text-xs uppercase tracking-wide text-primary/70">#{nft.id}</p>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-4 text-sm text-indigo-100/80">
+                  <CardContent className="space-y-4 text-sm text-foreground/80">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-xl bg-white/5 p-3">
                         <p className="text-xs uppercase tracking-wide text-indigo-200/70">Votes</p>
@@ -779,7 +889,7 @@ const Portfolio = () => {
                         variant="default"
                         size="sm"
                         onClick={() => handleSell(nft.id)}
-                        className="bg-gradient-to-r from-indigo-500 to-purple-500"
+                        className="bg-gradient-to-r from-primary to-secondary"
                       >
                         List for sale
                       </Button>
@@ -787,7 +897,7 @@ const Portfolio = () => {
                         variant="outline"
                         size="sm"
                         onClick={() => handleKeep(nft.id)}
-                        className="border-indigo-400/40 text-indigo-100 hover:bg-indigo-500/10"
+                        className="border-primary/40 text-foreground hover:bg-primary/10"
                       >
                         Keep earning
                       </Button>
@@ -802,17 +912,17 @@ const Portfolio = () => {
         <section className="space-y-10">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-500/20 text-purple-100">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary/20 text-secondary-foreground">
                 <Crown className="h-6 w-6" />
               </div>
               <div>
-                <h2 className="text-2xl font-semibold text-slate-100">Minted NFTs</h2>
-                <p className="text-sm text-indigo-200/70">
+                <h2 className="text-2xl font-semibold text-foreground">Minted NFTs</h2>
+                <p className="text-sm text-foreground/80">
                   Celebrate the memes that made it on-chain and keep an eye on collector interest.
                 </p>
               </div>
             </div>
-            <Button onClick={() => navigate("/marketplace")} className="bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/20">
+            <Button onClick={() => navigate("/marketplace")} className="bg-gradient-to-r from-secondary to-accent text-secondary-foreground shadow-lg shadow-secondary/20">
               Visit marketplace
             </Button>
           </div>
@@ -824,10 +934,10 @@ const Portfolio = () => {
               ))}
             </div>
           ) : mintedNFTs.length === 0 ? (
-            <Card className="border border-dashed border-purple-400/40 bg-slate-900/40 py-16 text-center text-purple-100">
+            <Card className="border border-dashed border-secondary/40 bg-muted/40 py-16 text-center text-secondary-foreground">
               <CardContent>
                 <CardTitle className="text-xl">No minted NFTs yet</CardTitle>
-                <p className="mt-3 text-sm text-purple-200/70">
+                <p className="mt-3 text-sm text-foreground/80">
                   Top-performing memes are automatically minted when they reach the spotlight.
                 </p>
               </CardContent>
@@ -835,7 +945,7 @@ const Portfolio = () => {
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {mintedNFTs.map((nft) => (
-                <Card key={nft.id} className="border border-purple-500/30 bg-[#140f2c]/80 shadow-lg shadow-purple-900/30">
+                <Card key={nft.id} className="border border-secondary/30 bg-card shadow-lg shadow-secondary/10">
                   <CardHeader>
                     <div className="flex items-start justify-between gap-4">
                       {nft.imageUrl ? (
@@ -845,17 +955,17 @@ const Portfolio = () => {
                           className="h-16 w-16 rounded-xl object-cover"
                         />
                       ) : (
-                        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-purple-500/20 text-3xl">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-secondary/20 text-3xl">
                           {nft.emoji}
                         </div>
                       )}
                       <div className="flex-1 space-y-1">
-                        <h3 className="text-lg font-semibold text-slate-100 line-clamp-2">{nft.title}</h3>
-                        <p className="text-xs uppercase tracking-wide text-purple-200/70">#{nft.id}</p>
+                        <h3 className="text-lg font-semibold text-card-foreground line-clamp-2">{nft.title}</h3>
+                        <p className="text-xs uppercase tracking-wide text-secondary/70">#{nft.id}</p>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-4 text-sm text-purple-100/80">
+                  <CardContent className="space-y-4 text-sm text-foreground/80">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-xl bg-white/5 p-3">
                         <p className="text-xs uppercase tracking-wide text-purple-200/70">Votes</p>
@@ -885,7 +995,7 @@ const Portfolio = () => {
                         variant="outline"
                         size="sm"
                         onClick={() => navigate("/marketplace")}
-                        className="border-purple-400/40 text-purple-100 hover:bg-purple-500/10"
+                        className="border-secondary/40 text-foreground hover:bg-secondary/10"
                       >
                         View on marketplace
                       </Button>
@@ -897,14 +1007,14 @@ const Portfolio = () => {
           )}
         </section>
 
-        <section className="space-y-6 rounded-3xl border border-indigo-500/20 bg-[#0d122c]/80 p-8 shadow-lg shadow-indigo-900/20">
+        <section className="space-y-6 rounded-3xl border border-primary/20 bg-card p-8 shadow-lg shadow-primary/10">
           <div className="flex flex-wrap items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-500/20 text-sky-100">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/20 text-accent-foreground">
               <MessageSquare className="h-6 w-6" />
             </div>
             <div>
-              <h2 className="text-2xl font-semibold text-slate-100">Share your feedback</h2>
-              <p className="text-sm text-indigo-200/70">
+              <h2 className="text-2xl font-semibold text-card-foreground">Share your feedback</h2>
+              <p className="text-sm text-foreground/80">
                 Help us shape the next wave of meme tools and creator features.
               </p>
             </div>
@@ -916,4 +1026,4 @@ const Portfolio = () => {
   );
 }
 
-export default Portfolio;
+export default Portfolio
