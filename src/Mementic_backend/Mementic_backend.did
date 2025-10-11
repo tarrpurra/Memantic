@@ -43,6 +43,7 @@ type MemeData = record {
   metadata : PythonMetadata;
   image_format : text;
   prompt : text;
+  caption : opt text;
   image_filename : text;
 };
 type MemeVotes = record {

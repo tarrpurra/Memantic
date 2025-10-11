@@ -133,6 +133,7 @@ impl Storable for DayUsage {
 #[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
 pub struct MemeData {
     pub prompt: String,
+    pub caption: Option<String>,
     pub image_url: String,
     pub image_filename: String,
     pub image_format: String,
@@ -176,6 +177,7 @@ impl Storable for StoredMeme {
             owner: StorablePrincipal(Principal::anonymous()),
             meme_data: MemeData {
                 prompt: String::new(),
+                caption: None,
                 image_url: String::new(),
                 image_filename: String::new(),
                 image_format: String::new(),
@@ -387,6 +389,7 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
 
                 MemeData {
                     prompt,
+                    caption: None,
                     image_url,
                     image_filename,
                     image_format,
@@ -445,6 +448,7 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
 
                         MemeData {
                             prompt,
+                            caption: None,
                             image_url,
                             image_filename,
                             image_format,
@@ -752,7 +756,34 @@ pub fn publish_meme(meme: MemeData) -> Result<PublicStoredMeme, String> {
 
     ic_cdk::println!("Publish meme - Authenticated user: {}", user.to_text());
     let now = time();
-    
+
+    let MemeData {
+        prompt,
+        caption,
+        image_url,
+        image_filename,
+        image_format,
+        metadata,
+    } = meme;
+
+    let sanitized_prompt = prompt.trim().to_string();
+    let sanitized_caption = caption
+        .and_then(|c| {
+            let trimmed = c.trim().to_string();
+            if trimmed.is_empty() { None } else { Some(trimmed) }
+        })
+        .ok_or_else(|| "Caption is required".to_string())?;
+
+    if sanitized_prompt.is_empty() {
+        ic_cdk::println!("Publish meme - Empty prompt detected");
+        return Err("Prompt cannot be empty".to_string());
+    }
+
+    let sanitized_url = image_url.trim().to_string();
+    if sanitized_url.is_empty() {
+        return Err("Image URL is required".to_string());
+    }
+
     // Allocate id
     let id = next_meme_id();
 
@@ -760,7 +791,14 @@ pub fn publish_meme(meme: MemeData) -> Result<PublicStoredMeme, String> {
     let stored = StoredMeme {
         id,
         owner: StorablePrincipal::from(user),
-        meme_data: meme,
+        meme_data: MemeData {
+            prompt: sanitized_prompt,
+            caption: Some(sanitized_caption),
+            image_url: sanitized_url,
+            image_filename: image_filename.trim().to_string(),
+            image_format: image_format.trim().to_string(),
+            metadata,
+        },
         created_at: now,            // when published
         canister_timestamp: now,    // canister-side write ts
         market_data: MarketData {
