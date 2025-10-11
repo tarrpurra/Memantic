@@ -564,18 +564,6 @@ export const MemeCard = ({
 
                 {/* Scrollable Content */}
                 <div className="flex-1 overflow-y-auto p-8">
-                  {/* Prompt */}
-                  {meme?.prompt && (
-                    <div className="mb-8">
-                      <h4 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">
-                        Prompt
-                      </h4>
-                      <p className="text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 leading-relaxed">
-                        {meme.prompt}
-                      </p>
-                    </div>
-                  )}
-
                   {/* Additional Info */}
                   <div className="space-y-4">
                     <h4 className="text-lg font-semibold text-gray-700 dark:text-gray-300">

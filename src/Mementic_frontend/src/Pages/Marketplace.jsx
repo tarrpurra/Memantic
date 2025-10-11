@@ -18,11 +18,9 @@ import {
   Crown,
   Filter,
   Search,
-  ArrowUp,
   Timer,
   User,
   Sparkles,
-  LogIn,
   Zap,
   X,
   Heart,
@@ -85,10 +83,26 @@ const stripBigInts = (obj) => {
   return obj;
 };
 
+const formatNumber = (value) => {
+  const n = Number(value) || 0;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  if (Number.isInteger(n)) return n.toString();
+  return n.toFixed(1);
+};
+
+const formatIcp = (value) => {
+  const n = Number(value) || 0;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  if (n >= 1) return n.toFixed(2);
+  return n.toFixed(4);
+};
+
 const normalizeMeme = (m, extra = {}) => {
   // Supports PublicStoredMeme { id, owner, meme_data{...}, created_at, ... }
   const md = m?.meme_data || m;
   const owner = m?.owner ?? md?.owner ?? m?.creator;
+  const unwrapOptional = (value) => (Array.isArray(value) ? value[0] : value);
 
   // Handle different vote structures
   const up = safeBigIntToNumber(
@@ -125,10 +139,29 @@ const normalizeMeme = (m, extra = {}) => {
     }
   }
 
+  const captionCandidate = unwrapOptional(md?.caption ?? m?.caption);
+  const safeCaption =
+    typeof captionCandidate === "string" && captionCandidate.trim().length > 0
+      ? captionCandidate.trim()
+      : "";
+
+  const promptText =
+    typeof md?.prompt === "string"
+      ? md.prompt
+      : typeof m?.prompt === "string"
+      ? m.prompt
+      : "";
+
   return {
     id: toSafeIdString(m?.id ?? m?.meme_id ?? m?._id ?? m?.uuid ?? Date.now()),
-    title: md?.title || md?.prompt || m?.title || m?.prompt || "Untitled Meme",
-    prompt: md?.prompt || m?.prompt || "",
+    title:
+      safeCaption ||
+      md?.title ||
+      m?.title ||
+      promptText ||
+      "Untitled Meme",
+    caption: safeCaption,
+    prompt: promptText,
     creator,
     image_url,
     votes: score,
@@ -298,8 +331,8 @@ function PreviewModal({
               <div className="space-y-4">
                 <div>
                   <h3 className="text-lg font-semibold mb-2">{meme.title}</h3>
-                  {meme.prompt && (
-                    <p className="text-sm text-muted-foreground">{meme.prompt}</p>
+                  {meme.caption && (
+                    <p className="text-sm text-muted-foreground">{meme.caption}</p>
                   )}
                 </div>
 
@@ -380,6 +413,7 @@ const Marketplace = () => {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sort, setSort] = useState("trending");
+  const [selectedCreator, setSelectedCreator] = useState("all");
   const [page, setPage] = useState(1);
 
   // Data State
@@ -529,15 +563,148 @@ const Marketplace = () => {
 
   // Filter memes based on search query
   const filteredMemes = useMemo(() => {
-    const base = ensureArray(memes);
+    let base = ensureArray(memes);
+    if (selectedCreator !== "all") {
+      base = base.filter((meme) => meme.creator === selectedCreator);
+    }
     if (!searchQuery.trim()) return base;
     const query = searchQuery.toLowerCase();
     return base.filter(
       (meme) =>
         (meme.title?.toLowerCase() ?? "").includes(query) ||
+        (meme.caption?.toLowerCase() ?? "").includes(query) ||
         (meme.prompt?.toLowerCase() ?? "").includes(query)
     );
-  }, [memes, searchQuery]);
+  }, [memes, searchQuery, selectedCreator]);
+
+  const totalVotes = useMemo(
+    () =>
+      ensureArray(memes).reduce(
+        (acc, meme) => acc + safeBigIntToNumber(meme?.votes || 0),
+        0
+      ),
+    [memes]
+  );
+
+  const totalViews = useMemo(
+    () =>
+      ensureArray(memes).reduce(
+        (acc, meme) => acc + safeBigIntToNumber(meme?.views || 0),
+        0
+      ),
+    [memes]
+  );
+
+  const listedCount = useMemo(
+    () => ensureArray(memes).filter((meme) => meme?.market_data?.is_listed).length,
+    [memes]
+  );
+
+  const uniqueCreators = useMemo(() => {
+    const creators = new Set();
+    ensureArray(memes).forEach((meme) => {
+      if (meme?.creator) creators.add(meme.creator);
+    });
+    return creators.size;
+  }, [memes]);
+
+  const creatorStats = useMemo(() => {
+    const stats = new Map();
+    ensureArray(memes).forEach((meme) => {
+      const creator = meme?.creator || "Anonymous";
+      if (!stats.has(creator)) {
+        stats.set(creator, { creator, count: 0, votes: 0 });
+      }
+      const entry = stats.get(creator);
+      entry.count += 1;
+      entry.votes += safeBigIntToNumber(meme?.votes || 0);
+    });
+    return Array.from(stats.values())
+      .sort((a, b) =>
+        b.votes !== a.votes ? b.votes - a.votes : b.count - a.count
+      )
+      .slice(0, 6);
+  }, [memes]);
+
+  const topTrending = useMemo(
+    () => ensureArray(topMemes).filter(Boolean).slice(0, 3),
+    [topMemes]
+  );
+
+  const shareOfTop = useMemo(() => {
+    if (!totalVotes || topTrending.length === 0) return 0;
+    const leadVotes = safeBigIntToNumber(topTrending[0]?.votes || 0);
+    return Math.round((leadVotes / totalVotes) * 100);
+  }, [topTrending, totalVotes]);
+
+  const recentMemes = useMemo(
+    () => ensureArray(memes).slice(0, 5),
+    [memes]
+  );
+
+  const priceRange = useMemo(() => {
+    const prices = ensureArray(memes)
+      .map((meme) => safeBigIntToNumber(meme?.market_data?.listing_price ?? 0))
+      .filter((price) => price > 0);
+    if (prices.length === 0) return null;
+    const minIcp = Math.min(...prices) / 1e8;
+    const maxIcp = Math.max(...prices) / 1e8;
+    return {
+      min: formatIcp(minIcp),
+      max: formatIcp(maxIcp),
+      count: prices.length,
+    };
+  }, [memes]);
+
+  const marketplaceTags = useMemo(() => {
+    const tags = [];
+    if (listedCount > 0) {
+      tags.push({ label: `${formatNumber(listedCount)} listed`, value: "listed" });
+    }
+    if (totalVotes > 0) {
+      tags.push({ label: `${formatNumber(totalVotes)} votes`, value: "votes" });
+    }
+    if (totalViews > 0) {
+      tags.push({ label: `${formatNumber(totalViews)} views`, value: "views" });
+    }
+    if (topTrending[0]) {
+      tags.push({ label: `Top: ${topTrending[0].title}`, value: topTrending[0].id });
+    }
+    return tags.slice(0, 4);
+  }, [listedCount, totalVotes, totalViews, topTrending]);
+
+  const sortOptions = useMemo(
+    () => [
+      {
+        value: "trending",
+        label: "Trending",
+        icon: TrendingUp,
+        meta: `${formatNumber(totalVotes)} votes`,
+      },
+      {
+        value: "newest",
+        label: "Newest",
+        icon: Sparkles,
+        meta: `${formatNumber(ensureArray(memes).length)} drops`,
+      },
+      {
+        value: "top",
+        label: "Top Voted",
+        icon: Crown,
+        meta: `${formatNumber(totalViews)} views`,
+      },
+      {
+        value: "listed",
+        label: "Listed",
+        icon: Coins,
+        meta: `${formatNumber(listedCount)} live`,
+      },
+    ],
+    [listedCount, memes, totalViews, totalVotes]
+  );
+
+  const selectedCreatorLabel =
+    selectedCreator === "all" ? "all creators" : selectedCreator;
 
   // Fetch Top 3
   useEffect(() => {
@@ -630,6 +797,7 @@ const Marketplace = () => {
                 id: "sample-1",
                 title: "Sample Meme 1",
                 prompt: "A funny sample meme",
+                caption: "Sample Meme 1",
                 owner: "SampleUser",
                 image_url: "",
                 votes: 5,
@@ -641,6 +809,7 @@ const Marketplace = () => {
                 id: "sample-2",
                 title: "Sample Meme 2",
                 prompt: "Another sample meme",
+                caption: "Sample Meme 2",
                 owner: "SampleUser2",
                 image_url: "",
                 votes: 3,
@@ -654,13 +823,39 @@ const Marketplace = () => {
         }
       }
 
-      // Sort: newest first, tie-breaker by votes (both numeric now)
-      arr.sort((a, b) => {
-        const dateDiff =
-          a.created_at === b.created_at ? 0 : b.created_at - a.created_at;
-        if (dateDiff !== 0) return dateDiff;
-        return (b.votes || 0) - (a.votes || 0);
-      });
+      const getCreatedAt = (meme) => safeBigIntToNumber(meme?.created_at || 0);
+      const getVotes = (meme) => safeBigIntToNumber(meme?.votes || 0);
+      const getViews = (meme) => safeBigIntToNumber(meme?.views || 0);
+
+      if (sort === "newest") {
+        arr.sort((a, b) => {
+          const dateDiff = getCreatedAt(b) - getCreatedAt(a);
+          if (dateDiff !== 0) return dateDiff;
+          return getVotes(b) - getVotes(a);
+        });
+      } else if (sort === "top") {
+        arr.sort((a, b) => {
+          const voteDiff = getVotes(b) - getVotes(a);
+          if (voteDiff !== 0) return voteDiff;
+          return getViews(b) - getViews(a);
+        });
+      } else if (sort === "listed") {
+        arr.sort((a, b) => {
+          const aListed = a?.market_data?.is_listed ? 1 : 0;
+          const bListed = b?.market_data?.is_listed ? 1 : 0;
+          if (aListed !== bListed) return bListed - aListed;
+          const voteDiff = getVotes(b) - getVotes(a);
+          if (voteDiff !== 0) return voteDiff;
+          return getCreatedAt(b) - getCreatedAt(a);
+        });
+      } else {
+        arr.sort((a, b) => {
+          const scoreA = getVotes(a) * 2 + getViews(a);
+          const scoreB = getVotes(b) * 2 + getViews(b);
+          if (scoreB !== scoreA) return scoreB - scoreA;
+          return getCreatedAt(b) - getCreatedAt(a);
+        });
+      }
 
       // Filter to current week only (cleanup old memes)
       const weekStart = getWeekStartIST();
@@ -1045,259 +1240,508 @@ const Marketplace = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[#050B1C] text-slate-100">
       <Navigation />
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Authentication Status Alert */}
-        {!isAuthenticated && !authLoading && (
-          <Card className="mb-6 border-yellow-500/20 bg-yellow-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <LogIn className="w-5 h-5 text-yellow-500" />
-                <div>
-                  <p className="text-sm font-medium">Want to participate?</p>
-                  <p className="text-xs text-muted-foreground">
-                    Login to vote on memes and create your own viral content
-                  </p>
-                </div>
-                <Button size="sm" onClick={() => navigate("/login")}>
-                  Login Now
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Search and Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder="Search memes..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-10"
-            />
+      <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-10 px-4 py-10 lg:px-6">
+        <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-100">
+              <Sparkles className="h-3 w-3" />
+              Weekly marketplace
+            </span>
+            <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+              Discover the memes steering culture this week
+            </h1>
+            <p className="max-w-xl text-sm text-slate-400">
+              Welcome back, {currentDisplayName}. Vote, collect, and champion the creations from {selectedCreatorLabel}.
+            </p>
           </div>
-          <Button variant="outline">
-            <Filter className="w-4 h-4 mr-2" />
-            Filters
-          </Button>
-        </div>
-
-        {/* Leaderboard Section */}
-        <Card className="mb-8 bg-gradient-glow border-primary/30">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-2xl">
-                <Crown className="w-6 h-6 text-yellow-500" />
-                Weekly Leaderboard
-              </CardTitle>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Timer className="w-4 h-4" />
-                <span>Contest ends in {timeLeft}</span>
-              </div>
+          <div className="w-full space-y-3 lg:max-w-md">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                placeholder="Search memes, creators, or themes..."
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                className="h-11 rounded-xl border-white/10 bg-white/5 pl-10 text-slate-100 placeholder:text-slate-500 focus-visible:border-primary/60"
+              />
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {ensureArray(topMemes).map((meme, index) => {
-                const rank = meme.rank || (index + 1);
-                const isTop3 = rank <= 3;
-                return (
-                  <div
-                    key={meme.id}
-                    className={`flex items-center gap-4 p-4 rounded-lg border ${
-                      rank === 1
-                        ? "bg-gradient-to-r from-yellow-500/10 to-yellow-600/10 border-yellow-500/30"
-                        : rank === 2
-                        ? "bg-gradient-to-r from-gray-400/10 to-gray-500/10 border-gray-400/30"
-                        : rank === 3
-                        ? "bg-gradient-to-r from-orange-500/10 to-orange-600/10 border-orange-500/30"
-                        : "bg-muted/50 border-border"
+            <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 shadow-inner shadow-primary/10">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-400">Voting resets in</p>
+                <p className="text-xl font-semibold text-white">{timeLeft}</p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleRefreshVotes}
+                className="flex items-center gap-2 rounded-xl border-primary/40 bg-primary/10 text-white hover:bg-primary/20"
+              >
+                <Timer className="h-4 w-4" />
+                Refresh votes
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <div className="grid gap-6 lg:grid-cols-[260px_1fr_320px]">
+        <aside className="space-y-6">
+          <Card className="border-white/10 bg-white/5 shadow-lg shadow-primary/10">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
+                <Filter className="h-4 w-4" />
+                Filtering
+              </CardTitle>
+              <p className="text-xs text-slate-400">
+                Tune the feed to match your vibe for this week's drop.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-3">
+                <p className="text-xs uppercase tracking-wide text-slate-400">Momentum</p>
+                <div className="space-y-2">
+                  {sortOptions.map((option) => {
+                    const Icon = option.icon;
+                    const isActive = sort === option.value;
+                    return (
+                      <Button
+                        key={option.value}
+                        variant="ghost"
+                        onClick={() => {
+                          setSort(option.value);
+                          setPage(1);
+                        }}
+                        className={`w-full justify-between rounded-xl border transition ${
+                          isActive
+                            ? "border-primary/60 bg-primary/80 text-white shadow-lg shadow-primary/40"
+                            : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
+                          {option.label}
+                        </span>
+                        <span className="text-xs text-slate-300">{option.meta}</span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-xs uppercase tracking-wide text-slate-400">Creator focus</p>
+                <div className="space-y-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setSelectedCreator("all");
+                      setPage(1);
+                    }}
+                    className={`w-full justify-between rounded-xl border ${
+                      selectedCreator === "all"
+                        ? "border-primary/60 bg-primary/70 text-white"
+                        : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
                     }`}
                   >
-                    {/* Rank Badge */}
-                    <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-lg ${
-                      rank === 1
-                        ? "bg-yellow-500 text-white"
-                        : rank === 2
-                        ? "bg-gray-400 text-white"
-                        : rank === 3
-                        ? "bg-orange-500 text-white"
-                        : "bg-muted text-muted-foreground"
-                    }`}>
-                      {rank === 1 ? "👑" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : rank}
-                    </div>
+                    <span className="flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      All creators
+                    </span>
+                    <span className="text-xs text-slate-300">{formatNumber(uniqueCreators)}</span>
+                  </Button>
+                  {creatorStats.map((creator) => (
+                    <Button
+                      key={creator.creator}
+                      variant="ghost"
+                      onClick={() => {
+                        setSelectedCreator(creator.creator);
+                        setPage(1);
+                      }}
+                      className={`w-full justify-between rounded-xl border ${
+                        selectedCreator === creator.creator
+                          ? "border-primary/60 bg-primary/70 text-white"
+                          : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <User className="h-4 w-4" />
+                        {creator.creator}
+                      </span>
+                      <span className="text-xs text-slate-300">
+                        {formatNumber(creator.votes)} votes
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
 
-                    {/* Image */}
-                    <div className="flex-shrink-0">
-                      {meme.image_url ? (
-                        <img
-                          src={meme.image_url}
-                          alt={meme.title}
-                          className="w-16 h-16 object-cover rounded-lg"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="w-16 h-16 flex items-center justify-center text-2xl bg-muted rounded-lg">
-                          {meme.emoji || "🖼️"}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-lg line-clamp-1">{meme.title}</h4>
-                      <p className="text-sm text-muted-foreground">
-                        by {meme.creator}
-                        {checkMemeOwnership(meme) && (
-                          <span className="ml-2 text-xs text-orange-600 font-medium">(You)</span>
-                        )}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(meme.created_at || Date.now()).toLocaleString("en-IN", {
-                          timeZone: "Asia/Kolkata",
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        })}
-                      </p>
-                      <div className="flex items-center gap-4 mt-1">
-                        <div className="flex items-center gap-1 text-sm">
-                          <Heart className="w-4 h-4 text-red-500" />
-                          <span className="text-red-500">{meme.votes}</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-sm">
-                          <Eye className="w-4 h-4 text-blue-500" />
-                          <span className="text-blue-500">{meme.views ?? 0}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Vote Button */}
-                    <div className="flex-shrink-0">
-                      <Button
-                        size="sm"
-                        variant={isAuthenticated ? "outline" : "ghost"}
-                        onClick={() => handleVote(meme.id, meme.votes, meme.creator)}
-                        disabled={!isAuthenticated || !hasProfileName || checkMemeOwnership(meme)}
-                        className={
-                          !isAuthenticated || checkMemeOwnership(meme)
-                            ? "opacity-50 cursor-not-allowed"
-                            : ""
-                        }
-                      >
-                        <ArrowUp className="w-4 h-4 mr-1" />
-                        {checkMemeOwnership(meme) ? "Yours" : "Vote"}
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* All Memes Grid */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold flex items-center gap-2">
-              <TrendingUp className="w-6 h-6" />
-              All Memes
-            </h2>
-            <div className="flex items-center gap-4">
-              {searchQuery ? (
-                <p className="text-sm text-muted-foreground">
-                  Found {ensureArray(filteredMemes).length} of {total} meme
-                  {ensureArray(filteredMemes).length !== 1 ? "s" : ""}
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {total} meme{total !== 1 ? "s" : ""} available
-                </p>
+              {priceRange && (
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Price range</p>
+                  <p className="text-sm text-slate-200">
+                    {priceRange.min} – {priceRange.max} ICP
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {formatNumber(priceRange.count)} listed memes this week
+                  </p>
+                </div>
               )}
-            </div>
-          </div>
-        </div>
 
-        {ensureArray(filteredMemes).length === 0 ? (
-          <Card className="text-center py-12">
-            <CardContent>
-              <Search className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-lg font-medium mb-2">No memes found</h3>
-              <p className="text-muted-foreground mb-4">
-                {searchQuery
-                  ? `No results for "${searchQuery}"`
-                  : "No memes available"}
-              </p>
-              {searchQuery && (
-                <Button variant="outline" onClick={() => setSearchQuery("")}>
-                  Clear Search
-                </Button>
+              {marketplaceTags.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Marketplace signals</p>
+                  <div className="flex flex-wrap gap-2">
+                    {marketplaceTags.map((tag) => (
+                      <span
+                        key={tag.value}
+                        className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs text-primary-100"
+                      >
+                        {tag.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {ensureArray(filteredMemes).filter(m => m).map((meme) => (
-              <MemeCard
-                key={meme.id}
-                meme={meme}
-                onVote={(id, votes) => handleVote(id, votes, meme.creator)}
-                onVoteSuccess={(id) => {
-                  // Optional: Could trigger additional actions after successful vote
-                  console.log(`Vote successful for meme ${id}`);
-                }}
-                isAuthenticated={isAuthenticated}
-                currentUserPrincipal={principal}
-                onOpenPreview={openPreview}
-              />
-            ))}
-          </div>
-        )}
+        </aside>
 
-        {/* Load More */}
-        {ensureArray(filteredMemes).length > 0 && canLoadMore && (
-          <div className="text-center mt-12">
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => setPage((p) => p + 1)}
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              Load More Memes
-            </Button>
-          </div>
-        )}
+        <main className="space-y-6">
+          <Card className="overflow-hidden border-white/10 bg-gradient-to-br from-primary/20 via-white/5 to-transparent">
+            <CardContent className="flex flex-col gap-6 p-6 lg:flex-row lg:items-center lg:p-8">
+              <div className="flex-1 space-y-4">
+                <div className="inline-flex items-center gap-2 text-sm text-primary-100">
+                  <Crown className="h-4 w-4" />
+                  Weekly leaders
+                </div>
+                <h2 className="text-2xl font-semibold text-white sm:text-3xl">
+                  {topTrending[0]?.title || "The leaderboard is warming up"}
+                </h2>
+                <p className="max-w-xl text-sm text-slate-200">
+                  {topTrending[0]
+                    ? `Holding ${formatNumber(topTrending[0]?.votes || 0)} votes and ${formatNumber(topTrending[0]?.views || 0)} views.`
+                    : "Publish your meme to claim the first spot on this week's board."}
+                </p>
+                <div className="flex flex-wrap gap-4 text-sm text-slate-200">
+                  <span className="flex items-center gap-2">
+                    <Heart className="h-4 w-4 text-pink-300" />
+                    {formatNumber(topTrending[0]?.votes || 0)} votes
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <Eye className="h-4 w-4 text-blue-300" />
+                    {formatNumber(topTrending[0]?.views || 0)} views
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-emerald-300" />
+                    {topTrending[0]?.creator || "—"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    onClick={() => topTrending[0] && openPreview(topTrending[0])}
+                    disabled={!topTrending[0]}
+                    className="rounded-xl bg-primary/80 px-5 text-white hover:bg-primary"
+                  >
+                    View meme
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleRefreshVotes}
+                    className="rounded-xl border-white/30 px-5 text-white hover:bg-white/10"
+                  >
+                    Refresh leaderboard
+                  </Button>
+                </div>
+              </div>
+              {topTrending[0]?.image_url && (
+                <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+                  <img
+                    src={topTrending[0].image_url}
+                    alt={topTrending[0].title}
+                    className="aspect-square w-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Create Your Own CTA */}
-        <Card className="mt-12 bg-gradient-card border-primary/30">
-          <CardContent className="text-center py-8">
-            <Zap className="w-12 h-12 mx-auto mb-4 text-primary" />
-            <h3 className="text-2xl font-bold mb-2">
-              Ready to Create Your Own?
-            </h3>
-            <p className="text-muted-foreground mb-6">
-              Join the community and start creating viral memes that earn votes
-            </p>
-            <Button size="lg" onClick={handleCreateMeme}>
-              {isAuthenticated ? "Start Creating" : "Login to Create"}
-            </Button>
-          </CardContent>
-        </Card>
+          <Card className="border-white/10 bg-white/5">
+            <CardHeader className="flex flex-col gap-1 pb-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-white">
+                  <TrendingUp className="h-5 w-5 text-primary-200" />
+                  Trending collections
+                </CardTitle>
+                <p className="text-xs text-slate-400">
+                  The most active drops across the community this week.
+                </p>
+              </div>
+              <span className="text-xs text-slate-400">
+                Share of weekly votes · {shareOfTop}% lead
+              </span>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-3">
+              {loadingTop
+                ? [...Array(3).keys()].map((index) => <SkeletonCard key={`leader-skeleton-${index}`} />)
+                : topTrending.length === 0
+                ? (
+                  <p className="col-span-full text-sm text-slate-400">
+                    Leaderboard data will appear once memes start receiving votes.
+                  </p>
+                )
+                : topTrending.map((meme, index) => (
+                  <button
+                    key={meme.id}
+                    type="button"
+                    onClick={() => openPreview(meme)}
+                    className="group rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-primary/50 hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                  >
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span>#{index + 1}</span>
+                      <span>
+                        {new Date(meme.created_at || Date.now()).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <h3 className="mt-2 line-clamp-2 text-base font-semibold text-white">
+                      {meme.title}
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-400">by {meme.creator}</p>
+                    <div className="mt-4 flex items-center gap-4 text-sm text-slate-200">
+                      <span className="flex items-center gap-1">
+                        <Heart className="h-4 w-4 text-pink-300" />
+                        {formatNumber(meme.votes || 0)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Eye className="h-4 w-4 text-blue-300" />
+                        {formatNumber(meme.views || 0)}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+            </CardContent>
+          </Card>
+
+          <Card className="border-white/10 bg-white/5">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-lg font-semibold text-white">
+                <TrendingUp className="h-5 w-5 text-primary-200" />
+                Marketplace feed
+              </CardTitle>
+              <p className="text-xs text-slate-400">
+                {searchQuery
+                  ? `Showing ${ensureArray(filteredMemes).length} result${ensureArray(filteredMemes).length === 1 ? "" : "s"} for “${searchQuery}”.`
+                  : `${total} meme${total === 1 ? "" : "s"} live for voting.`}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {errorMsg && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  {errorMsg}
+                </div>
+              )}
+
+              {loadingList && ensureArray(memes).length === 0 ? (
+                <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                  {[...Array(6).keys()].map((index) => (
+                    <SkeletonCard key={`feed-skeleton-${index}`} />
+                  ))}
+                </div>
+              ) : ensureArray(filteredMemes).length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 py-16 text-center">
+                  <Search className="h-10 w-10 text-slate-500" />
+                  <p className="mt-4 text-base font-semibold text-white">No memes found</p>
+                  <p className="mt-2 text-sm text-slate-400">
+                    {searchQuery
+                      ? "Try adjusting your search terms or filters."
+                      : "Be the first to publish a meme this week."}
+                  </p>
+                  {searchQuery && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setSearchQuery("")}
+                      className="mt-4 rounded-xl border-white/20 text-white hover:bg-white/10"
+                    >
+                      Clear search
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                  {ensureArray(filteredMemes)
+                    .filter(Boolean)
+                    .map((meme) => (
+                      <MemeCard
+                        key={meme.id}
+                        meme={meme}
+                        onVote={(id, votes) => handleVote(id, votes, meme.creator)}
+                        onVoteSuccess={() => undefined}
+                        isAuthenticated={isAuthenticated}
+                        currentUserPrincipal={principal}
+                        onOpenPreview={openPreview}
+                      />
+                    ))}
+                </div>
+              )}
+
+              {ensureArray(filteredMemes).length > 0 && canLoadMore && (
+                <div className="text-center">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() => setPage((prev) => prev + 1)}
+                    className="rounded-xl border-white/20 px-6 text-white hover:bg-white/10"
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Load more memes
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-primary/30 bg-gradient-to-r from-primary/30 to-primary/10">
+            <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
+              <Zap className="h-10 w-10 text-white" />
+              <h3 className="text-2xl font-semibold text-white">Launch your own drop</h3>
+              <p className="max-w-md text-sm text-slate-200">
+                Turn your ideas into meme culture and publish straight to the marketplace for this week’s competition.
+              </p>
+              <Button
+                size="lg"
+                onClick={handleCreateMeme}
+                className="rounded-xl bg-white px-6 text-primary hover:bg-slate-100"
+              >
+                {isAuthenticated ? "Open meme studio" : "Login to create"}
+              </Button>
+            </CardContent>
+          </Card>
+        </main>
+
+        <aside className="space-y-6">
+          <Card className="border-white/10 bg-white/5">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-semibold text-white">Market pulse</CardTitle>
+              <p className="text-xs text-slate-400">
+                Snapshot of this week's marketplace activity.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs text-slate-400">Memes</p>
+                  <p className="text-lg font-semibold text-white">{formatNumber(total)}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs text-slate-400">Active creators</p>
+                  <p className="text-lg font-semibold text-white">{formatNumber(uniqueCreators)}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs text-slate-400">Total votes</p>
+                  <p className="text-lg font-semibold text-white">{formatNumber(totalVotes)}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs text-slate-400">Total views</p>
+                  <p className="text-lg font-semibold text-white">{formatNumber(totalViews)}</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-gradient-to-r from-emerald-500/20 to-emerald-400/10 p-4 text-sm text-slate-200">
+                <p className="text-xs uppercase tracking-wide text-emerald-200">Top share</p>
+                <p className="mt-1 text-lg font-semibold text-white">{shareOfTop}% of weekly votes</p>
+                <p className="text-xs text-slate-300">
+                  {topTrending[0]
+                    ? `${topTrending[0].title} is leading the pack.`
+                    : "Awaiting the first leaderboard entry."}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-white/10 bg-white/5">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-semibold text-white">Featured collections</CardTitle>
+              <p className="text-xs text-slate-400">Curated highlights from the leaderboard.</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {topTrending.length === 0 ? (
+                <p className="text-sm text-slate-400">Publish a meme to see it featured here.</p>
+              ) : (
+                topTrending.map((meme) => (
+                  <div
+                    key={meme.id}
+                    className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3"
+                  >
+                    {meme.image_url ? (
+                      <img
+                        src={meme.image_url}
+                        alt={meme.title}
+                        className="h-12 w-12 rounded-lg object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/10 text-lg">
+                        {meme.emoji}
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <p className="line-clamp-1 text-sm font-semibold text-white">{meme.title}</p>
+                      <p className="text-xs text-slate-400">by {meme.creator}</p>
+                    </div>
+                    <div className="text-right text-xs text-slate-300">
+                      <div>{formatNumber(meme.votes || 0)} votes</div>
+                      <div>{formatNumber(meme.views || 0)} views</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-white/10 bg-white/5">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-semibold text-white">Recently added</CardTitle>
+              <p className="text-xs text-slate-400">Fresh drops from the community.</p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {recentMemes.length === 0 ? (
+                <p className="text-sm text-slate-400">Nothing yet—kick off the week with your meme.</p>
+              ) : (
+                recentMemes.map((meme) => (
+                  <button
+                    key={meme.id}
+                    type="button"
+                    onClick={() => openPreview(meme)}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-slate-200 transition hover:border-primary/40 hover:bg-primary/10"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="line-clamp-1 font-semibold text-white">{meme.title}</span>
+                      <span className="text-xs text-slate-400">
+                        {new Date(meme.created_at || Date.now()).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">by {meme.creator}</p>
+                  </button>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </aside>
       </div>
-
-      {/* Preview Modal */}
-      <PreviewModal
-        open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        meme={selectedMeme}
-        onLike={handleVote}
-        isAuthenticated={isAuthenticated}
-        isOwn={selectedMeme ? checkMemeOwnership(selectedMeme) : false}
-      />
     </div>
+
+    <PreviewModal
+      open={previewOpen}
+      onClose={() => setPreviewOpen(false)}
+      meme={selectedMeme}
+      onLike={handleVote}
+      isAuthenticated={isAuthenticated}
+      isOwn={selectedMeme ? checkMemeOwnership(selectedMeme) : false}
+    />
+  </div>
+
   );
 };
 

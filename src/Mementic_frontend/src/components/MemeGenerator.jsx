@@ -20,10 +20,19 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { useMemeGeneration } from "../hooks/useMemeGeneration";
 import backendService from "../services/backendService";
+import { useToast } from "../hooks/use-toast";
 
 
 // Enhanced Image Display Component
-const MemeImageDisplay = ({ generatedMeme, onClear, onPublish }) => {
+const MemeImageDisplay = ({
+  generatedMeme,
+  memeTitle,
+  onTitleChange,
+  onClear,
+  onPublish,
+  isPublishing,
+  canPublish,
+}) => {
   
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
@@ -112,45 +121,6 @@ const MemeImageDisplay = ({ generatedMeme, onClear, onPublish }) => {
     setImageUrl(`${imageUrl}${separator}t=${Date.now()}`);
   };
 
-  const handlePublish = async () => {
-    if (!generatedMeme) return;
-
-    try {
-      // Convert the generated meme data to the format expected by publish_meme
-      const memeData = {
-        prompt: generatedMeme.prompt,
-        image_url: generatedMeme.image_url,
-        image_filename: generatedMeme.image_filename || "generated_meme.jpg",
-        image_format: generatedMeme.image_format || "jpg",
-        metadata: generatedMeme.metadata || {
-          processing_time: 1.0,
-          timestamp: Date.now(),
-          file_size_bytes: 1024000,
-          service: "meme_generator"
-        }
-      };
-
-      // Publish the meme to marketplace
-      const publishedMeme = await backendService.publishMeme(memeData);
-
-      toast({
-        title: "Meme Published! 🎉",
-        description: "Your meme is now live in the marketplace and can receive votes!",
-      });
-
-      // Clear the generated meme after successful publishing
-      onClear();
-
-    } catch (error) {
-      console.error("Failed to publish meme:", error);
-      toast({
-        title: "Publishing Failed",
-        description: error.message || "Failed to publish meme to marketplace",
-        variant: "destructive",
-      });
-    }
-  };
-
   return (
     <div className="mt-6 p-4 border border-primary/20 rounded-lg bg-primary/5">
       <div className="flex items-center justify-between mb-3">
@@ -180,6 +150,22 @@ const MemeImageDisplay = ({ generatedMeme, onClear, onPublish }) => {
           <p className="text-sm text-muted-foreground bg-background/50 p-2 rounded border">
             {generatedMeme.prompt}
           </p>
+        </div>
+
+        {/* Title Input */}
+        <div>
+          <span className="text-sm font-medium">Meme Title:</span>
+          <Input
+            value={memeTitle}
+            onChange={(event) => onTitleChange(event.target.value)}
+            placeholder="Give your meme a name"
+            className="mt-2 bg-background/50 border-border"
+          />
+          {!memeTitle.trim() && (
+            <p className="mt-1 text-xs text-destructive">
+              Enter a title to publish this meme to the marketplace.
+            </p>
+          )}
         </div>
 
         {/* Image Display with Loading and Error States */}
@@ -312,10 +298,11 @@ const MemeImageDisplay = ({ generatedMeme, onClear, onPublish }) => {
             <Button
               variant="default"
               onClick={onPublish}
-              className="flex-1 bg-primary hover:bg-primary/90"
+              className="flex-1 bg-primary hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed"
+              disabled={!canPublish || isPublishing}
             >
               <span className="mr-2">🚀</span>
-              Publish to Marketplace
+              {isPublishing ? "Publishing..." : "Publish to Marketplace"}
             </Button>
           </div>
 
@@ -376,6 +363,10 @@ export const MemeGenerator = () => {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("");
   const [error, setError] = useState(null);
+  const [memeTitle, setMemeTitle] = useState("");
+  const [isPublishing, setIsPublishing] = useState(false);
+
+  const { toast } = useToast();
 
   // Wrap auth and meme generation hooks in error boundary
   let authContext, memeGenerationHook;
@@ -408,6 +399,27 @@ export const MemeGenerator = () => {
     remainingCalls,
   } = memeGenerationHook;
 
+  useEffect(() => {
+    if (!generatedMeme) {
+      setMemeTitle("");
+      return;
+    }
+
+    const suggestionSources = [
+      generatedMeme.caption,
+      generatedMeme.title,
+      generatedMeme.prompt,
+    ];
+
+    const suggestedTitle = suggestionSources
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .find((value) => value.length > 0);
+
+    if (suggestedTitle) {
+      setMemeTitle((prev) => (prev.trim() ? prev : suggestedTitle.slice(0, 80)));
+    }
+  }, [generatedMeme]);
+
   const handleGenerate = async (e) => {
     // Prevent any default form submission behavior
     e.preventDefault();
@@ -423,6 +435,81 @@ export const MemeGenerator = () => {
       setError(err.message);
     }
   };
+
+  const handleClearGeneratedMeme = () => {
+    clearGeneratedMeme();
+    setMemeTitle("");
+  };
+
+  const handlePublish = async () => {
+    if (!generatedMeme) {
+      return;
+    }
+
+    const title = memeTitle.trim();
+    if (!title) {
+      toast({
+        title: "Name your meme",
+        description: "Add a catchy title before publishing to the marketplace.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!generatedMeme.image_url) {
+      toast({
+        title: "Missing image",
+        description: "Generate an image before publishing your meme.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsPublishing(true);
+
+    try {
+      const metadata = generatedMeme.metadata || {
+        processing_time: 1.0,
+        timestamp: Math.floor(Date.now() / 1000),
+        file_size_bytes: 0,
+        service: "meme_generator",
+      };
+
+      const memeData = {
+        prompt: generatedMeme.prompt || prompt,
+        caption: title,
+        image_url: generatedMeme.image_url,
+        image_filename: generatedMeme.image_filename || "generated_meme.jpg",
+        image_format: generatedMeme.image_format || "jpg",
+        metadata: {
+          processing_time: Number(metadata.processing_time) || 1.0,
+          timestamp: Number(metadata.timestamp) || Math.floor(Date.now() / 1000),
+          file_size_bytes: Number(metadata.file_size_bytes) || 0,
+          service: metadata.service || "meme_generator",
+        },
+      };
+
+      await backendService.publishMeme(memeData);
+
+      toast({
+        title: "Meme Published! 🎉",
+        description: "Your meme is now live in the marketplace and can receive votes!",
+      });
+
+      handleClearGeneratedMeme();
+    } catch (error) {
+      console.error("Failed to publish meme:", error);
+      toast({
+        title: "Publishing Failed",
+        description: error?.message || "Failed to publish meme to marketplace",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const canPublishMeme = Boolean(memeTitle.trim()) && Boolean(generatedMeme?.image_url);
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
@@ -576,8 +663,12 @@ export const MemeGenerator = () => {
         {generatedMeme && (
           <MemeImageDisplay
             generatedMeme={generatedMeme}
-            onClear={clearGeneratedMeme}
+            memeTitle={memeTitle}
+            onTitleChange={setMemeTitle}
+            onClear={handleClearGeneratedMeme}
             onPublish={handlePublish}
+            isPublishing={isPublishing}
+            canPublish={canPublishMeme}
           />
         )}
       </CardContent>
