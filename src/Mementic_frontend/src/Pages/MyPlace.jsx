@@ -15,13 +15,14 @@ import {
   User,
   Sparkles,
   Image as ImageIcon,
-  ArrowLeft,
   Send,
+  ArrowLeft,
   Loader2,
   X
 } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { useMemeGeneration } from "../hooks/useMemeGeneration";
+import Navigation from "../components/Navigation";
 import backendService from "../services/backendService";
 
 const MyPlace = () => {
@@ -45,6 +46,9 @@ const MyPlace = () => {
     clearGeneratedMeme,
     remainingCalls,
   } = useMemeGeneration();
+
+  const normalizedRemainingCalls = Number.isFinite(remainingCalls) ? remainingCalls : 0;
+  const hasCalls = normalizedRemainingCalls > 0;
 
   // bump key whenever a new image_url appears
   useEffect(() => {
@@ -108,7 +112,7 @@ const MyPlace = () => {
       if (!generatedMeme || !generatedMeme.image_url) {
         toast({
           title: "No Meme to Post",
-          description: "Generate a meme first before posting to marketplace.",
+          description: "Generate a meme first before posting to pre-market place.",
           variant: "destructive",
         });
         return;
@@ -153,15 +157,15 @@ const MyPlace = () => {
       const created = await backendService.publishMeme(memeData);
 
       toast({
-        title: "Posted to Marketplace! 🚀",
+        title: "Posted to Pre-Market Place! 🚀",
         description: `Meme #${created?.id ?? ""} is now live for votes.`,
       });
-      navigate("/marketplace");
+      navigate("/pre-marketplace");
     } catch (error) {
       console.error("Failed to publish meme:", error);
       toast({
         title: "Publish Failed",
-        description: error?.message || "Could not post meme to marketplace",
+        description: error?.message || "Could not post meme to pre-market place",
         variant: "destructive",
       });
     }
@@ -189,44 +193,31 @@ const MyPlace = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate("/marketplace")}
-              aria-label="Go back to marketplace"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Sparkles className="w-6 h-6 text-primary" />
-                <h1 className="text-2xl font-bold">My Creative Space</h1>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                AI-Powered Meme Generation
-                {remainingCalls !== undefined && (
-                  <span className="ml-2 text-primary font-medium">
-                    • {remainingCalls} calls remaining
-                  </span>
-                )}
-              </p>
-            </div>
-          </div>
-          <div
-            className="px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-sm cursor-pointer hover:bg-secondary/80 transition-colors"
-            onClick={() => navigate("/portfolio")}
-          >
-            <User className="w-4 h-4 mr-2 inline" />
-            Portfolio
-          </div>
-        </div>
-      </div>
+      <Navigation />
 
       <div className="max-w-6xl mx-auto px-6 py-8">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Creator studio</h1>
+            <p className="text-sm text-muted-foreground">
+              Generate and publish memes with your daily AI call allotment.
+            </p>
+          </div>
+          <div
+            className={`flex items-center gap-3 rounded-full border px-4 py-2 text-sm font-medium ${
+              hasCalls
+                ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
+                : "border-amber-400/40 bg-amber-500/10 text-amber-100"
+            }`}
+            title="Remaining meme generation calls"
+          >
+            <Sparkles className="h-4 w-4" />
+            {hasCalls
+              ? `${normalizedRemainingCalls} call${normalizedRemainingCalls === 1 ? "" : "s"} left today`
+              : "No calls remaining today"}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           {/* Creation Panel */}
           <div className="space-y-8">
@@ -400,7 +391,7 @@ const MyPlace = () => {
                         onClick={handlePostToMarketplace}
                       >
                         <Send className="w-4 h-4 mr-2" />
-                        Post to Marketplace
+                        Post to Pre-Market Place
                       </Button>
                       <Button
                         variant="outline"
@@ -522,7 +513,7 @@ const MyPlace = () => {
               </Button>
               <Button variant="hero" onClick={handlePostToMarketplace}>
                 <Send className="w-4 h-4 mr-2" />
-                Post to Marketplace
+                Post to Pre-Market Place
               </Button>
             </div>
           </div>

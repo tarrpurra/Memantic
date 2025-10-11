@@ -11,6 +11,7 @@ import { Badge } from "../components/ui/Badge";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import Navigation from "../components/Navigation";
 import {
   TrendingUp,
   Coins,
@@ -28,6 +29,7 @@ import {
   EyeOff,
   Send,
   Copy,
+  Download,
 } from "lucide-react";
 
 const Wallet_Page = () => {
@@ -98,8 +100,10 @@ const Wallet_Page = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+      <Navigation />
+
+      {/* Page Header */}
+      <div className="border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">

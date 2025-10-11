@@ -217,6 +217,36 @@ class BackendService {
     this.isAuthenticated = false;
   }
 
+  async useExternalAgent(agent) {
+    if (!agent) {
+      throw new Error("An agent instance is required to use an external identity");
+    }
+
+    if (!idlFactory || !Id) {
+      throw new Error("Backend service not properly configured");
+    }
+
+    console.log("Attaching external agent to backend service");
+    this.agent = agent;
+    this.actor = Actor.createActor(idlFactory, {
+      agent,
+      canisterId: Id,
+    });
+    this.isAuthenticated = true;
+    this.initialized = true;
+  }
+
+  async resetToAnonymous() {
+    console.log("Resetting backend service to anonymous mode");
+    this.agent = null;
+    this.actor = null;
+    this.isAuthenticated = false;
+    this.initialized = false;
+    this.authClient = null;
+    this._initPromise = null;
+    return this.initialize();
+  }
+
   /* ============ AUTHENTICATION METHODS ============ */
 
   /**
@@ -420,7 +450,7 @@ class BackendService {
     return this._unwrapResult(result, "generate_meme failed");
   }
 
-  /**
+  /**c
     * Get user's memes
     */
   async getUserMemes() {
@@ -622,6 +652,40 @@ class BackendService {
       // Return default stats if the method fails
       return [0, 0, 0]; // [total_feedback, approved_count, approval_rate]
     }
+  }
+
+  /* ============ USER PROFILE METHODS ============ */
+
+  /**
+    * Update user profile
+    */
+  async updateUserProfile(username, displayName) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required to update profile");
+    }
+    const usernameOpt = username ? [username] : [];
+    const displayNameOpt = displayName ? [displayName] : [];
+    const result = await this._safeCall('update_user_profile', usernameOpt, displayNameOpt);
+    return this._unwrapResult(result, "update_user_profile failed");
+  }
+
+  /**
+    * Get user profile
+    */
+  async getUserProfile() {
+    if (!this.isAuthenticated) {
+      return null;
+    }
+    const result = await this._safeCall('get_user_profile');
+    return this._fromOpt(result);
+  }
+
+  /**
+    * Get user profile by principal
+    */
+  async getUserProfileByPrincipal(principal) {
+    const result = await this._safeCall('get_user_profile_by_principal', principal);
+    return this._fromOpt(result);
   }
 
   /* ============ UTILITY METHODS ============ */

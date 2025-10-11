@@ -1,5 +1,55 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { HttpAgent } from "@dfinity/agent";
+import { AuthClient } from "@dfinity/auth-client";
+import { useIdentityKit } from "@nfid/identitykit/react";
 import backendService from "../services/backendService";
+import { getAgentHost, getIdentityProvider, isDevMode } from "../config/environment";
+
+const AUTH_STORAGE_KEY = "mementic-auth-state";
+const isBrowser = typeof window !== "undefined";
+
+const readFromStorage = (key) => {
+  if (!isBrowser) return null;
+
+  try {
+    const fromLocal = window.localStorage.getItem(key);
+    if (fromLocal) {
+      return JSON.parse(fromLocal);
+    }
+
+    const fromSession = window.sessionStorage.getItem(key);
+    if (fromSession) {
+      return JSON.parse(fromSession);
+    }
+  } catch (error) {
+    console.warn("Failed to parse stored auth state:", error);
+  }
+
+  return null;
+};
+
+const writeToStorage = (key, value) => {
+  if (!isBrowser) return;
+
+  try {
+    if (value === null || value === undefined) {
+      window.localStorage.removeItem(key);
+      window.sessionStorage.removeItem(key);
+      return;
+    }
+
+    const serialized = JSON.stringify(value);
+    window.localStorage.setItem(key, serialized);
+    window.sessionStorage.setItem(key, serialized);
+  } catch (error) {
+    console.warn("Failed to persist auth state:", error);
+  }
+};
+
+const loadStoredAuthState = () => readFromStorage(AUTH_STORAGE_KEY);
+const persistAuthState = (value) => writeToStorage(AUTH_STORAGE_KEY, value);
+
+// User profiles are now stored in the backend
 
 const AuthContext = createContext();
 
@@ -12,205 +62,341 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
+  const { user, identity: nfidIdentity, connect: nfidConnect, disconnect: nfidDisconnect, isConnecting: nfidConnecting } = useIdentityKit();
+  const [authClient, setAuthClient] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [user, setUser] = useState(null);
-  const [remainingCalls, setRemainingCalls] = useState(0);
   const [principal, setPrincipal] = useState(null);
+  const [remainingCalls, setRemainingCalls] = useState(0);
+  const [username, setUsername] = useState("");
+  const [activeProvider, setActiveProvider] = useState(null); // "nfid" or "internet-identity"
 
-  // Initialize authentication on component mount
+  const loginProvider = activeProvider;
+
+  const attachIdentityToBackend = async (identity) => {
+    if (!identity) return;
+
+    const agent = new HttpAgent({ identity, host: getAgentHost() });
+
+    if (isDevMode()) {
+      try {
+        await agent.fetchRootKey();
+      } catch (error) {
+        console.warn("Failed to fetch root key for development:", error);
+      }
+    }
+
+    await backendService.useExternalAgent(agent);
+  };
+
+  const clearBackendAuth = async () => {
+    try {
+      await backendService.resetToAnonymous();
+    } catch (error) {
+      console.warn("Failed to reset backend authentication state:", error);
+    }
+  };
+
   useEffect(() => {
     const initAuth = async () => {
       try {
         setIsLoading(true);
-        console.log("Initializing authentication...");
 
-        // Initialize backend service (this will create AuthClient and check for stored identity)
-        await backendService.initialize();
+        // Initialize AuthClient for direct Internet Identity
+        const client = await AuthClient.create();
+        setAuthClient(client);
 
-        // Check authentication state from backend service
-        const isAuth = backendService.isUserAuthenticated();
-        console.log("Backend service authentication status:", isAuth);
+        // Check NFID first
+        if (nfidIdentity && user) {
+          const principalText = nfidIdentity.getPrincipal().toText();
+          const storedAuth = loadStoredAuthState();
+          const storedUsername =
+            storedAuth?.principal === principalText ? storedAuth.username || "" : "";
 
-        if (isAuth && backendService.authClient) {
-          const identity = backendService.authClient.getIdentity();
+          setIsAuthenticated(true);
+          setPrincipal(principalText);
+          setActiveProvider("nfid");
+          setUsername(storedUsername);
+
+          // Update backend service with NFID identity
+          await attachIdentityToBackend(nfidIdentity);
+
+          const resolvedUsername = await loadUserProfile(storedUsername);
+          persistAuthState({
+            principal: principalText,
+            username: resolvedUsername,
+            provider: "nfid",
+          });
+
+          await loadUserData();
+        }
+        // Check direct AuthClient
+        else if (await client.isAuthenticated()) {
+          const identity = client.getIdentity();
           const principalText = identity.getPrincipal().toText();
+          const storedAuth = loadStoredAuthState();
+          const storedUsername =
+            storedAuth?.principal === principalText ? storedAuth.username || "" : "";
 
-          if (principalText !== "2vxsx-fae") {
-            console.log("User authenticated with principal:", principalText);
-            setIsAuthenticated(true);
-            setPrincipal(principalText);
-            await loadUserData();
-          } else {
-            console.log("Anonymous principal detected, clearing authentication state");
-            setIsAuthenticated(false);
-            setPrincipal(null);
-          }
+          setIsAuthenticated(true);
+          setPrincipal(principalText);
+          setActiveProvider("internet-identity");
+          setUsername(storedUsername);
+
+          // Update backend service with identity
+          await attachIdentityToBackend(identity);
+
+          const resolvedUsername = await loadUserProfile(storedUsername);
+          persistAuthState({
+            principal: principalText,
+            username: resolvedUsername,
+            provider: "internet-identity",
+          });
+
+          await loadUserData();
         } else {
-          console.log("User not authenticated or AuthClient not ready");
           setIsAuthenticated(false);
           setPrincipal(null);
+          setUsername("");
+          setActiveProvider(null);
+          setRemainingCalls(0);
+          persistAuthState(null);
+          await clearBackendAuth();
         }
       } catch (error) {
         console.error("Failed to initialize authentication:", error);
         setIsAuthenticated(false);
         setPrincipal(null);
+        setUsername("");
+        setActiveProvider(null);
+        setRemainingCalls(0);
+        persistAuthState(null);
+        await clearBackendAuth();
       } finally {
         setIsLoading(false);
       }
     };
 
     initAuth();
-  }, []);
+  }, [nfidIdentity, user]);
 
-  // Load user data
   const loadUserData = async () => {
     try {
       const calls = await backendService.getRemainingCalls();
       setRemainingCalls(calls);
-
-      // You can add more user data loading here
-      // const userMemes = await backendService.getUserMemes();
-      // setUser({ remainingCalls: calls, memes: userMemes });
     } catch (error) {
       console.error("Failed to load user data:", error);
     }
   };
 
-  // Login function
-  const login = async () => {
+  const extractStoredUsername = (value) => {
+    if (!value) return "";
+
+    if (typeof value === "string") {
+      return value.trim();
+    }
+
+    if (Array.isArray(value)) {
+      const candidate = value.find((entry) => typeof entry === "string" && entry.trim().length > 0);
+      return candidate ? candidate.trim() : "";
+    }
+
+    if (typeof value === "object") {
+      const direct = value.username ?? value.displayName ?? value.display_name;
+      return extractStoredUsername(direct);
+    }
+
+    return "";
+  };
+
+  const loadUserProfile = async (fallbackUsername = "") => {
+    try {
+      const profile = await backendService.getUserProfile();
+      const profileUsername = extractStoredUsername(profile?.username ?? profile);
+      const nextUsername = profileUsername || extractStoredUsername(fallbackUsername) || "";
+
+      setUsername(nextUsername);
+      return nextUsername;
+    } catch (error) {
+      console.error("Failed to load user profile:", error);
+      const normalizedFallback = extractStoredUsername(fallbackUsername);
+      setUsername(normalizedFallback);
+      return normalizedFallback;
+    }
+  };
+
+  const loginWithNFID = async () => {
     try {
       setIsLoading(true);
-      console.log("Starting login process...");
-
-      const success = await backendService.login();
-
-      if (success && backendService.authClient) {
-        console.log("Login successful, setting authenticated state");
-
-        // Small delay to ensure authentication state is fully updated
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Get principal directly from AuthClient
-        const identity = backendService.authClient.getIdentity();
-        const principalText = identity.getPrincipal().toText();
-
-        console.log("Identity retrieved:", identity);
-        console.log("Principal text:", principalText);
-
-        if (principalText && principalText !== "2vxsx-fae") {
-          setIsAuthenticated(true);
-          setPrincipal(principalText);
-          console.log("Principal after login:", principalText);
-          await loadUserData();
-          return true;
-        } else {
-          console.log("Login resulted in anonymous or invalid principal:", principalText);
-          setIsAuthenticated(false);
-          setPrincipal(null);
-          return false;
-        }
-      } else {
-        console.log("Login failed or AuthClient not available");
-        setIsAuthenticated(false);
-        setPrincipal(null);
-        return false;
-      }
+      await nfidConnect();
+      // NFID will trigger the useEffect when identity/user changes
+      return true;
     } catch (error) {
-      console.error("Login failed:", error);
+      console.error("NFID login failed:", error);
       setIsAuthenticated(false);
       setPrincipal(null);
+      setUsername("");
+      setActiveProvider(null);
+      setRemainingCalls(0);
+      persistAuthState(null);
+      await clearBackendAuth();
       throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Logout function
-  const logout = async () => {
+  const loginWithInternetIdentity = async () => {
     try {
       setIsLoading(true);
-      console.log("Starting logout process...");
+      if (!authClient) {
+        throw new Error("Auth client not initialized");
+      }
 
-      await backendService.logout();
+      // AuthClient.login() opens a popup and returns a Promise that resolves when login is complete
+        await authClient.login({
+          identityProvider: getIdentityProvider(),
+        });
 
-      // Force clear all authentication state
-      setIsAuthenticated(false);
-      setUser(null);
-      setRemainingCalls(0);
-      setPrincipal(null);
+        // After successful login, update state
+        const identity = authClient.getIdentity();
+        const principalText = identity.getPrincipal().toText();
 
-      console.log("Logout completed successfully");
-      return true; // Return success
+        setIsAuthenticated(true);
+        setPrincipal(principalText);
+        setActiveProvider("internet-identity");
+
+        // Update backend service with identity
+        await attachIdentityToBackend(identity);
+
+        // Load user profile from backend
+        const resolvedUsername = await loadUserProfile();
+      persistAuthState({
+        principal: principalText,
+        username: resolvedUsername,
+        provider: "internet-identity",
+      });
+
+      await loadUserData();
+      return true;
     } catch (error) {
-      console.error("Logout failed:", error);
-      // Even if logout fails, clear the local state
+      console.error("Internet Identity login failed:", error);
       setIsAuthenticated(false);
-      setUser(null);
-      setRemainingCalls(0);
       setPrincipal(null);
-      return false; // Return failure
+      setUsername("");
+      setActiveProvider(null);
+      setRemainingCalls(0);
+      persistAuthState(null);
+      await clearBackendAuth();
+      throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Refresh user data
+  // Keep backward compatibility
+  const login = loginWithInternetIdentity;
+
+  const logout = async () => {
+    try {
+      setIsLoading(true);
+      if (activeProvider === "nfid") {
+        await nfidDisconnect();
+      } else if (activeProvider === "internet-identity" && authClient) {
+        await authClient.logout();
+      }
+    } catch (error) {
+      console.error("Logout failed:", error);
+    } finally {
+      await clearBackendAuth();
+      setIsAuthenticated(false);
+      setPrincipal(null);
+      setUsername("");
+      setActiveProvider(null);
+      setRemainingCalls(0);
+      persistAuthState(null);
+      setIsLoading(false);
+    }
+    return true;
+  };
+
+  const updateUsername = async (value) => {
+    const normalized = typeof value === "string" ? value.trim() : "";
+    try {
+      await backendService.updateUserProfile(normalized, null);
+      setUsername(normalized);
+      if (principal) {
+        persistAuthState({
+          principal,
+          username: normalized,
+          provider: activeProvider,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to update username:", error);
+      throw error;
+    }
+  };
+
   const refreshUserData = async () => {
     if (isAuthenticated) {
       await loadUserData();
     }
   };
 
-  // Debug authentication state
-  const debugAuth = async () => {
-    console.log("=== AUTH CONTEXT DEBUG ===");
-    console.log("Context state:", {
+  const debugAuth = () => {
+    const backendDebug = backendService.debugAuth();
+    const context = {
       isAuthenticated,
       isLoading,
       principal,
-      remainingCalls
-    });
-
-    // Debug backend service
-    const backendDebug = backendService.debugAuth();
-    console.log("Backend service debug:", backendDebug);
-
-    console.log("=== END CONTEXT DEBUG ===");
-    return {
-      context: { isAuthenticated, isLoading, principal, remainingCalls },
-      backend: backendDebug
+      remainingCalls,
+      loginProvider,
+      username,
     };
+
+    console.log("=== AUTH CONTEXT DEBUG ===");
+    console.log("Context state:", context);
+    console.log("Backend service debug:", backendDebug);
+    console.log("=== END CONTEXT DEBUG ===");
+
+    return { context, backend: backendDebug };
   };
 
-  // Force clear authentication data (for debugging/testing)
   const forceClearAuth = async () => {
     try {
-      console.log("Force clearing authentication data...");
-
-      // Clear localStorage
       const localKeys = Object.keys(localStorage);
-      localKeys.forEach(key => {
-        if (key.includes('internet_identity') || key.includes('authClient') || key.includes('delegation')) {
+      localKeys.forEach((key) => {
+        if (
+          key.includes("internet_identity") ||
+          key.includes("authClient") ||
+          key.includes("delegation")
+        ) {
           localStorage.removeItem(key);
         }
       });
 
-      // Clear sessionStorage
       const sessionKeys = Object.keys(sessionStorage);
-      sessionKeys.forEach(key => {
-        if (key.includes('internet_identity') || key.includes('authClient') || key.includes('delegation')) {
+      sessionKeys.forEach((key) => {
+        if (
+          key.includes("internet_identity") ||
+          key.includes("authClient") ||
+          key.includes("delegation")
+        ) {
           sessionStorage.removeItem(key);
         }
       });
 
-      // Reset state
-      setIsAuthenticated(false);
-      setUser(null);
-      setRemainingCalls(0);
-      setPrincipal(null);
+      if (isBrowser) {
+        window.localStorage.removeItem(AUTH_STORAGE_KEY);
+        window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+      }
 
-      console.log("Authentication data cleared");
+      setIsAuthenticated(false);
+      setPrincipal(null);
+      setUsername("");
+      setRemainingCalls(0);
+      await clearBackendAuth();
       return true;
     } catch (error) {
       console.error("Failed to clear auth data:", error);
@@ -221,12 +407,16 @@ export const AuthProvider = ({ children }) => {
   const value = {
     isAuthenticated,
     isLoading,
-    user,
-    remainingCalls,
     principal,
+    remainingCalls,
+    loginProvider,
+    username,
     login,
+    loginWithNFID,
+    loginWithInternetIdentity,
     logout,
     refreshUserData,
+    updateUsername,
     debugAuth,
     forceClearAuth,
     backendService,

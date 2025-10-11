@@ -43,6 +43,7 @@ type MemeData = record {
   metadata : PythonMetadata;
   image_format : text;
   prompt : text;
+  caption : opt text;
   image_filename : text;
 };
 type MemeVotes = record {
@@ -103,6 +104,13 @@ type TopEntry = record {
   downvotes : nat32;
 };
 type TransformArgs = record { context : blob; response : HttpResponse };
+type UserProfile = record {
+  updated_at : nat64;
+  "principal" : principal;
+  username : opt text;
+  created_at : nat64;
+  display_name : opt text;
+};
 type VoteRecord = record { vote_type : VoteType; timestamp : nat64 };
 type VoteResponse = record {
   new_vote_count : nat32;
@@ -146,6 +154,7 @@ service : (opt InitArgs) -> {
   get_all_feedback : () -> (vec Feedback) query;
   // List all memes for marketplace (newest first)
   get_all_memes : () -> (vec PublicStoredMeme) query;
+  get_all_user_profiles : () -> (vec UserProfile) query;
   // Get all approved feedback for public display
   get_approved_feedback : (opt nat32) -> (vec Feedback) query;
   // Completed weeks
@@ -170,6 +179,8 @@ service : (opt InitArgs) -> {
   get_total_users : () -> (nat64) query;
   get_user_meme_count : () -> (nat32) query;
   get_user_memes : () -> (vec PublicStoredMeme) query;
+  get_user_profile : () -> (opt UserProfile) query;
+  get_user_profile_by_principal : (principal) -> (opt UserProfile) query;
   // Did caller vote on meme?
   get_user_vote : (nat64) -> (opt VoteRecord) query;
   // Leaderboard for any week id. Returns None if week not found.
@@ -202,6 +213,7 @@ service : (opt InitArgs) -> {
   // Submit feedback from a user
   submit_feedback : (text, text, text, text, bool) -> (Result);
   transform : (TransformArgs) -> (HttpResponse) query;
+  update_user_profile : (opt text, opt text) -> (Result_2);
   // Cast or change a vote on a meme in the **current active week**.
   // Rejects if meme is not from current week or if the week is completed/expired.
   vote_meme : (nat64, VoteType) -> (Result_6);

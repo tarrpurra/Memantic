@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../components/ui/Button";
 import {
   Card,
@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/Card";
+import { Input } from "../components/ui/Input";
 import {
   TrendingUp,
   Coins,
@@ -17,9 +18,10 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "../hooks/use-toast";
 import { FeedbackForm } from "../components/FeedbackForm";
+import Navigation from "../components/Navigation";
 
 import backendService from "../services/backendService";
 
@@ -75,20 +77,43 @@ const SkeletonTile = () => (
 
 const Portfolio = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const {
     principal,
+    username,
     logout,
     isAuthenticated,
     isLoading: authLoading,
+    updateUsername,
   } = useAuth();
 
+  const locationState = location.state ?? {};
+  const requestedFrom = locationState?.from;
+  const requireUsername = Boolean(locationState?.requireUsername);
+
+  const sanitizedUsername = typeof username === "string" ? username.trim() : "";
+  const hasUsername = sanitizedUsername.length > 0;
 
   const [loading, setLoading] = useState(true);
   const [nfts, setNfts] = useState([]);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
+  const [usernameInput, setUsernameInput] = useState(sanitizedUsername);
+  const [usernameError, setUsernameError] = useState("");
+  const [usernameSaved, setUsernameSaved] = useState(false);
+  const [savingUsername, setSavingUsername] = useState(false);
+  const [showUsernameEditor, setShowUsernameEditor] = useState(!hasUsername || requireUsername);
+
+  const redirectAfterSaveRef = useRef(requestedFrom || null);
+
+  const displayName =
+    sanitizedUsername || (principal ? `${principal.slice(0, 8)}...${principal.slice(-6)}` : "Not logged in");
+  const displayTitle = sanitizedUsername || principal || "";
+  const principalPreview = principal
+    ? `${principal.slice(0, 8)}...${principal.slice(-6)}`
+    : "";
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -96,6 +121,86 @@ const Portfolio = () => {
       navigate("/login");
     }
   }, [isAuthenticated, authLoading, navigate]);
+
+  useEffect(() => {
+    setUsernameInput(sanitizedUsername);
+    if (sanitizedUsername) {
+      setShowUsernameEditor(false);
+    }
+  }, [sanitizedUsername]);
+
+  useEffect(() => {
+    if (requestedFrom) {
+      redirectAfterSaveRef.current = requestedFrom;
+    }
+  }, [requestedFrom]);
+
+  useEffect(() => {
+    if (!requireUsername) return;
+
+    setShowUsernameEditor(true);
+    if (requestedFrom) {
+      redirectAfterSaveRef.current = requestedFrom;
+    }
+
+    navigate(location.pathname, {
+      replace: true,
+      state: requestedFrom ? { from: requestedFrom } : undefined,
+    });
+  }, [requireUsername, requestedFrom, location.pathname, navigate]);
+
+  const handleEditUsername = () => {
+    setShowUsernameEditor(true);
+    setUsernameSaved(false);
+    setUsernameError("");
+    setUsernameInput(sanitizedUsername);
+  };
+
+  const handleCancelUsername = () => {
+    setShowUsernameEditor(false);
+    setUsernameError("");
+    setUsernameInput(sanitizedUsername);
+  };
+
+  const handleUsernameSubmit = async (event) => {
+    event.preventDefault();
+    const trimmed = typeof usernameInput === "string" ? usernameInput.trim() : "";
+
+    if (trimmed.length < 3) {
+      setUsernameError("Username must be at least 3 characters long.");
+      return;
+    }
+
+    if (trimmed.length > 32) {
+      setUsernameError("Username must be 32 characters or fewer.");
+      return;
+    }
+
+    try {
+      setSavingUsername(true);
+      await updateUsername(trimmed);
+      setUsernameSaved(true);
+      setShowUsernameEditor(false);
+      setUsernameError("");
+      toast({
+        title: "Profile updated",
+        description: "Your username is live across the marketplace and creator studio.",
+      });
+
+      const target = redirectAfterSaveRef.current;
+      if (target) {
+        redirectAfterSaveRef.current = null;
+        setTimeout(() => {
+          navigate(target, { replace: true });
+        }, 400);
+      }
+    } catch (error) {
+      console.error("Failed to update username:", error);
+      setUsernameError("Failed to save username. Please try again.");
+    } finally {
+      setSavingUsername(false);
+    }
+  };
 
   // Safely unwrap candid optionals that arrive as [] | [value]
   function unopt(v) {
@@ -425,8 +530,10 @@ const Portfolio = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-gradient-to-r from-background via-card/50 to-background backdrop-blur-sm sticky top-0 z-10">
+      <Navigation />
+
+      {/* Page Header */}
+      <div className="border-b border-border bg-gradient-to-r from-background via-card/50 to-background backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-6">
@@ -460,12 +567,10 @@ const Portfolio = () => {
               <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-muted/20 rounded-lg">
                 <User className="w-4 h-4 text-muted-foreground" />
                 <span
-                  className="text-sm font-mono text-muted-foreground"
-                  title={principal || ""}
+                  className="text-sm font-medium text-muted-foreground"
+                  title={displayTitle}
                 >
-                  {principal
-                    ? `${principal.slice(0, 8)}...${principal.slice(-6)}`
-                    : "Not logged in"}
+                  {displayName}
                 </span>
               </div>
 
@@ -524,10 +629,8 @@ const Portfolio = () => {
                 <User className="w-5 h-5 text-muted-foreground" />
                 <div>
                   <p className="text-sm font-medium">Logged in as:</p>
-                  <p className="text-xs font-mono text-muted-foreground">
-                    {principal
-                      ? `${principal.slice(0, 8)}...${principal.slice(-6)}`
-                      : "Not logged in"}
+                  <p className="text-xs text-muted-foreground" title={displayTitle}>
+                    {displayName}
                   </p>
                 </div>
               </div>
@@ -550,6 +653,98 @@ const Portfolio = () => {
             <CardContent className="p-4 text-sm">{error}</CardContent>
           </Card>
         )}
+
+        <Card
+          className={`mb-8 backdrop-blur-sm ${
+            hasUsername ? "border-border/60 bg-background/80" : "border-primary/40 bg-primary/5"
+          }`}
+        >
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="text-xl">Creator profile</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Set your public username once and we’ll show it across the marketplace, auctions, and studio.
+              </p>
+            </div>
+            {hasUsername && !showUsernameEditor && (
+              <Button variant="ghost" size="sm" onClick={handleEditUsername}>
+                Change username
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                  Public username
+                </p>
+                <p className="text-lg font-semibold text-foreground">
+                  {hasUsername ? sanitizedUsername : "Not set"}
+                </p>
+                {principal && (
+                  <p className="mt-2 text-xs text-muted-foreground" title={principal}>
+                    Principal: {principalPreview}
+                  </p>
+                )}
+              </div>
+              {usernameSaved && !showUsernameEditor && (
+                <div className="rounded-md border border-emerald-400/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200">
+                  Username updated successfully.
+                </div>
+              )}
+            </div>
+
+            {showUsernameEditor ? (
+              <form onSubmit={handleUsernameSubmit} className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <User className="h-4 w-4 text-primary" />
+                  <span>Choose how you appear to other creators</span>
+                </div>
+                <Input
+                  value={usernameInput}
+                  onChange={(event) => {
+                    setUsernameInput(event.target.value);
+                    setUsernameError("");
+                    setUsernameSaved(false);
+                  }}
+                  placeholder="e.g. MemeMaestro"
+                  maxLength={32}
+                  disabled={savingUsername}
+                />
+                {usernameError && <p className="text-xs text-destructive">{usernameError}</p>}
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button type="submit" disabled={savingUsername} className="sm:flex-1">
+                    {savingUsername ? "Saving…" : "Save username"}
+                  </Button>
+                  {hasUsername && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="sm:flex-1"
+                      onClick={handleCancelUsername}
+                      disabled={savingUsername}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </form>
+            ) : (
+              <div className="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                <p>
+                  {hasUsername
+                    ? "Your username is visible everywhere instead of your principal."
+                    : "Pick a username so your principal stays private."}
+                </p>
+                {!hasUsername && (
+                  <Button size="sm" onClick={handleEditUsername}>
+                    Add username
+                  </Button>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Stats Overview */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-6 mb-8">

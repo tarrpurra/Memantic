@@ -9,10 +9,15 @@ import MyPlace from "./Pages/MyPlace";
 import Marketplace from "./Pages/Marketplace";
 import Portfolio from "./Pages/Portfolio";
 import Wallet_Page from "./Pages/Wallet";
+import PreMarketplace from "./Pages/PreMarketplace";
+import Auction from "./Pages/Auction";
+import MemeNFTPlace from "./Pages/MemeNFTPlace";
 import NotFound from "./Pages/NotFound";
 import { ToastContainer } from "./components/Toast";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
+import "@nfid/identitykit/react/styles.css";
+import { IdentityKitProvider } from "@nfid/identitykit/react";
 
 // Component to display toasts
 const ToastDisplay = () => {
@@ -21,33 +26,31 @@ const ToastDisplay = () => {
 };
 
 function App() {
-  // const [greeting, setGreeting] = useState('');
-
-  // function handleSubmit(event) {
-  //   event.preventDefault();
-  //   const name = event.target.value;
-  //   Mementic_backend.greet(name).then((greeting) => {
-  //     setGreeting(greeting);
-  //   });
-  //   return false;
-  // }
 
   return (
     <ToastProvider>
-      <AuthProvider>
-        <ToastDisplay />
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/landing" element={<Landing />} />
-          <Route path="/myplace" element={<MyPlace />} />
-          <Route path="/marketplace" element={<Marketplace />} />
-          <Route path="/portfolio" element={<Portfolio />} />
-          <Route path="/wallet" element={<Wallet_Page />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </AuthProvider>
+      <IdentityKitProvider
+        signerClientOptions={{
+          targets: ["uxrrr-q7777-77774-qaaaq-cai"] // **IMPORTANT**: these are *your* canisters, not ledger canisters
+        }}>
+        <AuthProvider>
+          <ToastDisplay />
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/landing" element={<Landing />} />
+            <Route path="/myplace" element={<MyPlace />} />
+            <Route path="/pre-marketplace" element={<Marketplace />} />
+            <Route path="/marketplace" element={<PreMarketplace />} />
+            <Route path="/auction" element={<Auction />} />
+            <Route path="/meme-nft" element={<MemeNFTPlace />} />
+            <Route path="/portfolio" element={<Portfolio />} />
+            <Route path="/wallet" element={<Wallet_Page />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
+      </IdentityKitProvider>
     </ToastProvider>
   );
 }

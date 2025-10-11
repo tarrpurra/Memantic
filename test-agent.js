@@ -10,7 +10,7 @@ const isDevMode = () => {
     return window.location.hostname.includes('localhost') ||
            window.location.hostname === '127.0.0.1';
   }
-  return process.env.NODE_ENV !== 'production' ||
+  return process.env.NODE_ENV !== 'development' ||
          process.env.VITE_NETWORK === 'local';
 };
 

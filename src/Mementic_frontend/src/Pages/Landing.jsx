@@ -1,4 +1,13 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import {
+  Trophy,
+  ShieldCheck,
+  Wand2,
+  Flame,
+  Sparkles
+} from "lucide-react";
 import { Button } from "../components/ui/Button";
 import {
   Card,
@@ -6,588 +15,266 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/Card";
-import { useNavigate } from "react-router-dom";
+import Navigation from "../components/Navigation";
 import { useAuth } from "../contexts/AuthContext";
-import { Sparkles, MessageSquare, Heart, RefreshCw, TrendingUp, Zap, ChevronLeft, ChevronRight } from "lucide-react";
 import backendService from "../services/backendService";
+
+
+const ACTION_CARDS = [
+  {
+    title: "Create",
+    description:
+      "Compose with AI prompts, remix templates, and spark meme magic.",
+    icon: Wand2,
+    href: "/myplace",
+    accent: "from-purple-500/60 to-cyan-400/50",
+  },
+  {
+    title: "Compete",
+    description:
+      "Join weekly brackets, earn votes, and climb the on-chain leaderboard.",
+    icon: Trophy,
+    href: "/pre-marketplace",
+    accent: "from-cyan-400/50 to-sky-400/40",
+  },
+  {
+    title: "Own",
+    description:
+      "Mint as NFTs, stake ICP, and list in the marketplace you control.",
+    icon: ShieldCheck,
+    href: "/pre-marketplace",
+    accent: "from-sky-400/40 to-purple-500/50",
+  },
+];
+
+const formatNumber = (value) => {
+  const numeric = Number(value || 0);
+  return new Intl.NumberFormat("en-US", {
+    notation: numeric >= 1000 ? "compact" : "standard",
+    maximumFractionDigits: numeric >= 1000 ? 1 : 0,
+  }).format(numeric);
+};
+
+const formatDisplayName = (name, principal) => {
+  const value = (typeof name === 'string' ? name.trim() : '') || principal;
+  if (!value) return "Creator";
+  if (value.length <= 12) return value;
+  return `${value.slice(0, 5)}…${value.slice(-3)}`;
+};
 
 const Landing = () => {
   const navigate = useNavigate();
-  const { principal, isLoading, isAuthenticated } = useAuth();
+  const { isAuthenticated, principal, username } = useAuth();
 
-  const [feedback, setFeedback] = useState([]);
-  const [feedbackStats, setFeedbackStats] = useState({ total: 0, approved: 0, returnRate: 0 });
-  const [loadingFeedback, setLoadingFeedback] = useState(true);
-  const [stats, setStats] = useState({
-    users: 0,
-    memes: 0,
-    reviews: 0
-  });
-  const [loadingStats, setLoadingStats] = useState(true);
-  const [currentFeedbackIndex, setCurrentFeedbackIndex] = useState(0);
+  const [globalStats, setGlobalStats] = useState({ memesCreated: 12 });
+  const [globalLoading, setGlobalLoading] = useState(true);
 
-  const handleCreateClick = () => {
-    if (!isAuthenticated) {
-      navigate("/login");
-    } else {
-      navigate("/myplace");
-    }
-  };
-
-  const nextFeedback = () => {
-    setCurrentFeedbackIndex((prev) =>
-      prev < feedback.length - 1 ? prev + 1 : 0
-    );
-  };
-
-  const prevFeedback = () => {
-    setCurrentFeedbackIndex((prev) =>
-      prev > 0 ? prev - 1 : feedback.length - 1
-    );
-  };
-
-  // Fetch feedback data
   useEffect(() => {
-    const fetchFeedback = async () => {
+    let isMounted = true;
+
+    const fetchGlobalStats = async () => {
       try {
-        setLoadingFeedback(true);
-        console.log("Fetching real feedback data from backend...");
+        setGlobalLoading(true);
+        await backendService.ensureReady();
+        const totalMemes = await backendService.getTotalMemes();
 
-        const [feedbackData, statsData] = await Promise.all([
-          backendService.getAllFeedback(), // Get all feedback
-          backendService.getFeedbackStats()
-        ]);
-
-        console.log("Feedback data received:", {
-          feedbackCount: feedbackData?.length || 0,
-          feedbackStats: statsData
-        });
-
-        setFeedback(feedbackData || []);
-        setFeedbackStats({
-          total: statsData?.[0] || 0,
-          approved: statsData?.[1] || 0,
-          returnRate: Math.round(statsData?.[2] || 0)
-        });
-
-        console.log("Feedback state updated successfully");
+        if (!isMounted) return;
+        setGlobalStats({ memesCreated: Number(totalMemes) || 0 });
       } catch (error) {
-        console.error("Failed to fetch real feedback from backend:", error);
-        // Use fallback data
-        setFeedback([]);
-        setFeedbackStats({ total: 0, approved: 0, returnRate: 0 });
+        console.warn(
+          "Failed to fetch total memes, falling back to placeholder",
+          error
+        );
+        if (isMounted) {
+          setGlobalStats((prev) => ({ ...prev }));
+        }
       } finally {
-        setLoadingFeedback(false);
+        if (isMounted) {
+          setGlobalLoading(false);
+        }
       }
     };
 
-    fetchFeedback();
+    fetchGlobalStats();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  // Check for feedback submission trigger and refresh data
-  useEffect(() => {
-    const checkForFeedbackUpdate = () => {
-      const feedbackSubmitted = localStorage.getItem('feedbackSubmitted');
-      if (feedbackSubmitted) {
-        console.log("Feedback was submitted, refreshing landing page data...");
-        // Clear the flag
-        localStorage.removeItem('feedbackSubmitted');
 
-        // Refresh feedback data
-        const refreshData = async () => {
-          try {
-            setLoadingFeedback(true);
-            setLoadingStats(true);
-
-            const [feedbackData, statsData, totalUsers, totalMemes] = await Promise.all([
-              backendService.getAllFeedback(),
-              backendService.getFeedbackStats(),
-              backendService.getTotalUsers(),
-              backendService.getTotalMemes()
-            ]);
-
-            setFeedback(feedbackData || []);
-            setFeedbackStats({
-              total: statsData?.[0] || 0,
-              approved: statsData?.[1] || 0,
-              returnRate: Math.round(statsData?.[2] || 0)
-            });
-            setCurrentFeedbackIndex(0); // Reset to first feedback item
-            setCurrentFeedbackIndex(0); // Reset to first feedback item
-
-            setStats({
-              users: Number(totalUsers) || 0,
-              memes: Number(totalMemes) || 0,
-              reviews: statsData?.[1] || 0
-            });
-
-            console.log("Landing page data refreshed after feedback submission");
-          } catch (error) {
-            console.error("Failed to refresh data after feedback submission:", error);
-          } finally {
-            setLoadingFeedback(false);
-            setLoadingStats(false);
-          }
-        };
-
-        refreshData();
-      }
-    };
-
-    // Check immediately and also listen for storage changes
-    checkForFeedbackUpdate();
-
-    const handleStorageChange = (e) => {
-      if (e.key === 'feedbackSubmitted') {
-        checkForFeedbackUpdate();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
-
-  // Fetch real statistics
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        setLoadingStats(true);
-        console.log("Fetching real statistics from backend...");
-
-        const [totalUsers, totalMemes, feedbackStats] = await Promise.all([
-          backendService.getTotalUsers(),
-          backendService.getTotalMemes(),
-          backendService.getFeedbackStats()
-        ]);
-
-        console.log("Backend data received:", {
-          totalUsers: Number(totalUsers),
-          totalMemes: Number(totalMemes),
-          feedbackStats: feedbackStats
-        });
-
-        const newStats = {
-          users: Number(totalUsers) || 0,
-          memes: Number(totalMemes) || 0,
-          reviews: feedbackStats?.[1] || 0,
-          returnRate: Math.round(feedbackStats?.[2] || 0)
-        };
-
-        console.log("Setting stats to:", newStats);
-        setStats(newStats);
-      } catch (error) {
-        console.error("Failed to fetch real stats from backend:", error);
-        // Keep default values
-      } finally {
-        setLoadingStats(false);
-      }
-    };
-
-    fetchStats();
-  }, []);
+  const heroName = formatDisplayName(username, principal);
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Hero Section */}
-      <section className="relative py-20 px-6 text-center min-h-screen">
-        <div className="absolute inset-0 bg-[url('/back2.gif')] bg-cover bg-center"></div>
-        <div className="absolute inset-0 backdrop-blur-md bg-black/20"></div>
+    <div className="relative min-h-screen overflow-hidden bg-gradient-background text-foreground">
+      <div className="pointer-events-none fixed inset-0 z-0 opacity-70">
+        <div className="hero-aurora" />
+        <div className="hero-grid" />
+        <div className="hero-sparkles" />
+      </div>
 
-        <div className="relative z-10 max-w-4xl mx-auto pl-6">
-          <div className="flex items-center justify-center mb-8">
-            <Sparkles className="w-12 h-12 md:w-16 md:h-16 text-primary mr-4" />
-            <h1 className="text-5xl md:text-7xl font-black bg-gradient-hero bg-clip-text text-transparent leading-tight">
-              Mementic – The Future of Meme Culture
-            </h1>
+      <Navigation />
+
+      <main className="relative z-10">
+        <section
+          id="hero"
+          className="relative flex min-h-[78vh] items-center justify-center px-5 py-24 sm:px-8"
+        >
+          <div className="absolute inset-0 -z-10 overflow-hidden">
+            <motion.div
+              aria-hidden
+              className="absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-purple-500/30 to-cyan-400/20 blur-3xl"
+              animate={{ opacity: [0.6, 0.85, 0.6], scale: [1, 1.08, 1] }}
+              transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+            />
           </div>
 
-          <p className="text-xl md:text-2xl text-muted-foreground mb-12 max-w-2xl mx-auto">
-            A decentralized platform where AI meets memes. Create, share, and
-            earn from viral content while the community decides what deserves to
-            become a collectible NFT.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-16">
-            <Button
-              variant="hero"
-              size="xl"
-              onClick={handleCreateClick}
-              className="w-full sm:w-auto border-2 p-2 bg-gradient-hero hero-button"
-              disabled={isLoading}
+          <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
+            <motion.span
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, duration: 0.6 }}
+              className="mb-6 inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-4 py-2 text-sm font-medium text-muted-foreground shadow-card backdrop-blur"
             >
-              <Zap className="mr-2" />
-              {isLoading
-                ? "Loading..."
-                : isAuthenticated
-                ? "Create Meme"
-                : "Login to Create Meme"}
-            </Button>
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span>{heroName}</span>
+            </motion.span>
 
-            <Button
-              variant="glow"
-              size="xl"
-              onClick={() => navigate("/marketplace")}
-              className="w-full sm:w-auto border-2 p-2 border-pink-400 hero-button"
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.7 }}
+              className="text-balance text-4xl font-semibold tracking-tight text-foreground sm:text-5xl lg:text-6xl"
             >
-              <TrendingUp className="mr-2" />
-              Marketplace
-            </Button>
+              Ready to Create Your First Viral Meme?
+            </motion.h1>
+
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3, duration: 0.7 }}
+              className="mt-6 max-w-2xl text-lg text-muted-foreground"
+            >
+              Mementic is your decentralized AI meme lab on the Internet
+              Computer. Generate, compete, and collect culture in a few taps—no
+              gatekeepers, just on-chain virality.
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4, duration: 0.7 }}
+              className="mt-10 flex flex-col items-center gap-4 sm:flex-row"
+            >
+              <Button
+                variant="hero"
+                size="xl"
+                className="hero-button px-10 py-6 text-base font-semibold shadow-glow"
+                onClick={() => navigate("/myplace")}
+              >
+                Create
+              </Button>
+              <Button
+                variant="ghost"
+                size="lg"
+                className="rounded-full border border-border/60 bg-background/60 px-8"
+                onClick={() => navigate("/pre-marketplace")}
+              >
+                Explore Flow
+              </Button>
+            </motion.div>
           </div>
-        </div>
-      </section>
-      <section className="py-16 px-6 bg-muted/20">
-        <div className="max-w-6xl mx-auto grid gap-8 md:grid-cols-3">
-          <div className="md:col-span-2">
-            <h2 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              Memes, owned.
+        </section>
+
+        <section id="pre-marketplace" className="section-wrapper relative">
+          <div className="mx-auto flex max-w-6xl flex-col items-center text-center">
+            <span className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-background/70 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              <Flame className="h-3.5 w-3.5 text-primary" />
+              Momentum
+            </span>
+            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">
+              Memes Created
             </h2>
-            <p className="mt-4 text-muted-foreground">
-              Mementic turns viral jokes into ownable, tradable digital
-              assets—built on ICP. Create with AI, battle for upvotes, and mint
-              winners as NFTs. Welcome to the meme economy.
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true, amount: 0.3 }}
+              className="mt-6 text-6xl font-semibold text-primary drop-shadow-sm sm:text-7xl"
+            >
+              {globalLoading ? "…" : formatNumber(globalStats.memesCreated)}
+            </motion.div>
+            <p className="mt-4 max-w-2xl text-base text-muted-foreground">
+              Every meme minted here is verifiable on-chain. Track community
+              growth, preview upcoming drops, and prime your submission in the
+              Pre Meme Marketplace.
             </p>
-            <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="rounded-xl bg-card/60 p-4 border border-border">
-                <div className="text-sm text-muted-foreground">Create</div>
-                <div className="mt-1 font-semibold">AI Meme Studio</div>
-              </div>
-              <div className="rounded-xl bg-card/60 p-4 border border-border">
-                <div className="text-sm text-muted-foreground">Compete</div>
-                <div className="mt-1 font-semibold">Weekly Battles</div>
-              </div>
-              <div className="rounded-xl bg-card/60 p-4 border border-border">
-                <div className="text-sm text-muted-foreground">Own</div>
-                <div className="mt-1 font-semibold">NFT Minting & Auctions</div>
-              </div>
-            </div>
           </div>
 
-          <div className="rounded-2xl bg-card p-6 border border-border">
-            <h3 className="text-xl font-bold">Business Model</h3>
-            <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
-              <li>• NFT auction fees (small %)</li>
-              <li>• Sponsored meme contests (brands/DAOs)</li>
-              <li>• Premium tools (boosts, analytics)</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-      <section className="py-16 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between">
-            <h2 className="text-3xl font-bold">Traction</h2>
-            <button
-              onClick={async () => {
-                console.log("Manually refreshing real data...");
-                try {
-                  setLoadingStats(true);
-                  const [totalUsers, totalMemes, feedbackStats] = await Promise.all([
-                    backendService.getTotalUsers(),
-                    backendService.getTotalMemes(),
-                    backendService.getFeedbackStats()
-                  ]);
-
-                  console.log("Manual refresh - Backend data:", {
-                    totalUsers: Number(totalUsers),
-                    totalMemes: Number(totalMemes),
-                    feedbackStats: feedbackStats
-                  });
-
-                  setStats({
-                    users: Number(totalUsers) || 0,
-                    memes: Number(totalMemes) || 0,
-                    reviews: feedbackStats?.[1] || 0
-                  });
-
-                  console.log("Real data refreshed successfully");
-                } catch (error) {
-                  console.error("Manual refresh failed:", error);
-                } finally {
-                  setLoadingStats(false);
-                }
-              }}
-              className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
-              disabled={loadingStats}
-            >
-              {loadingStats ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-              Refresh Data
-            </button>
-          </div>
-          <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-            <div className="rounded-xl bg-card p-6 border border-border">
-              <div className="text-3xl font-black">
-                {loadingStats ? "..." : stats.memes}
-              </div>
-              <div className="text-sm text-muted-foreground mt-1">
-                Memes created
-              </div>
-            </div>
-            <div className="rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 p-6 border border-blue-200">
-              <div className="text-3xl font-black text-blue-700 dark:text-blue-300">
-                {loadingStats ? "..." : stats.reviews}
-              </div>
-              <div className="text-sm text-blue-600 dark:text-blue-400 mt-1 font-medium">
-                User reviews
-              </div>
-            </div>
-          </div>
-
-          {/* What Users Love About Mementic - Only show if real feedback exists */}
-          {feedback.filter(item => item.likes && item.likes.trim() !== '').length > 0 && (
-            <div className="mt-8">
-              <div className="flex items-center gap-2 mb-6">
-                <Heart className="w-5 h-5 text-red-500" />
-                <h3 className="text-xl font-semibold">What Users Love About Mementic</h3>
-                {loadingFeedback && (
-                  <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
-                )}
-              </div>
-
-              {loadingFeedback ? (
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="rounded-2xl bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 p-6 border border-green-200 animate-pulse">
-                      <div className="h-4 bg-green-200 rounded mb-2"></div>
-                      <div className="h-4 bg-green-200 rounded mb-2 w-3/4"></div>
-                      <div className="h-3 bg-green-200 rounded w-1/3"></div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  {feedback
-                    .filter(item => item.likes && item.likes.trim() !== '') // Only show feedback with positive comments
-                    .map((item) => (
-                    <div key={item.id} className="rounded-2xl bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 p-6 border border-green-200">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Heart className="w-4 h-4 text-red-500 fill-current" />
-                        <span className="text-sm font-semibold text-green-700 dark:text-green-300">What they love</span>
+          <div className="mx-auto mt-12 grid max-w-6xl gap-6 md:grid-cols-3">
+            {ACTION_CARDS.map((card) => {
+              const Icon = card.icon;
+              return (
+                <motion.button
+                  key={card.title}
+                  type="button"
+                  onClick={() => navigate(card.href)}
+                  whileHover={{ y: -8, scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="group relative overflow-hidden rounded-3xl border border-border/50 bg-background/70 p-[1px] text-left shadow-card"
+                >
+                  <div
+                    className={`relative h-full rounded-[calc(theme(borderRadius.3xl)-1px)] bg-gradient-to-br ${card.accent} p-0.5 transition-colors`}
+                  >
+                    <div className="relative flex h-full flex-col gap-6 rounded-[calc(theme(borderRadius.3xl)-1.5px)] bg-background/90 p-6 backdrop-blur-xl">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500/70 to-cyan-400/60 text-white shadow-glow">
+                            <Icon className="h-5 w-5" />
+                          </span>
+                          <span className="text-xl font-semibold">
+                            {card.title}
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-base italic text-gray-700 dark:text-gray-300 mb-4 leading-relaxed">
-                        "{item.likes}"
+                      <p className="text-sm text-muted-foreground">
+                        {card.description}
                       </p>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium text-gray-600 dark:text-gray-400">— {item.name}</span>
-                        {item.will_return && (
-                          <span className="text-green-600 font-medium flex items-center gap-1">
-                            <span className="text-xs">Will return</span>
-                            <span className="text-green-600">✅</span>
-                          </span>
-                        )}
-                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+        </section>
+      </main>
 
-          {/* Complete User Feedback - Only show if real feedback exists */}
-          {feedback.length > 0 && (
-            <div className="mt-12">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5 text-primary" />
-                  <h3 className="text-xl font-semibold">Complete User Feedback</h3>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={prevFeedback}
-                    className="p-2 rounded-full bg-card hover:bg-card/80 border border-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={feedback.length <= 1}
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </button>
-                  <span className="text-sm text-muted-foreground min-w-[60px] text-center">
-                    {currentFeedbackIndex + 1} / {feedback.length}
-                  </span>
-                  <button
-                    onClick={nextFeedback}
-                    className="p-2 rounded-full bg-card hover:bg-card/80 border border-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={feedback.length <= 1}
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="max-w-2xl mx-auto">
-                {(() => {
-                  const item = feedback[currentFeedbackIndex];
-                  return (
-                    <div className="rounded-2xl bg-card p-8 border border-border">
-                      <div className="space-y-4">
-                        {item.likes && (
-                          <div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Heart className="w-4 h-4 text-green-500" />
-                              <span className="text-sm font-medium text-green-600">What they love</span>
-                            </div>
-                            <p className="text-base italic text-muted-foreground ml-6">"{item.likes}"</p>
-                          </div>
-                        )}
-                        {item.dislikes && (
-                          <div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <TrendingUp className="w-4 h-4 text-orange-500" />
-                              <span className="text-sm font-medium text-orange-600">Could improve</span>
-                            </div>
-                            <p className="text-base italic text-muted-foreground ml-6">"{item.dislikes}"</p>
-                          </div>
-                        )}
-                        {item.suggestions && (
-                          <div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Sparkles className="w-4 h-4 text-blue-500" />
-                              <span className="text-sm font-medium text-blue-600">Suggestions</span>
-                            </div>
-                            <p className="text-base italic text-muted-foreground ml-6">"{item.suggestions}"</p>
-                          </div>
-                        )}
-                      </div>
-                      <div className="mt-6 pt-4 border-t border-border text-sm text-muted-foreground flex items-center justify-between">
-                        <span className="font-medium">— {item.name}</span>
-                        {item.will_return ? (
-                          <span className="text-green-600 font-medium flex items-center gap-1">
-                            <span>Will return</span>
-                            <span>✅</span>
-                          </span>
-                        ) : (
-                          <span className="text-red-600 font-medium flex items-center gap-1">
-                            <span>Won't return</span>
-                            <span>❌</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
+      <footer className="relative z-10 border-t border-border/40 bg-gradient-to-br from-background to-background/80">
+        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-8">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-black text-white">
+              <span className="text-xs font-semibold">ICP</span>
             </div>
-          )}
-        </div>
-      </section>
-      <section className="py-16 px-6 bg-muted/20">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold">Roadmap</h2>
-          <div className="mt-6 grid gap-6 md:grid-cols-3">
-            <div className="rounded-2xl bg-card p-6 border border-border">
-              <div className="text-sm uppercase tracking-wide text-muted-foreground">
-                Short-term
-              </div>
-              <h3 className="mt-2 font-semibold">Ship & Smooth</h3>
-              <ul className="mt-3 text-sm text-muted-foreground space-y-2">
-                <li>• Auction & leaderboard polish</li>
-                <li>• Faster image delivery</li>
-                <li>• Anti-spam & rate limits</li>
-              </ul>
-            </div>
-            <div className="rounded-2xl bg-card p-6 border border-border">
-              <div className="text-sm uppercase tracking-wide text-muted-foreground">
-                Mid-term
-              </div>
-              <h3 className="mt-2 font-semibold">Grow Communities</h3>
-              <ul className="mt-3 text-sm text-muted-foreground space-y-2">
-                <li>• Hosted meme challenges (DAOs/brands)</li>
-                <li>• Creator profiles & badges</li>
-                <li>• Advanced AI tools (remix, presets)</li>
-              </ul>
-            </div>
-            <div className="rounded-2xl bg-card p-6 border border-border">
-              <div className="text-sm uppercase tracking-wide text-muted-foreground">
-                Long-term
-              </div>
-              <h3 className="mt-2 font-semibold">Meme Layer of Web3</h3>
-              <ul className="mt-3 text-sm text-muted-foreground space-y-2">
-                <li>• ICP dApp/marketplace integrations</li>
-                <li>• Portable meme identity</li>
-                <li>• Culture primitives for Web3</li>
-              </ul>
-            </div>
+            <span>Built on Internet Computer</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <a className="hover:text-foreground" href="/about">
+              About
+            </a>
+            <span className="text-border">|</span>
+            <a className="hover:text-foreground" href="/terms">
+              Terms
+            </a>
+            <span className="text-border">|</span>
+            <a className="hover:text-foreground" href="/privacy">
+              Privacy
+            </a>
+            <span className="text-border">|</span>
+            <a className="hover:text-foreground" href="/contact">
+              Contact
+            </a>
           </div>
         </div>
-      </section>
-      {/* Roadmap Section */}
-      <section className="py-16 px-6 bg-muted/20">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-sm mb-4">
-              <TrendingUp className="w-4 h-4 mr-2" />
-              Roadmap
-            </div>
-            <h2 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              Our Journey Ahead
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>🚀 Beta Launch</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  AI-powered meme generator is live. Users can authenticate with
-                  Internet Identity and start creating memes today.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>🎭 Community Voting</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Upvote your favorite memes. Top 3 winners in each round will
-                  be immortalized as NFTs on the Internet Computer.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>🌐 Future Plans</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Meme staking, creator rewards, and integration with major NFT
-                  marketplaces. Building the world’s first meme economy.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-      {/* CTA Section */}
-      <section className="py-20 px-6 text-center">
-        <div className="max-w-3xl mx-auto">
-          <h2 className="text-4xl font-bold mb-6">
-            Ready to Create Your First Viral Meme?
-          </h2>
-          <p className="text-xl text-muted-foreground mb-8">
-            Be part of the decentralized meme revolution. Your creativity could
-            be the next viral NFT.
-          </p>
-          <Button
-            variant="hero"
-            size="xl"
-            onClick={handleCreateClick}
-            className="bg-primary p-3 hero-button"
-            disabled={isLoading}
-          >
-            {isLoading
-              ? "Loading..."
-              : isAuthenticated
-              ? "Start Creating Now"
-              : "Login to Start Creating"}
-          </Button>
-        </div>
-      </section>
+      </footer>
     </div>
   );
 };
