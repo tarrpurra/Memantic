@@ -1,7 +1,7 @@
 // environment.ts (or .js)
 
-const NETWORK = import.meta.env?.VITE_NETWORK || 'ic'; // 'local' | 'ic' | 'mainnet' | 'playground'
-const CANISTER_ID = 'g3bm6-baaaa-aaaaa-qcexq-cai';
+const NETWORK = import.meta.env?.VITE_NETWORK || 'local'; // 'local' | 'ic' | 'mainnet' | 'playground'
+const CANISTER_ID = 'uxrrr-q7777-77774-qaaaq-cai';
 
 export const isDevMode = () => {
   // Check if we're on mainnet by looking at the hostname or environment
@@ -44,7 +44,7 @@ export const getIdentityProvider = () => {
 
 // Export canister id
 export const Id =
-  import.meta.env?.VITE_CANISTER_ID_MEMENTIC_BACKEND ||
+  // import.meta.env?.VITE_CANISTER_ID_MEMENTIC_BACKEND ||
   import.meta.env?.CANISTER_ID_MEMENTIC_BACKEND ||
   CANISTER_ID;
 

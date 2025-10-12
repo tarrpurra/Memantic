@@ -75,6 +75,8 @@ type PythonMetadata = record {
   timestamp : nat64;
   file_size_bytes : nat64;
 };
+type NftImage = record { mime_type : text; image : blob };
+
 type Result = variant { Ok : text; Err : text };
 type Result_1 = variant { Ok : nat32; Err : text };
 type Result_2 = variant { Ok; Err : text };
@@ -206,4 +208,6 @@ service : (opt InitArgs) -> {
   // Rejects if meme is not from current week or if the week is completed/expired.
   vote_meme : (nat64, VoteType) -> (Result_6);
   whoami : () -> (principal) query;
+  get_nft_image : (nat) -> (opt NftImage) query;
+  mint_to : (nat64) -> (variant { Ok : nat; Err : text });
 }

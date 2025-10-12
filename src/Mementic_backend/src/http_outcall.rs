@@ -7,11 +7,16 @@ use ic_cdk::api::management_canister::http_request::{
     http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse, TransformArgs,
     TransformContext,
 };
+
 use ic_cdk_macros::{query, update};
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     DefaultMemoryImpl, StableBTreeMap, Storable,
 };
+
+use ic_cdk::api::call::call;
+use ic_cdk::api::call::call_with_payment;
+
 use ic_stable_structures::storable::Bound;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -931,3 +936,27 @@ fn transform(args: TransformArgs) -> HttpResponse {
     r.headers.retain(|h| matches!(h.name.to_ascii_lowercase().as_str(), "content-type" | "content-length"));
     r
 }
+
+/// Fetch bytes from a given image URL
+pub async fn fetch_image_bytes_from_image_storage(url: &str) -> Result<Vec<u8>, String> {
+    let request: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
+        url: url.to_string(),
+        method: HttpMethod::GET,
+        headers: vec![],
+        body: None,
+        max_response_bytes: None,
+        transform: None,
+    };
+
+    // Perform the async call to management canister
+    let cycles: u64 = 21_000_000_000; // Attach enough cycles for HTTP outcall
+    let (response,): (HttpResponse,) = call_with_payment::<(CanisterHttpRequestArgument,), (HttpResponse,)>(
+        Principal::management_canister(),
+        "http_request",
+        (request,),
+        cycles
+    ).await.map_err(|e| format!("http_request call failed: {:?}", e))?;
+
+    Ok(response.body)
+}
+
