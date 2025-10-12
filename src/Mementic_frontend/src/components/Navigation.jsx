@@ -6,8 +6,8 @@ import { useAuth } from "../contexts/AuthContext";
 
 // Static navigation - always shows the same 5 items regardless of current page
 const NAV_LINKS = [
-  { label: "Market Place", href: "/pre-marketplace", icon: ShoppingBag, type: "route" },
-  { label: "Pre Market Place", href: "/marketplace", icon: Store, type: "route" },
+  { label: "Pre Market Place", href: "/pre-marketplace", icon: ShoppingBag, type: "route" },
+  { label: "Market Place", href: "/marketplace", icon: Store, type: "route" },
   { label: "Auction", href: "/auction", icon: Gavel, type: "route" },
   { label: "LaunchPad", href: "/meme-nft", icon: Gem, type: "route" },
   { label: "Meme Studio", href: "/myplace", icon: PenTool, type: "route" },

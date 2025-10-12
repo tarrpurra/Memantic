@@ -476,7 +476,7 @@ const Portfolio = () => {
                     <Sparkles className="h-5 w-5 text-primary" />
                   </div>
                   <p className="text-xs uppercase tracking-wide text-primary/70">Voting Power</p>
-                  <p className="mt-2 text-2xl font-semibold text-primary">0</p>
+                  <p className="mt-2 text-2xl font-semibold text-primary">{totalVotes.toLocaleString()}</p>
                   <p className="text-xs text-primary/60 mt-1">Total upvotes</p>
                 </div>
 
@@ -485,7 +485,7 @@ const Portfolio = () => {
                     <Crown className="h-5 w-5 text-secondary" />
                   </div>
                   <p className="text-xs uppercase tracking-wide text-secondary/70">Memes Created</p>
-                  <p className="mt-2 text-2xl font-semibold text-secondary">0</p>
+                  <p className="mt-2 text-2xl font-semibold text-secondary">{generatedCount.toLocaleString()}</p>
                   <p className="text-xs text-secondary/60 mt-1">Total generated</p>
                 </div>
 
@@ -494,7 +494,7 @@ const Portfolio = () => {
                     <TrendingUp className="h-5 w-5 text-accent" />
                   </div>
                   <p className="text-xs uppercase tracking-wide text-accent/70">Minted NFTs</p>
-                  <p className="mt-2 text-2xl font-semibold text-accent">0</p>
+                  <p className="mt-2 text-2xl font-semibold text-accent">{mintedCount.toLocaleString()}</p>
                   <p className="text-xs text-accent/60 mt-1">On-chain assets</p>
                 </div>
 
@@ -503,7 +503,7 @@ const Portfolio = () => {
                     <Coins className="h-5 w-5 text-amber-600" />
                   </div>
                   <p className="text-xs uppercase tracking-wide text-amber-600/70">Total Sales</p>
-                  <p className="mt-2 text-2xl font-semibold text-amber-600">0</p>
+                  <p className="mt-2 text-2xl font-semibold text-amber-600">{totalSales.toLocaleString()}</p>
                   <p className="text-xs text-amber-600/60 mt-1">Marketplace transactions</p>
                 </div>
               </div>
@@ -519,7 +519,7 @@ const Portfolio = () => {
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-primary/70">Marketplace Listings</p>
-                    <p className="text-lg font-semibold text-primary">0</p>
+                    <p className="text-lg font-semibold text-primary">{listedCount.toLocaleString()}</p>
                   </div>
                 </div>
               </div>
@@ -676,10 +676,10 @@ const Portfolio = () => {
 
                     {/* Bars */}
                     {[
-                      { label: 'ICP Earned', value: 0, max: 10, color: 'hsl(var(--primary))', icon: Coins },
-                      { label: 'Total Views', value: 0, max: 1000, color: 'hsl(var(--secondary))', icon: Sparkles },
-                      { label: 'Avg ICP/Vote', value: 0, max: 1, color: 'hsl(var(--accent))', icon: TrendingUp },
-                      { label: 'Listed %', value: 0, max: 100, color: 'hsl(45 86% 58%)', icon: ArrowUp }
+                      { label: 'ICP Earned', value: totalEarnings, max: Math.max(totalEarnings * 1.5, 10), color: 'hsl(var(--primary))', icon: Coins },
+                      { label: 'Total Views', value: totalViews, max: Math.max(totalViews * 1.5, 1000), color: 'hsl(var(--secondary))', icon: Sparkles },
+                      { label: 'Avg ICP/Vote', value: avgEarningsPerVote, max: Math.max(avgEarningsPerVote * 1.5, 1), color: 'hsl(var(--accent))', icon: TrendingUp },
+                      { label: 'Listed %', value: listedProgress, max: 100, color: 'hsl(45 86% 58%)', icon: ArrowUp }
                     ].map((metric, index) => {
                       const barHeight = (metric.value / metric.max) * 120;
                       const x = 60 + index * 80;
@@ -765,11 +765,11 @@ const Portfolio = () => {
                 <div className="w-full bg-muted rounded-full h-2">
                   <div
                     className="bg-gradient-to-r from-secondary to-accent h-2 rounded-full transition-all duration-500"
-                    style={{ width: `0%` }}
+                    style={{ width: `${mintedProgress}%` }}
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  0 of 0 memes minted as NFTs
+                  {mintedCount} of {generatedCount} memes minted as NFTs
                 </p>
               </div>
 
@@ -782,22 +782,22 @@ const Portfolio = () => {
                 <div className="w-full bg-muted rounded-full h-2">
                   <div
                     className="bg-gradient-to-r from-primary to-accent h-2 rounded-full transition-all duration-500"
-                    style={{ width: `0%` }}
+                    style={{ width: `${listedProgress}%` }}
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  No memes currently listed for sale
+                  {listedCount > 0 ? `${listedCount} memes currently listed for sale` : "No memes currently listed for sale"}
                 </p>
               </div>
 
               {/* Quick Stats */}
               <div className="grid grid-cols-2 gap-4 pt-2">
                 <div className="text-center p-3 rounded-lg bg-muted/50">
-                  <p className="text-2xl font-bold text-primary">0</p>
+                  <p className="text-2xl font-bold text-primary">{generatedCount.toLocaleString()}</p>
                   <p className="text-xs text-muted-foreground">Created</p>
                 </div>
                 <div className="text-center p-3 rounded-lg bg-muted/50">
-                  <p className="text-2xl font-bold text-secondary">0</p>
+                  <p className="text-2xl font-bold text-secondary">{mintedCount.toLocaleString()}</p>
                   <p className="text-xs text-muted-foreground">Minted</p>
                 </div>
               </div>
@@ -881,7 +881,7 @@ const Portfolio = () => {
                       </div>
                       <div className="rounded-xl bg-white/5 p-3">
                         <p className="text-xs uppercase tracking-wide text-indigo-200/70">Status</p>
-                        <p className="mt-2 text-sm font-semibold text-emerald-100">Earning</p>
+                        <p className="mt-2 text-sm font-semibold text-emerald-100">{nft.status === 'selling' ? 'Listed' : 'Earning'}</p>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-3">

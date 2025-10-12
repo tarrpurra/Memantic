@@ -395,6 +395,13 @@ export const MemeCard = ({
                     {title}
                   </h3>
                   <p className="text-white/80 text-sm">by @{creator}</p>
+                  <p className="text-white/60 text-xs">
+                    {new Date(meme?.created_at || Date.now()).toLocaleString("en-IN", {
+                      timeZone: "Asia/Kolkata",
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })}
+                  </p>
                 </div>
 
                 {/* Quick Action Buttons - Visible on Hover */}
@@ -573,9 +580,11 @@ export const MemeCard = ({
                       <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
                         <span className="font-medium">Created:</span>
                         <span>
-                          {new Date(
-                            meme?.created_at
-                          ).toLocaleDateString()}
+                          {new Date(meme?.created_at || Date.now()).toLocaleString("en-IN", {
+                            timeZone: "Asia/Kolkata",
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
                         </span>
                       </div>
                       {meme?.market_data?.is_listed && (

@@ -38,6 +38,10 @@ const MyPlace = () => {
   // lightbox for enlarged preview + details
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
+  // caption modal
+  const [isCaptionModalOpen, setIsCaptionModalOpen] = useState(false);
+  const [caption, setCaption] = useState("");
+
   const {
     isGenerating,
     generatedMeme,
@@ -107,17 +111,29 @@ const MyPlace = () => {
     }
   };
 
-  const handlePostToMarketplace = async () => {
-    try {
-      if (!generatedMeme || !generatedMeme.image_url) {
-        toast({
-          title: "No Meme to Post",
-          description: "Generate a meme first before posting to pre-market place.",
-          variant: "destructive",
-        });
-        return;
-      }
+  const handlePostToMarketplace = () => {
+    if (!generatedMeme || !generatedMeme.image_url) {
+      toast({
+        title: "No Meme to Post",
+        description: "Generate a meme first before posting to pre-market place.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsCaptionModalOpen(true);
+  };
 
+  const handleConfirmPost = async () => {
+    if (!caption.trim()) {
+      toast({
+        title: "Caption Required",
+        description: "Please enter a caption for your meme.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
       // Build MemeData expected by canister
       const url = generatedMeme.image_url;
       const deriveFilename = (u) => {
@@ -136,6 +152,7 @@ const MyPlace = () => {
       const md = generatedMeme.metadata || {};
       const memeData = {
         prompt: generatedMeme.prompt || prompt || "",
+        caption: [caption.trim()], // Candid Option<String> as array
         image_url: url,
         image_filename: filename,
         image_format: ext,
@@ -160,6 +177,8 @@ const MyPlace = () => {
         title: "Posted to Pre-Market Place! 🚀",
         description: `Meme #${created?.id ?? ""} is now live for votes.`,
       });
+      setIsCaptionModalOpen(false);
+      setCaption("");
       navigate("/pre-marketplace");
     } catch (error) {
       console.error("Failed to publish meme:", error);
@@ -514,6 +533,38 @@ const MyPlace = () => {
               <Button variant="hero" onClick={handlePostToMarketplace}>
                 <Send className="w-4 h-4 mr-2" />
                 Post to Pre-Market Place
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Caption Modal */}
+      {isCaptionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md bg-card rounded-xl shadow-xl border border-border p-6">
+            <h3 className="text-lg font-semibold mb-4">Add Caption</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Enter a caption for your meme. This will be displayed in the pre-marketplace.
+            </p>
+            <Textarea
+              placeholder="Enter your meme caption..."
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              className="min-h-[100px] mb-4"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsCaptionModalOpen(false);
+                  setCaption("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button variant="hero" onClick={handleConfirmPost}>
+                Post Meme
               </Button>
             </div>
           </div>
