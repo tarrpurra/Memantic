@@ -27,7 +27,11 @@ pub use voting::{
 };
 
 pub use nft_module::{
-    SupportedStandard, TokenRecord, TokenMetadataEntry, MetadataValue, MintedPair
+    SupportedStandard, TokenRecord, TokenMetadataEntry, MetadataValue, MintedPair, NftImage,
+    icrc7_name, icrc7_symbol, icrc7_total_supply, icrc7_supported_standards,
+    icrc7_owner_of, icrc7_tokens_of, get_token, get_token_by_meme_id, get_nft_image,
+    // minting
+    mint_week_top3_from_voting,
 };
 
 pub use feedback::{
@@ -36,7 +40,7 @@ pub use feedback::{
 };
 
 pub use user_profiles::{
-    UserProfile, update_user_profile, get_user_profile, get_user_profile_by_principal, get_all_user_profiles,
+    UserProfile, update_user_profile, get_user_profile, get_user_profile_by_principal,
 };
 
 #[query]
@@ -46,8 +50,7 @@ pub fn whoami() -> Principal {
 
 #[update]
 pub async fn mint_week_top3_here(week_id: u64) -> Result<Vec<MintedPair>, String> {
-    let voting_canister = ic_cdk::id();
-    nft_module::mint_week_top3_from_voting(voting_canister, week_id).await
+    nft_module::mint_week_top3_from_voting(week_id).await
 }
 
 ic_cdk::export_candid!();

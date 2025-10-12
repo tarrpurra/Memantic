@@ -299,8 +299,7 @@ fn mint_top3_for_completed_week(week_id: u64) {
 
     // Spawn an async task to mint the NFTs
     ic_cdk::spawn(async move {
-        let voting_canister = ic_cdk::api::id();
-        match crate::nft_module::mint_week_top3_from_voting(voting_canister, week_id).await {
+        match crate::nft_module::mint_week_top3_from_voting(week_id).await {
             Ok(minted_pairs) => {
                 ic_cdk::println!("Successfully minted {} NFTs for week {}", minted_pairs.len(), week_id);
                 for pair in minted_pairs {

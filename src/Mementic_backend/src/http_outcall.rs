@@ -7,11 +7,16 @@ use ic_cdk::api::management_canister::http_request::{
     http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse, TransformArgs,
     TransformContext,
 };
+
 use ic_cdk_macros::{query, update};
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     DefaultMemoryImpl, StableBTreeMap, Storable,
 };
+
+use ic_cdk::api::call::call;
+use ic_cdk::api::call::call_with_payment;
+
 use ic_stable_structures::storable::Bound;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -133,7 +138,6 @@ impl Storable for DayUsage {
 #[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
 pub struct MemeData {
     pub prompt: String,
-    pub caption: Option<String>,
     pub image_url: String,
     pub image_filename: String,
     pub image_format: String,
@@ -177,7 +181,6 @@ impl Storable for StoredMeme {
             owner: StorablePrincipal(Principal::anonymous()),
             meme_data: MemeData {
                 prompt: String::new(),
-                caption: None,
                 image_url: String::new(),
                 image_filename: String::new(),
                 image_format: String::new(),
@@ -389,7 +392,6 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
 
                 MemeData {
                     prompt,
-                    caption: None,
                     image_url,
                     image_filename,
                     image_format,
@@ -448,7 +450,6 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
 
                         MemeData {
                             prompt,
-                            caption: None,
                             image_url,
                             image_filename,
                             image_format,
@@ -756,34 +757,7 @@ pub fn publish_meme(meme: MemeData) -> Result<PublicStoredMeme, String> {
 
     ic_cdk::println!("Publish meme - Authenticated user: {}", user.to_text());
     let now = time();
-
-    let MemeData {
-        prompt,
-        caption,
-        image_url,
-        image_filename,
-        image_format,
-        metadata,
-    } = meme;
-
-    let sanitized_prompt = prompt.trim().to_string();
-    let sanitized_caption = caption
-        .and_then(|c| {
-            let trimmed = c.trim().to_string();
-            if trimmed.is_empty() { None } else { Some(trimmed) }
-        })
-        .ok_or_else(|| "Caption is required".to_string())?;
-
-    if sanitized_prompt.is_empty() {
-        ic_cdk::println!("Publish meme - Empty prompt detected");
-        return Err("Prompt cannot be empty".to_string());
-    }
-
-    let sanitized_url = image_url.trim().to_string();
-    if sanitized_url.is_empty() {
-        return Err("Image URL is required".to_string());
-    }
-
+    
     // Allocate id
     let id = next_meme_id();
 
@@ -791,14 +765,7 @@ pub fn publish_meme(meme: MemeData) -> Result<PublicStoredMeme, String> {
     let stored = StoredMeme {
         id,
         owner: StorablePrincipal::from(user),
-        meme_data: MemeData {
-            prompt: sanitized_prompt,
-            caption: Some(sanitized_caption),
-            image_url: sanitized_url,
-            image_filename: image_filename.trim().to_string(),
-            image_format: image_format.trim().to_string(),
-            metadata,
-        },
+        meme_data: meme,
         created_at: now,            // when published
         canister_timestamp: now,    // canister-side write ts
         market_data: MarketData {
@@ -968,4 +935,27 @@ fn transform(args: TransformArgs) -> HttpResponse {
     let mut r = args.response;
     r.headers.retain(|h| matches!(h.name.to_ascii_lowercase().as_str(), "content-type" | "content-length"));
     r
+}
+
+/// Fetch bytes from a given image URL
+pub async fn fetch_image_bytes_from_image_storage(url: &str) -> Result<Vec<u8>, String> {
+    let request: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
+        url: url.to_string(),
+        method: HttpMethod::GET,
+        headers: vec![],
+        body: None,
+        max_response_bytes: None,
+        transform: None,
+    };
+
+    // Perform the async call to management canister
+    let cycles: u64 = 21_000_000_000; // Attach enough cycles for HTTP outcall
+    let (response,): (HttpResponse,) = call_with_payment::<(CanisterHttpRequestArgument,), (HttpResponse,)>(
+        Principal::management_canister(),
+        "http_request",
+        (request,),
+        cycles
+    ).await.map_err(|e| format!("http_request call failed: {:?}", e))?;
+
+    Ok(response.body)
 }
