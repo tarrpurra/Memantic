@@ -71,23 +71,23 @@ const PreMarketplace = () => {
           <div className="mx-auto flex max-w-5xl flex-col items-center text-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
               <Flame className="h-4 w-4 text-primary" />
-              Pre Meme Marketplace
+              Meme Marketplace
             </span>
             <h1 className="mt-6 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
-              Discover the next viral drop before it explodes
+              Discover and trade the hottest meme NFTs
             </h1>
             <p className="mt-6 text-lg text-muted-foreground sm:max-w-2xl">
-              Track pre-market momentum, surface community hype, and secure your position in the most anticipated meme collections.
+              Browse live auctions, vote on trending memes, and collect verified NFT drops from the Mementic ecosystem.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link to="/myplace">
                 <Button variant="hero" size="xl" className="px-10">
-                  Launch a Pre-Market Drop
+                  Create Your Meme
                 </Button>
               </Link>
-              <Link to="/marketplace">
+              <Link to="/auction">
                 <Button variant="outline" size="lg" className="rounded-full border-border/60 bg-background/70">
-                  View Live Marketplace
+                  View Live Auctions
                 </Button>
               </Link>
             </div>
@@ -190,7 +190,7 @@ const PreMarketplace = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-3 text-lg font-semibold text-muted-foreground">
                     <Trophy className="h-5 w-5 text-primary" />
-                    Leaderboard Momentum
+                    Marketplace Leaderboard
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -243,7 +243,7 @@ const PreMarketplace = () => {
                       </div>
                       <p className="mt-3 text-lg font-semibold text-foreground">0% of active bids are trending upward.</p>
                       <p className="mt-3 text-xs">
-                        Momentum accelerated in the last 24h across ordinal-backed drops with premium artwork and remix utility.
+                        Marketplace activity shows steady growth with verified NFT drops and community-driven auctions.
                       </p>
                     </div>
                     <div className="rounded-2xl border border-primary/30 bg-background/70 p-5 text-sm text-muted-foreground">
@@ -278,7 +278,7 @@ const PreMarketplace = () => {
                     Market Table
                   </CardTitle>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Track ranking, offers, and live momentum before each collection hits the primary marketplace.
+                    Browse live NFT collections, track rankings, and discover trending meme drops in the marketplace.
                   </p>
                 </div>
               </CardHeader>
@@ -336,10 +336,10 @@ const PreMarketplace = () => {
                 Market Feed
               </div>
               <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">
-                Watch the pre-market feed in full fidelity
+                Watch the market feed in full fidelity
               </h2>
               <p className="text-sm text-muted-foreground sm:max-w-3xl">
-                Large-format previews make it effortless to scan meme quality, storytelling, and collectability before you place a bid.
+                Discover trending NFT collections with detailed previews, creator stories, and marketplace analytics.
               </p>
             </div>
 
