@@ -138,6 +138,7 @@ impl Storable for DayUsage {
 #[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
 pub struct MemeData {
     pub prompt: String,
+    pub caption: Option<String>,
     pub image_url: String,
     pub image_filename: String,
     pub image_format: String,
@@ -181,6 +182,7 @@ impl Storable for StoredMeme {
             owner: StorablePrincipal(Principal::anonymous()),
             meme_data: MemeData {
                 prompt: String::new(),
+                caption: None,
                 image_url: String::new(),
                 image_filename: String::new(),
                 image_format: String::new(),
@@ -392,6 +394,7 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
 
                 MemeData {
                     prompt,
+                    caption: None,
                     image_url,
                     image_filename,
                     image_format,
@@ -450,6 +453,7 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
 
                         MemeData {
                             prompt,
+                            caption: None,
                             image_url,
                             image_filename,
                             image_format,

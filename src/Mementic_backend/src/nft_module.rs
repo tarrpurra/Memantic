@@ -340,6 +340,7 @@ fn build_metadata(m: &PublicStoredMeme) -> Vec<TokenMetadataEntry> {
             value: MetadataValue::Map(vec![
                 ("meme:id".into(), MetadataValue::Text(m.id.to_string())),
                 ("meme:prompt".into(), MetadataValue::Text(m.meme_data.prompt.clone())),
+                ("meme:caption".into(), MetadataValue::Text(m.meme_data.caption.clone().unwrap_or_default())),
                 ("meme:filename".into(), MetadataValue::Text(m.meme_data.image_filename.clone())),
                 ("meme:format".into(), MetadataValue::Text(m.meme_data.image_format.clone())),
                 ("meme:service".into(), MetadataValue::Text(m.meme_data.metadata.service.clone())),

@@ -42,6 +42,7 @@ type MemeData = record {
   image_url : text;
   metadata : PythonMetadata;
   image_format : text;
+  caption : opt text;
   prompt : text;
   image_filename : text;
 };
