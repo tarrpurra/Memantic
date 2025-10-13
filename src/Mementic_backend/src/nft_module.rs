@@ -8,8 +8,10 @@ use ic_stable_structures::{
     DefaultMemoryImpl, StableBTreeMap,
 };
 
-use crate::{WeeklyPeriod, WeeklyLeaderboard, MemeVotes, VoteRecord, MemeData, VoteResponse, VoteType, TransformArgs, HttpResponse};
-
+use crate::{
+    HttpResponse, MemeData, MemeVotes, TransformArgs, VoteRecord, VoteResponse, VoteType,
+    WeeklyLeaderboard, WeeklyPeriod,
+};
 
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, cell::RefCell};
@@ -53,7 +55,10 @@ impl Storable for SNat {
 }
 
 impl Storable for SPrincipal {
-    const BOUND: Bound = Bound::Bounded { max_size: 64, is_fixed_size: false };
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 64,
+        is_fixed_size: false,
+    };
 
     fn to_bytes(&self) -> Cow<[u8]> {
         Cow::Owned(candid::Encode!(&self).expect("encode SPrincipal"))
@@ -155,6 +160,19 @@ pub struct TokenRecord {
     pub has_image: bool,           // indicates presence in STORED_IMAGES
 }
 
+#[derive(Clone, Debug, Default, CandidType, Serialize, Deserialize)]
+pub struct TokenSaleMetadata {
+    pub token_id: Nat,
+    pub meme_id: u64,
+    pub is_listed: bool,
+    pub listing_price: Option<u64>,
+    pub listed_at: Option<u64>,
+    pub total_sales: u64,
+    pub total_earned: u64,
+    pub last_sale_price: Option<u64>,
+    pub last_sale_at: Option<u64>,
+}
+
 #[derive(Clone, CandidType, Deserialize)]
 pub struct NftImage {
     pub mime_type: String,
@@ -162,7 +180,10 @@ pub struct NftImage {
 }
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
-pub struct SupportedStandard { pub name: String, pub url: String }
+pub struct SupportedStandard {
+    pub name: String,
+    pub url: String,
+}
 
 impl Storable for TokenRecord {
     // Variable-size Candid; fine for values (not keys).
@@ -178,6 +199,22 @@ impl Storable for TokenRecord {
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         candid::Decode!(&bytes, TokenRecord).expect("decode TokenRecord")
+    }
+}
+
+impl Storable for TokenSaleMetadata {
+    const BOUND: Bound = Bound::Unbounded;
+
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(candid::Encode!(&self).expect("encode TokenSaleMetadata"))
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        candid::Encode!(&self).expect("encode TokenSaleMetadata")
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        candid::Decode!(&bytes, TokenSaleMetadata).expect("decode TokenSaleMetadata")
     }
 }
 
@@ -202,6 +239,9 @@ thread_local! {
     // NEW: store actual image bytes (ImageBlob wraps Vec<u8>)
     static STORED_IMAGES: RefCell<StableBTreeMap<u64, ImageBlob, Mem>> =
         RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(4)))));
+
+    static TOKEN_SALES: RefCell<StableBTreeMap<SNat, TokenSaleMetadata, Mem>> =
+        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(5)))));
 }
 
 // ---------- Init ----------
@@ -219,8 +259,14 @@ fn init(args: Option<InitArgs>) {
     let caller = ic_cdk::caller();
     STATE.with(|s| {
         let mut st = s.borrow_mut();
-        st.name = args.as_ref().and_then(|a| a.name.clone()).unwrap_or_else(|| "Mementic Top Memes".into());
-        st.symbol = args.as_ref().and_then(|a| a.symbol.clone()).unwrap_or_else(|| "MEME".into());
+        st.name = args
+            .as_ref()
+            .and_then(|a| a.name.clone())
+            .unwrap_or_else(|| "Mementic Top Memes".into());
+        st.symbol = args
+            .as_ref()
+            .and_then(|a| a.symbol.clone())
+            .unwrap_or_else(|| "MEME".into());
         st.description = args.as_ref().and_then(|a| a.description.clone());
         st.logo = args.as_ref().and_then(|a| a.logo.clone());
         st.admin = args.as_ref().and_then(|a| a.admin).unwrap_or(caller);
@@ -239,24 +285,36 @@ fn assert_admin() {
 }
 
 // ---------- ICRC-7-ish queries ----------
-#[query(name="icrc7_name")]
-pub fn icrc7_name() -> String { STATE.with(|s| s.borrow().name.clone()) }
+#[query(name = "icrc7_name")]
+pub fn icrc7_name() -> String {
+    STATE.with(|s| s.borrow().name.clone())
+}
 
-#[query(name="icrc7_symbol")]
-pub fn icrc7_symbol() -> String { STATE.with(|s| s.borrow().symbol.clone()) }
+#[query(name = "icrc7_symbol")]
+pub fn icrc7_symbol() -> String {
+    STATE.with(|s| s.borrow().symbol.clone())
+}
 
-#[query(name="icrc7_total_supply")]
-pub fn icrc7_total_supply() -> Nat { STATE.with(|s| s.borrow().total_supply.clone()) }
+#[query(name = "icrc7_total_supply")]
+pub fn icrc7_total_supply() -> Nat {
+    STATE.with(|s| s.borrow().total_supply.clone())
+}
 
-#[query(name="icrc7_supported_standards")]
+#[query(name = "icrc7_supported_standards")]
 pub fn icrc7_supported_standards() -> Vec<SupportedStandard> {
     vec![
-        SupportedStandard { name: "ICRC-7".into(), url: "https://github.com/dfinity/ICRC/ICRCs/ICRC-7".into() },
-        SupportedStandard { name: "ICRC-37".into(), url: "https://github.com/dfinity/ICRC/ICRCs/ICRC-37".into() },
+        SupportedStandard {
+            name: "ICRC-7".into(),
+            url: "https://github.com/dfinity/ICRC/ICRCs/ICRC-7".into(),
+        },
+        SupportedStandard {
+            name: "ICRC-37".into(),
+            url: "https://github.com/dfinity/ICRC/ICRCs/ICRC-37".into(),
+        },
     ]
 }
 
-#[query(name="icrc7_owner_of")]
+#[query(name = "icrc7_owner_of")]
 pub fn icrc7_owner_of(token_ids: Vec<Nat>) -> Vec<Option<Principal>> {
     TOKENS.with(|t| {
         let map = t.borrow();
@@ -267,9 +325,14 @@ pub fn icrc7_owner_of(token_ids: Vec<Nat>) -> Vec<Option<Principal>> {
     })
 }
 
-#[query(name="icrc7_tokens_of")]
+#[query(name = "icrc7_tokens_of")]
 pub fn icrc7_tokens_of(owner: Principal) -> Vec<Nat> {
-    OWNER_INDEX.with(|idx| idx.borrow().get(&SPrincipal(owner)).map(|ot| ot.0.clone()).unwrap_or_default())
+    OWNER_INDEX.with(|idx| {
+        idx.borrow()
+            .get(&SPrincipal(owner))
+            .map(|ot| ot.0.clone())
+            .unwrap_or_default()
+    })
 }
 
 #[query]
@@ -286,11 +349,47 @@ pub fn get_token_by_meme_id(meme_id: u64) -> Option<Nat> {
 pub fn get_nft_image(token_id: Nat) -> Option<NftImage> {
     let rec_opt = TOKENS.with(|t| t.borrow().get(&SNat(token_id.clone())));
     let rec = rec_opt?;
-    let mime = rec.mime_type.clone().unwrap_or("application/octet-stream".to_string());
+    let mime = rec
+        .mime_type
+        .clone()
+        .unwrap_or("application/octet-stream".to_string());
     let img_blob = STORED_IMAGES.with(|imgs| imgs.borrow().get(&rec.meme_id))?;
     Some(NftImage {
         mime_type: mime,
         image: img_blob.0.clone(),
+    })
+}
+
+#[query]
+pub fn get_sale_metadata(token_id: Nat) -> Option<TokenSaleMetadata> {
+    TOKEN_SALES.with(|sales| sales.borrow().get(&SNat(token_id)))
+}
+
+#[query]
+pub fn get_sale_metadata_for_meme(meme_id: u64) -> Option<TokenSaleMetadata> {
+    let token_id = get_token_by_meme_id(meme_id)?;
+    TOKEN_SALES.with(|sales| sales.borrow().get(&SNat(token_id)))
+}
+
+pub fn mutate_sale_metadata<F>(token_id: &Nat, meme_id: u64, mutator: F) -> TokenSaleMetadata
+where
+    F: FnOnce(&mut TokenSaleMetadata),
+{
+    TOKEN_SALES.with(|sales| {
+        let mut map = sales.borrow_mut();
+        let mut record = map
+            .get(&SNat(token_id.clone()))
+            .unwrap_or_else(|| TokenSaleMetadata {
+                token_id: token_id.clone(),
+                meme_id,
+                ..Default::default()
+            });
+        record.token_id = token_id.clone();
+        record.meme_id = meme_id;
+        let mut_record = &mut record;
+        mutator(mut_record);
+        map.insert(SNat(token_id.clone()), record.clone());
+        record
     })
 }
 
@@ -325,7 +424,7 @@ fn guess_content_type(ext: &str) -> Option<String> {
     }
 }
 
-fn build_metadata(m: &PublicStoredMeme) -> Vec<TokenMetadataEntry> {
+fn build_metadata(m: &PublicStoredMeme, token_id: &Nat) -> Vec<TokenMetadataEntry> {
     let ct = guess_content_type(&m.meme_data.image_format);
 
     let mut root: Vec<TokenMetadataEntry> = vec![
@@ -339,17 +438,48 @@ fn build_metadata(m: &PublicStoredMeme) -> Vec<TokenMetadataEntry> {
             immutable: true,
             value: MetadataValue::Map(vec![
                 ("meme:id".into(), MetadataValue::Text(m.id.to_string())),
-                ("meme:prompt".into(), MetadataValue::Text(m.meme_data.prompt.clone())),
-                ("meme:caption".into(), MetadataValue::Text(m.meme_data.caption.clone().unwrap_or_default())),
-                ("meme:filename".into(), MetadataValue::Text(m.meme_data.image_filename.clone())),
-                ("meme:format".into(), MetadataValue::Text(m.meme_data.image_format.clone())),
-                ("meme:service".into(), MetadataValue::Text(m.meme_data.metadata.service.clone())),
-                ("meme:ai_timestamp_ns".into(), MetadataValue::Text(m.meme_data.metadata.timestamp.to_string())),
-                ("meme:file_size_bytes".into(), MetadataValue::Text(m.meme_data.metadata.file_size_bytes.to_string())),
-                ("meme:created_at_ns".into(), MetadataValue::Text(m.created_at.to_string())),
-                ("meme:stored_at_ns".into(), MetadataValue::Text(m.canister_timestamp.to_string())),
+                (
+                    "meme:prompt".into(),
+                    MetadataValue::Text(m.meme_data.prompt.clone()),
+                ),
+                (
+                    "meme:caption".into(),
+                    MetadataValue::Text(m.meme_data.caption.clone().unwrap_or_default()),
+                ),
+                (
+                    "meme:filename".into(),
+                    MetadataValue::Text(m.meme_data.image_filename.clone()),
+                ),
+                (
+                    "meme:format".into(),
+                    MetadataValue::Text(m.meme_data.image_format.clone()),
+                ),
+                (
+                    "meme:service".into(),
+                    MetadataValue::Text(m.meme_data.metadata.service.clone()),
+                ),
+                (
+                    "meme:ai_timestamp_ns".into(),
+                    MetadataValue::Text(m.meme_data.metadata.timestamp.to_string()),
+                ),
+                (
+                    "meme:file_size_bytes".into(),
+                    MetadataValue::Text(m.meme_data.metadata.file_size_bytes.to_string()),
+                ),
+                (
+                    "meme:created_at_ns".into(),
+                    MetadataValue::Text(m.created_at.to_string()),
+                ),
+                (
+                    "meme:stored_at_ns".into(),
+                    MetadataValue::Text(m.canister_timestamp.to_string()),
+                ),
+                (
+                    "nft:token_id".into(),
+                    MetadataValue::Text(token_id.to_string()),
+                ),
             ]),
-        }
+        },
     ];
 
     if let Some(ctext) = ct {
@@ -364,15 +494,25 @@ fn build_metadata(m: &PublicStoredMeme) -> Vec<TokenMetadataEntry> {
 }
 
 // ---------- X-canister clients ----------
-async fn voting_get_top3_for_week(voting_canister: Principal, week_id: u64) -> Result<Vec<TopEntry>, String> {
+async fn voting_get_top3_for_week(
+    voting_canister: Principal,
+    week_id: u64,
+) -> Result<Vec<TopEntry>, String> {
     use ic_cdk::api::call::call;
-    call::<(u64,), (Result<Vec<TopEntry>, String>,)>(voting_canister, "get_top3_for_week", (week_id,))
-        .await
-        .map(|(res,)| res)
-        .map_err(|e| format!("get_top3_for_week call failed: {:?}", e))?
+    call::<(u64,), (Result<Vec<TopEntry>, String>,)>(
+        voting_canister,
+        "get_top3_for_week",
+        (week_id,),
+    )
+    .await
+    .map(|(res,)| res)
+    .map_err(|e| format!("get_top3_for_week call failed: {:?}", e))?
 }
 
-async fn voting_get_meme_data(voting_canister: Principal, meme_id: u64) -> Result<Option<PublicStoredMeme>, String> {
+async fn voting_get_meme_data(
+    voting_canister: Principal,
+    meme_id: u64,
+) -> Result<Option<PublicStoredMeme>, String> {
     use ic_cdk::api::call::call;
     call::<(u64,), (Option<PublicStoredMeme>,)>(voting_canister, "get_meme", (meme_id,))
         .await
@@ -382,7 +522,11 @@ async fn voting_get_meme_data(voting_canister: Principal, meme_id: u64) -> Resul
 
 // ---------- Public: mint Top-3 (now fetches image bytes before minting) ----------
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
-pub struct MintedPair { pub meme_id: u64, pub token_id: Nat, pub owner: Principal }
+pub struct MintedPair {
+    pub meme_id: u64,
+    pub token_id: Nat,
+    pub owner: Principal,
+}
 
 #[update]
 async fn mint_to(meme_id: u64) -> Result<Nat, String> {
@@ -392,17 +536,25 @@ async fn mint_to(meme_id: u64) -> Result<Nat, String> {
     }
 
     let voting_canister = ic_cdk::api::id();
-    let stored_meme_data = voting_get_meme_data(voting_canister, meme_id).await?
+    let stored_meme_data = voting_get_meme_data(voting_canister, meme_id)
+        .await?
         .ok_or_else(|| format!("StoredMeme {} not found in voting canister", meme_id))?;
 
     let image_url = stored_meme_data.meme_data.image_url.clone();
     let image_format = stored_meme_data.meme_data.image_format.clone();
-    let mime_type = guess_content_type(&image_format).unwrap_or_else(|| "application/octet-stream".into());
+    let mime_type =
+        guess_content_type(&image_format).unwrap_or_else(|| "application/octet-stream".into());
 
-    let image_bytes = match crate::http_outcall::fetch_image_bytes_from_image_storage(&image_url).await {
-        Ok(b) => b,
-        Err(e) => return Err(format!("failed to fetch image for meme {} : {}", meme_id, e)),
-    };
+    let image_bytes =
+        match crate::http_outcall::fetch_image_bytes_from_image_storage(&image_url).await {
+            Ok(b) => b,
+            Err(e) => {
+                return Err(format!(
+                    "failed to fetch image for meme {} : {}",
+                    meme_id, e
+                ))
+            }
+        };
 
     // Store image bytes in STORED_IMAGES under meme_id
     STORED_IMAGES.with(|imgs| {
@@ -411,7 +563,7 @@ async fn mint_to(meme_id: u64) -> Result<Nat, String> {
 
     // Generate token_id and build token metadata
     let token_id = next_token_id();
-    let mut metadata = build_metadata(&stored_meme_data);
+    let mut metadata = build_metadata(&stored_meme_data, &token_id);
 
     // Add content type to metadata (ensures downstream clients can read content type)
     metadata.push(TokenMetadataEntry {
@@ -434,6 +586,7 @@ async fn mint_to(meme_id: u64) -> Result<Nat, String> {
     TOKENS.with(|t| t.borrow_mut().insert(SNat(token_id.clone()), rec));
     push_owner(stored_meme_data.owner, &token_id);
     MINT_INDEX.with(|mi| mi.borrow_mut().insert(meme_id, SNat(token_id.clone())));
+    mutate_sale_metadata(&token_id, meme_id, |_| {});
 
     Ok(token_id)
 }
@@ -448,14 +601,22 @@ pub async fn mint_week_top3_from_voting(week_id: u64) -> Result<Vec<MintedPair>,
 
     let voting_canister = ic_cdk::api::id();
     let winners = voting_get_top3_for_week(voting_canister, week_id).await?;
-    if winners.is_empty() { return Ok(vec![]); }
+    if winners.is_empty() {
+        return Ok(vec![]);
+    }
 
     let mut minted: Vec<MintedPair> = Vec::new();
     for w in winners.into_iter() {
         let token_id = mint_to(w.meme_id).await?;
         // Fetch owner from token record
-        let owner = TOKENS.with(|t| t.borrow().get(&SNat(token_id.clone())).map(|rec| rec.owner)).unwrap_or(Principal::anonymous());
-        minted.push(MintedPair { meme_id: w.meme_id, token_id, owner });
+        let owner = TOKENS
+            .with(|t| t.borrow().get(&SNat(token_id.clone())).map(|rec| rec.owner))
+            .unwrap_or(Principal::anonymous());
+        minted.push(MintedPair {
+            meme_id: w.meme_id,
+            token_id,
+            owner,
+        });
     }
 
     WEEK_MINTED.with(|wm| wm.borrow_mut().insert(week_id, true));

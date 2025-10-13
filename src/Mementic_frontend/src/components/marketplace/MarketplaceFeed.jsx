@@ -45,7 +45,11 @@ const MarketplaceFeed = ({
   );
 
   const listedCount = useMemo(
-    () => ensureArray(memes).filter((meme) => meme?.market_data?.is_listed).length,
+    () =>
+      ensureArray(memes).filter((meme) => {
+        const sale = meme?.sale_metadata ?? meme?.market_data;
+        return sale?.is_listed;
+      }).length,
     [memes]
   );
 

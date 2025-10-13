@@ -200,12 +200,13 @@ const normalizeMeme = (m, extra = {}) => {
   const createdAt =
     createdAtCandidates.find((value) => value && value > 0) ?? Date.now();
 
-  const marketData = md?.market_data ?? m?.market_data ?? {};
-  const listingPriceIcp = convertE8sToIcp(unwrapOptional(marketData?.listing_price));
-  const listedAt = normalizeTimestampToMs(unwrapOptional(marketData?.listed_at));
-  const views = safeBigIntToNumber(
-    unwrapOptional(marketData?.views) ?? m?.views ?? md?.views ?? 0
+  const saleMetadata =
+    md?.sale_metadata ?? m?.sale_metadata ?? md?.market_data ?? m?.market_data ?? {};
+  const listingPriceIcp = convertE8sToIcp(
+    unwrapOptional(saleMetadata?.listing_price)
   );
+  const listedAt = normalizeTimestampToMs(unwrapOptional(saleMetadata?.listed_at));
+  const views = safeBigIntToNumber(m?.views ?? md?.views ?? 0);
 
   return {
     id: toSafeIdString(m?.id ?? m?.meme_id ?? m?._id ?? m?.uuid ?? Date.now()),
@@ -224,7 +225,8 @@ const normalizeMeme = (m, extra = {}) => {
     created_at: createdAt,
     listed_at: listedAt || null,
     listingPriceIcp,
-    market_data: marketData,
+    sale_metadata: saleMetadata,
+    market_data: saleMetadata,
     metadata_service: metadata?.service ? String(metadata.service) : null,
     rank: safeBigIntToNumber(extra?.rank ?? m?.rank ?? 0),
     __raw: m,
@@ -390,7 +392,11 @@ const Auction = () => {
   }, []);
 
   const liveAuctions = useMemo(
-    () => auctions.filter((meme) => meme.market_data?.is_listed ?? true),
+    () =>
+      auctions.filter((meme) => {
+        const sale = meme?.sale_metadata ?? meme?.market_data;
+        return sale?.is_listed ?? true;
+      }),
     [auctions]
   );
 

@@ -28,16 +28,6 @@ type LeaderboardEntry = record {
   rank : nat32;
   meme_data : opt PublicStoredMeme;
 };
-type MarketData = record {
-  listing_price : opt nat64;
-  total_sales : nat64;
-  last_sale_price : opt nat64;
-  views : nat64;
-  is_listed : bool;
-  last_sale_at : opt nat64;
-  total_earned : nat64;
-  listed_at : opt nat64;
-};
 type MemeData = record {
   image_url : text;
   metadata : PythonMetadata;
@@ -66,10 +56,11 @@ type NftImage = record { mime_type : text; image : blob };
 type PublicStoredMeme = record {
   id : nat64;
   owner : principal;
-  market_data : MarketData;
   created_at : nat64;
   meme_data : MemeData;
   canister_timestamp : nat64;
+  views : nat64;
+  sale_metadata : opt TokenSaleMetadata;
 };
 type PythonMetadata = record {
   "service" : text;
@@ -99,6 +90,17 @@ type TokenRecord = record {
   mime_type : opt text;
   has_image : bool;
   minted_at : nat64;
+};
+type TokenSaleMetadata = record {
+  token_id : nat;
+  meme_id : nat64;
+  is_listed : bool;
+  listing_price : opt nat64;
+  listed_at : opt nat64;
+  total_sales : nat64;
+  total_earned : nat64;
+  last_sale_price : opt nat64;
+  last_sale_at : opt nat64;
 };
 type TopEntry = record {
   upvotes : nat32;
@@ -176,6 +178,8 @@ service : (opt InitArgs) -> {
   get_nft_image : (nat) -> (opt NftImage) query;
   get_token : (nat) -> (opt TokenRecord) query;
   get_token_by_meme_id : (nat64) -> (opt nat) query;
+  get_sale_metadata : (nat) -> (opt TokenSaleMetadata) query;
+  get_sale_metadata_for_meme : (nat64) -> (opt TokenSaleMetadata) query;
   // Return **Top 3** for a given week (for NFT mint step).
   // Fails if the week is not completed yet.
   get_top3_for_week : (nat64) -> (Result_3) query;
