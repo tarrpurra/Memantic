@@ -640,8 +640,11 @@ pub fn remove_all_memes_from_market() -> Result<u32, String> {
         return Err("Authentication required".to_string());
     }
 
-    // Optional: Add admin check here if you have admin principals
-    // For now, allowing any authenticated user
+    // Admin check - only admin can perform this operation
+    let admin = crate::nft_module::get_admin();
+    if user != admin {
+        return Err("Admin access required".to_string());
+    }
 
     let keys_to_update: Vec<u64> = MEMES.with(|m| {
         let map = m.borrow();
@@ -722,6 +725,12 @@ pub fn delete_all_user_memes() -> Result<u32, String> {
     let user = caller();
     if user == Principal::anonymous() {
         return Err("Authentication required".to_string());
+    }
+
+    // Admin check - only admin can perform this operation
+    let admin = crate::nft_module::get_admin();
+    if user != admin {
+        return Err("Admin access required".to_string());
     }
 
     // Get all meme IDs in the system
@@ -930,15 +939,7 @@ pub fn get_marketplace_memes() -> Vec<PublicStoredMeme> {
 #[query]
 pub fn get_meme(meme_id: u64) -> Option<PublicStoredMeme> {
     MEMES.with(|m| {
-        let mut map = m.borrow_mut();
-        if let Some(mut stored) = map.get(&meme_id) {
-            // Increment view count
-            stored.views = stored.views.saturating_add(1);
-            map.insert(meme_id, stored.clone());
-            Some(stored.into())
-        } else {
-            None
-        }
+        m.borrow().get(&meme_id).map(|stored| stored.into())
     })
 }
 

@@ -1,4 +1,4 @@
-// src/lib.rs
+ // src/lib.rs
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_cdk::api::time;
 use ic_cdk_macros::{init, query, update};
@@ -282,6 +282,11 @@ fn assert_admin() {
     if ic_cdk::caller() != STATE.with(|s| s.borrow().admin) {
         ic_cdk::trap("Unauthorized: admin only");
     }
+}
+
+#[query]
+pub fn get_admin() -> Principal {
+    STATE.with(|s| s.borrow().admin)
 }
 
 // ---------- ICRC-7-ish queries ----------

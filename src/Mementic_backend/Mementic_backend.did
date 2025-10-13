@@ -55,12 +55,12 @@ type MintedPair = record { meme_id : nat64; token_id : nat; owner : principal };
 type NftImage = record { mime_type : text; image : blob };
 type PublicStoredMeme = record {
   id : nat64;
+  sale_metadata : opt TokenSaleMetadata;
+  views : nat64;
   owner : principal;
   created_at : nat64;
   meme_data : MemeData;
   canister_timestamp : nat64;
-  views : nat64;
-  sale_metadata : opt TokenSaleMetadata;
 };
 type PythonMetadata = record {
   "service" : text;
@@ -92,15 +92,15 @@ type TokenRecord = record {
   minted_at : nat64;
 };
 type TokenSaleMetadata = record {
-  token_id : nat;
-  meme_id : nat64;
-  is_listed : bool;
   listing_price : opt nat64;
-  listed_at : opt nat64;
   total_sales : nat64;
-  total_earned : nat64;
+  meme_id : nat64;
+  token_id : nat;
   last_sale_price : opt nat64;
+  is_listed : bool;
   last_sale_at : opt nat64;
+  total_earned : nat64;
+  listed_at : opt nat64;
 };
 type TopEntry = record {
   upvotes : nat32;
@@ -156,6 +156,7 @@ service : (opt InitArgs) -> {
   // Force-complete a specific week_id (admin/ops hook).
   finalize_week : (nat64) -> (Result_2);
   generate_meme : (text) -> (Result);
+  get_admin : () -> (principal) query;
   // Get all feedback (admin function)
   get_all_feedback : () -> (vec Feedback) query;
   // List all memes for marketplace (newest first)
@@ -176,10 +177,10 @@ service : (opt InitArgs) -> {
   // Get per-meme votes
   get_meme_votes : (nat64) -> (opt MemeVotes) query;
   get_nft_image : (nat) -> (opt NftImage) query;
-  get_token : (nat) -> (opt TokenRecord) query;
-  get_token_by_meme_id : (nat64) -> (opt nat) query;
   get_sale_metadata : (nat) -> (opt TokenSaleMetadata) query;
   get_sale_metadata_for_meme : (nat64) -> (opt TokenSaleMetadata) query;
+  get_token : (nat) -> (opt TokenRecord) query;
+  get_token_by_meme_id : (nat64) -> (opt nat) query;
   // Return **Top 3** for a given week (for NFT mint step).
   // Fails if the week is not completed yet.
   get_top3_for_week : (nat64) -> (Result_3) query;
