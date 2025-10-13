@@ -2,11 +2,11 @@
 #![allow(clippy::too_many_arguments)]
 
 use candid::{CandidType, Nat, Principal};
-use ic_cdk::{caller,api::time};
 use ic_cdk::api::management_canister::http_request::{
     http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse, TransformArgs,
     TransformContext,
 };
+use ic_cdk::{api::time, caller};
 
 use ic_cdk_macros::{query, update};
 use ic_stable_structures::{
@@ -17,6 +17,7 @@ use ic_stable_structures::{
 use ic_cdk::api::call::call;
 use ic_cdk::api::call::call_with_payment;
 
+use crate::nft_module::TokenSaleMetadata;
 use ic_stable_structures::storable::Bound;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -34,23 +35,46 @@ const MEME_WORKER_URL: &str = "https://dark-shape-faac.h28177922.workers.dev/gen
 pub struct StorablePrincipal(Principal);
 
 impl Storable for StorablePrincipal {
-    const BOUND: Bound = Bound::Bounded { max_size: 29, is_fixed_size: false };
-    fn to_bytes(&self) -> Cow<[u8]> { Cow::Borrowed(self.0.as_slice()) }
-    fn into_bytes(self) -> Vec<u8> { self.0.as_slice().to_vec() }
-    fn from_bytes(bytes: Cow<[u8]>) -> Self { StorablePrincipal(Principal::from_slice(bytes.as_ref())) }
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 29,
+        is_fixed_size: false,
+    };
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Borrowed(self.0.as_slice())
+    }
+    fn into_bytes(self) -> Vec<u8> {
+        self.0.as_slice().to_vec()
+    }
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        StorablePrincipal(Principal::from_slice(bytes.as_ref()))
+    }
 }
-impl From<Principal> for StorablePrincipal { fn from(p: Principal) -> Self { StorablePrincipal(p) } }
-impl From<StorablePrincipal> for Principal { fn from(sp: StorablePrincipal) -> Self { sp.0 } }
+impl From<Principal> for StorablePrincipal {
+    fn from(p: Principal) -> Self {
+        StorablePrincipal(p)
+    }
+}
+impl From<StorablePrincipal> for Principal {
+    fn from(sp: StorablePrincipal) -> Self {
+        sp.0
+    }
+}
 
 // ---------- Storable wrapper for Vec<u64> ----------
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StorableVecU64(pub Vec<u64>);
 impl StorableVecU64 {
     pub const MAX_LEN: usize = 1024;
-    #[inline] fn byte_capacity_for(len: usize) -> usize { 4 + 8 * len }
+    #[inline]
+    fn byte_capacity_for(len: usize) -> usize {
+        4 + 8 * len
+    }
 }
 impl Storable for StorableVecU64 {
-    const BOUND: Bound = Bound::Bounded { max_size: (4 + 8 * Self::MAX_LEN) as u32, is_fixed_size: false };
+    const BOUND: Bound = Bound::Bounded {
+        max_size: (4 + 8 * Self::MAX_LEN) as u32,
+        is_fixed_size: false,
+    };
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut len = self.0.len().min(Self::MAX_LEN);
         let mut bytes = Vec::with_capacity(Self::byte_capacity_for(len));
@@ -71,13 +95,17 @@ impl Storable for StorableVecU64 {
     }
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         let b = bytes.as_ref();
-        if b.len() < 4 { return StorableVecU64(Vec::new()); }
+        if b.len() < 4 {
+            return StorableVecU64(Vec::new());
+        }
         let declared = u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize;
         let len = declared.min(Self::MAX_LEN);
         let mut v = Vec::with_capacity(len);
         for i in 0..len {
             let start = 4 + i * 8;
-            if start + 8 > b.len() { break; }
+            if start + 8 > b.len() {
+                break;
+            }
             let mut arr = [0u8; 8];
             arr.copy_from_slice(&b[start..start + 8]);
             v.push(u64::from_le_bytes(arr));
@@ -85,8 +113,16 @@ impl Storable for StorableVecU64 {
         StorableVecU64(v)
     }
 }
-impl From<Vec<u64>> for StorableVecU64 { fn from(v: Vec<u64>) -> Self { StorableVecU64(v) } }
-impl From<StorableVecU64> for Vec<u64> { fn from(sv: StorableVecU64) -> Self { sv.0 } }
+impl From<Vec<u64>> for StorableVecU64 {
+    fn from(v: Vec<u64>) -> Self {
+        StorableVecU64(v)
+    }
+}
+impl From<StorableVecU64> for Vec<u64> {
+    fn from(sv: StorableVecU64) -> Self {
+        sv.0
+    }
+}
 
 // ---------- Stable memory setup ----------
 thread_local! {
@@ -112,9 +148,15 @@ thread_local! {
 
 // ---------- Data structures ----------
 #[derive(Clone, Debug, Default, Serialize, Deserialize, CandidType)]
-struct DayUsage { day: u64, count: u8 }
+struct DayUsage {
+    day: u64,
+    count: u8,
+}
 impl Storable for DayUsage {
-    const BOUND: Bound = Bound::Bounded { max_size: 9, is_fixed_size: true };
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 9,
+        is_fixed_size: true,
+    };
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut bytes = Vec::with_capacity(9);
         bytes.extend_from_slice(&self.day.to_le_bytes());
@@ -128,10 +170,15 @@ impl Storable for DayUsage {
         bytes
     }
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        if bytes.len() != 9 { return DayUsage::default(); }
+        if bytes.len() != 9 {
+            return DayUsage::default();
+        }
         let mut day_arr = [0u8; 8];
         day_arr.copy_from_slice(&bytes[0..8]);
-        DayUsage { day: u64::from_le_bytes(day_arr), count: bytes[8] }
+        DayUsage {
+            day: u64::from_le_bytes(day_arr),
+            count: bytes[8],
+        }
     }
 }
 
@@ -153,29 +200,23 @@ pub struct PythonMetadata {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
-pub struct MarketData {
-    pub is_listed: bool,
-    pub listing_price: Option<u64>, // Price in e8s (ICP smallest unit)
-    pub listed_at: Option<u64>,
-    pub total_sales: u64,
-    pub total_earned: u64, // Total earned from sales in e8s
-    pub last_sale_price: Option<u64>,
-    pub last_sale_at: Option<u64>,
-    pub views: u64, // Number of times this meme has been viewed
-}
-#[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
 pub struct StoredMeme {
     pub id: u64,
     pub owner: StorablePrincipal,
     pub meme_data: MemeData,
     pub created_at: u64,
     pub canister_timestamp: u64,
-    pub market_data: MarketData,
+    #[serde(default)]
+    pub views: u64,
 }
 impl Storable for StoredMeme {
     const BOUND: Bound = Bound::Unbounded;
-    fn to_bytes(&self) -> Cow<[u8]> { Cow::Owned(serde_json::to_vec(self).unwrap_or_default()) }
-    fn into_bytes(self) -> Vec<u8> { serde_json::to_vec(&self).unwrap_or_default() }
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(serde_json::to_vec(self).unwrap_or_default())
+    }
+    fn into_bytes(self) -> Vec<u8> {
+        serde_json::to_vec(&self).unwrap_or_default()
+    }
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         serde_json::from_slice(bytes.as_ref()).unwrap_or_else(|_| StoredMeme {
             id: 0,
@@ -186,20 +227,16 @@ impl Storable for StoredMeme {
                 image_url: String::new(),
                 image_filename: String::new(),
                 image_format: String::new(),
-                metadata: PythonMetadata { processing_time: 0.0, timestamp: 0, file_size_bytes: 0, service: String::new() },
+                metadata: PythonMetadata {
+                    processing_time: 0.0,
+                    timestamp: 0,
+                    file_size_bytes: 0,
+                    service: String::new(),
+                },
             },
             created_at: 0,
             canister_timestamp: 0,
-            market_data: MarketData {
-                is_listed: false,
-                listing_price: None,
-                listed_at: None,
-                total_sales: 0,
-                total_earned: 0,
-                last_sale_price: None,
-                last_sale_at: None,
-                views: 0,
-            },
+            views: 0,
         })
     }
 }
@@ -210,7 +247,8 @@ pub struct PublicStoredMeme {
     pub meme_data: MemeData,
     pub created_at: u64,
     pub canister_timestamp: u64,
-    pub market_data: MarketData,
+    pub views: u64,
+    pub sale_metadata: Option<TokenSaleMetadata>,
 }
 impl From<StoredMeme> for PublicStoredMeme {
     fn from(sm: StoredMeme) -> Self {
@@ -220,21 +258,27 @@ impl From<StoredMeme> for PublicStoredMeme {
             meme_data: sm.meme_data,
             created_at: sm.created_at,
             canister_timestamp: sm.canister_timestamp,
-            market_data: sm.market_data,
+            views: sm.views,
+            sale_metadata: crate::nft_module::get_sale_metadata_for_meme(sm.id),
         }
     }
 }
 
 // ---------- Helpers ----------
 fn is_url_allowed(url: &str) -> bool {
-    url.starts_with("https://") || url.starts_with("http://127.0.0.1") || url.starts_with("http://localhost")
+    url.starts_with("https://")
+        || url.starts_with("http://127.0.0.1")
+        || url.starts_with("http://localhost")
 }
 fn url_encode(input: &str) -> String {
-    input.chars().map(|c| match c {
-        'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
-        ' ' => "%20".to_string(),
-        _ => format!("%{:02X}", c as u8),
-    }).collect()
+    input
+        .chars()
+        .map(|c| match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
+            ' ' => "%20".to_string(),
+            _ => format!("%{:02X}", c as u8),
+        })
+        .collect()
 }
 
 // ---------- Simple GET helper (Cloudflare Worker) ----------
@@ -258,7 +302,7 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
     let storable_user = StorablePrincipal::from(user);
     let now = time();
     let current_day = now / (24 * 60 * 60 * 1_000_000_000); // Convert ns to days
-    
+
     // Check if user has exceeded daily limit
     let can_generate = RATE.with(|r| {
         let mut rate_map = r.borrow_mut();
@@ -275,7 +319,7 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
             true
         }
     });
-    
+
     if !can_generate {
         return Err("Daily meme generation limit reached. Please try again tomorrow.".to_string());
     }
@@ -288,8 +332,14 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
     }
 
     let headers = vec![
-        HttpHeader { name: "User-Agent".into(), value: "mementic_canister".into() },
-        HttpHeader { name: "Accept".into(), value: "application/json".into() },
+        HttpHeader {
+            name: "User-Agent".into(),
+            value: "mementic_canister".into(),
+        },
+        HttpHeader {
+            name: "Accept".into(),
+            value: "application/json".into(),
+        },
     ];
 
     let req = CanisterHttpRequestArgument {
@@ -320,15 +370,28 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
                 rate_map.insert(storable_user, new_usage);
             } else {
                 // New day, reset count to 1
-                rate_map.insert(storable_user, DayUsage { day: current_day, count: 1 });
+                rate_map.insert(
+                    storable_user,
+                    DayUsage {
+                        day: current_day,
+                        count: 1,
+                    },
+                );
             }
         } else {
             // First time user, start with count 1
-            rate_map.insert(storable_user, DayUsage { day: current_day, count: 1 });
+            rate_map.insert(
+                storable_user,
+                DayUsage {
+                    day: current_day,
+                    count: 1,
+                },
+            );
         }
     });
 
-    let response_text = String::from_utf8(resp.body).unwrap_or_else(|_| "<non-utf8-body>".to_string());
+    let response_text =
+        String::from_utf8(resp.body).unwrap_or_else(|_| "<non-utf8-body>".to_string());
     ic_cdk::println!("Cloudflare Worker Response: {}", &response_text);
 
     // Parse the response to extract meme data
@@ -342,22 +405,26 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
                 ic_cdk::println!("Found nested 'data' object, extracting meme data from it");
 
                 // Extract fields from the data object
-                let prompt = data_obj.get("prompt")
+                let prompt = data_obj
+                    .get("prompt")
                     .and_then(|v| v.as_str())
                     .unwrap_or(&prompt)
                     .to_string();
 
-                let image_url = data_obj.get("image_url")
+                let image_url = data_obj
+                    .get("image_url")
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
 
-                let image_filename = data_obj.get("image_filename")
+                let image_filename = data_obj
+                    .get("image_filename")
                     .and_then(|v| v.as_str())
                     .unwrap_or("generated_meme.png")
                     .to_string();
 
-                let image_format = data_obj.get("image_format")
+                let image_format = data_obj
+                    .get("image_format")
                     .and_then(|v| v.as_str())
                     .unwrap_or("png")
                     .to_string();
@@ -366,16 +433,20 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
                 let metadata_obj = data_obj.get("metadata");
                 let metadata = if let Some(meta) = metadata_obj {
                     PythonMetadata {
-                        processing_time: meta.get("processing_time")
+                        processing_time: meta
+                            .get("processing_time")
                             .and_then(|v| v.as_f64())
                             .unwrap_or(1.0),
-                        timestamp: meta.get("timestamp")
+                        timestamp: meta
+                            .get("timestamp")
                             .and_then(|v| v.as_u64())
                             .unwrap_or(time()),
-                        file_size_bytes: meta.get("file_size_bytes")
+                        file_size_bytes: meta
+                            .get("file_size_bytes")
                             .and_then(|v| v.as_u64())
                             .unwrap_or(1024000),
-                        service: meta.get("service")
+                        service: meta
+                            .get("service")
                             .and_then(|v| v.as_str())
                             .unwrap_or("icp-meme-generator")
                             .to_string(),
@@ -410,42 +481,50 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
                         ic_cdk::println!("Response was: {}", &response_text);
 
                         // Last resort: extract fields from root level
-                        let prompt = json_value.get("prompt")
+                        let prompt = json_value
+                            .get("prompt")
                             .and_then(|v| v.as_str())
                             .unwrap_or(&prompt)
                             .to_string();
 
-                        let image_url = json_value.get("image_url")
+                        let image_url = json_value
+                            .get("image_url")
                             .or_else(|| json_value.get("url"))
                             .or_else(|| json_value.get("image"))
                             .and_then(|v| v.as_str())
                             .unwrap_or("")
                             .to_string();
 
-                        let image_filename = json_value.get("image_filename")
+                        let image_filename = json_value
+                            .get("image_filename")
                             .or_else(|| json_value.get("filename"))
                             .and_then(|v| v.as_str())
                             .unwrap_or("generated_meme.png")
                             .to_string();
 
-                        let image_format = json_value.get("image_format")
+                        let image_format = json_value
+                            .get("image_format")
                             .or_else(|| json_value.get("format"))
                             .and_then(|v| v.as_str())
                             .unwrap_or("png")
                             .to_string();
 
                         let metadata = PythonMetadata {
-                            processing_time: json_value.get("processing_time")
+                            processing_time: json_value
+                                .get("processing_time")
                                 .and_then(|v| v.as_f64())
                                 .unwrap_or(1.0),
-                            timestamp: json_value.get("timestamp")
+                            timestamp: json_value
+                                .get("timestamp")
                                 .and_then(|v| v.as_u64())
                                 .unwrap_or(time()),
-                            file_size_bytes: json_value.get("file_size_bytes")
+                            file_size_bytes: json_value
+                                .get("file_size_bytes")
                                 .or_else(|| json_value.get("file_size"))
                                 .and_then(|v| v.as_u64())
                                 .unwrap_or(1024000),
-                            service: json_value.get("service")
+                            service: json_value
+                                .get("service")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("icp-meme-generator")
                                 .to_string(),
@@ -507,25 +586,23 @@ pub fn list_meme_for_sale(meme_id: u64, price_e8s: u64) -> Result<(), String> {
         return Err("Authentication required".to_string());
     }
 
-    MEMES.with(|m| {
-        let mut map = m.borrow_mut();
-        if let Some(mut stored) = map.get(&meme_id) {
-            // Verify ownership
-            if stored.owner.0 != user {
-                return Err("You don't own this meme".to_string());
-            }
+    let owner = MEMES.with(|m| m.borrow().get(&meme_id).map(|stored| stored.owner.0));
+    let owner = owner.ok_or_else(|| "Meme not found".to_string())?;
 
-            // Update market data
-            stored.market_data.is_listed = true;
-            stored.market_data.listing_price = Some(price_e8s);
-            stored.market_data.listed_at = Some(time());
+    if owner != user {
+        return Err("You don't own this meme".to_string());
+    }
 
-            map.insert(meme_id, stored);
-            Ok(())
-        } else {
-            Err("Meme not found".to_string())
-        }
-    })
+    let token_id = crate::nft_module::get_token_by_meme_id(meme_id)
+        .ok_or_else(|| "Meme has not been minted as an NFT yet".to_string())?;
+
+    crate::nft_module::mutate_sale_metadata(&token_id, meme_id, |sale| {
+        sale.is_listed = true;
+        sale.listing_price = Some(price_e8s);
+        sale.listed_at = Some(time());
+    });
+
+    Ok(())
 }
 
 /// Remove a meme from the marketplace
@@ -536,25 +613,23 @@ pub fn remove_meme_from_market(meme_id: u64) -> Result<(), String> {
         return Err("Authentication required".to_string());
     }
 
-    MEMES.with(|m| {
-        let mut map = m.borrow_mut();
-        if let Some(mut stored) = map.get(&meme_id) {
-            // Verify ownership
-            if stored.owner.0 != user {
-                return Err("You don't own this meme".to_string());
-            }
+    let owner = MEMES.with(|m| m.borrow().get(&meme_id).map(|stored| stored.owner.0));
+    let owner = owner.ok_or_else(|| "Meme not found".to_string())?;
 
-            // Update market data
-            stored.market_data.is_listed = false;
-            stored.market_data.listing_price = None;
-            stored.market_data.listed_at = None;
+    if owner != user {
+        return Err("You don't own this meme".to_string());
+    }
 
-            map.insert(meme_id, stored);
-            Ok(())
-        } else {
-            Err("Meme not found".to_string())
-        }
-    })
+    if let Some(token_id) = crate::nft_module::get_token_by_meme_id(meme_id) {
+        crate::nft_module::mutate_sale_metadata(&token_id, meme_id, |sale| {
+            sale.is_listed = false;
+            sale.listing_price = None;
+            sale.listed_at = None;
+        });
+        Ok(())
+    } else {
+        Err("Meme has not been minted as an NFT yet".to_string())
+    }
 }
 
 /// Remove all memes from the marketplace (admin function)
@@ -568,31 +643,29 @@ pub fn remove_all_memes_from_market() -> Result<u32, String> {
     // Optional: Add admin check here if you have admin principals
     // For now, allowing any authenticated user
 
-    let mut removed_count = 0;
-    MEMES.with(|m| {
-        let mut map = m.borrow_mut();
-        let keys_to_update: Vec<u64> = map
-            .iter()
+    let keys_to_update: Vec<u64> = MEMES.with(|m| {
+        let map = m.borrow();
+        map.iter()
             .filter_map(|entry| {
-                let sm = entry.value();
-                if sm.market_data.is_listed {
-                    Some(*entry.key())
-                } else {
-                    None
-                }
+                let meme_id = *entry.key();
+                crate::nft_module::get_sale_metadata_for_meme(meme_id)
+                    .filter(|sale| sale.is_listed)
+                    .map(|_| meme_id)
             })
-            .collect();
-
-        for meme_id in keys_to_update {
-            if let Some(mut stored) = map.get(&meme_id) {
-                stored.market_data.is_listed = false;
-                stored.market_data.listing_price = None;
-                stored.market_data.listed_at = None;
-                map.insert(meme_id, stored);
-                removed_count += 1;
-            }
-        }
+            .collect()
     });
+
+    let mut removed_count = 0;
+    for meme_id in keys_to_update {
+        if let Some(token_id) = crate::nft_module::get_token_by_meme_id(meme_id) {
+            crate::nft_module::mutate_sale_metadata(&token_id, meme_id, |sale| {
+                sale.is_listed = false;
+                sale.listing_price = None;
+                sale.listed_at = None;
+            });
+            removed_count += 1;
+        }
+    }
 
     Ok(removed_count)
 }
@@ -652,9 +725,8 @@ pub fn delete_all_user_memes() -> Result<u32, String> {
     }
 
     // Get all meme IDs in the system
-    let all_meme_ids: Vec<u64> = MEMES.with(|m| {
-        m.borrow().iter().map(|entry| *entry.key()).collect()
-    });
+    let all_meme_ids: Vec<u64> =
+        MEMES.with(|m| m.borrow().iter().map(|entry| *entry.key()).collect());
 
     let mut deleted_count = 0;
     let mut failed_deletions = Vec::new();
@@ -691,7 +763,10 @@ pub fn delete_all_user_memes() -> Result<u32, String> {
 
             // Remove all voting data for this meme
             if let Err(e) = crate::voting::delete_meme_data(meme_id) {
-                failed_deletions.push(format!("Meme {}: voting data deletion failed: {}", meme_id, e));
+                failed_deletions.push(format!(
+                    "Meme {}: voting data deletion failed: {}",
+                    meme_id, e
+                ));
                 continue;
             }
 
@@ -703,7 +778,11 @@ pub fn delete_all_user_memes() -> Result<u32, String> {
 
     // If there were any failures, return an error with details
     if !failed_deletions.is_empty() {
-        return Err(format!("Deleted {} memes, but failed to delete: {}", deleted_count, failed_deletions.join(", ")));
+        return Err(format!(
+            "Deleted {} memes, but failed to delete: {}",
+            deleted_count,
+            failed_deletions.join(", ")
+        ));
     }
 
     Ok(deleted_count)
@@ -712,25 +791,25 @@ pub fn delete_all_user_memes() -> Result<u32, String> {
 /// Record a sale (called internally or by marketplace canister)
 #[update]
 pub fn record_meme_sale(meme_id: u64, sale_price_e8s: u64) -> Result<(), String> {
-    MEMES.with(|m| {
-        let mut map = m.borrow_mut();
-        if let Some(mut stored) = map.get(&meme_id) {
-            stored.market_data.total_sales += 1;
-            stored.market_data.total_earned += sale_price_e8s;
-            stored.market_data.last_sale_price = Some(sale_price_e8s);
-            stored.market_data.last_sale_at = Some(time());
+    let exists = MEMES.with(|m| m.borrow().contains_key(&meme_id));
+    if !exists {
+        return Err("Meme not found".to_string());
+    }
 
-            // Remove from market after sale
-            stored.market_data.is_listed = false;
-            stored.market_data.listing_price = None;
-            stored.market_data.listed_at = None;
-
-            map.insert(meme_id, stored);
-            Ok(())
-        } else {
-            Err("Meme not found".to_string())
-        }
-    })
+    if let Some(token_id) = crate::nft_module::get_token_by_meme_id(meme_id) {
+        crate::nft_module::mutate_sale_metadata(&token_id, meme_id, |sale| {
+            sale.total_sales = sale.total_sales.saturating_add(1);
+            sale.total_earned = sale.total_earned.saturating_add(sale_price_e8s);
+            sale.last_sale_price = Some(sale_price_e8s);
+            sale.last_sale_at = Some(time());
+            sale.is_listed = false;
+            sale.listing_price = None;
+            sale.listed_at = None;
+        });
+        Ok(())
+    } else {
+        Err("Meme has not been minted as an NFT yet".to_string())
+    }
 }
 
 /// Increment view count for a meme
@@ -739,7 +818,7 @@ pub fn increment_meme_views(meme_id: u64) -> Result<(), String> {
     MEMES.with(|m| {
         let mut map = m.borrow_mut();
         if let Some(mut stored) = map.get(&meme_id) {
-            stored.market_data.views += 1;
+            stored.views = stored.views.saturating_add(1);
             map.insert(meme_id, stored);
             Ok(())
         } else {
@@ -761,7 +840,7 @@ pub fn publish_meme(meme: MemeData) -> Result<PublicStoredMeme, String> {
 
     ic_cdk::println!("Publish meme - Authenticated user: {}", user.to_text());
     let now = time();
-    
+
     // Allocate id
     let id = next_meme_id();
 
@@ -770,18 +849,9 @@ pub fn publish_meme(meme: MemeData) -> Result<PublicStoredMeme, String> {
         id,
         owner: StorablePrincipal::from(user),
         meme_data: meme,
-        created_at: now,            // when published
-        canister_timestamp: now,    // canister-side write ts
-        market_data: MarketData {
-            is_listed: false,
-            listing_price: None,
-            listed_at: None,
-            total_sales: 0,
-            total_earned: 0,
-            last_sale_price: None,
-            last_sale_at: None,
-            views: 0,
-        },
+        created_at: now,         // when published
+        canister_timestamp: now, // canister-side write ts
+        views: 0,
     };
 
     // Insert into global index
@@ -836,9 +906,13 @@ pub fn get_marketplace_memes() -> Vec<PublicStoredMeme> {
             .iter()
             .filter_map(|entry| {
                 let sm = entry.value();
-                // Only include memes that are listed for sale
-                if sm.market_data.is_listed {
-                    let pm: PublicStoredMeme = sm.into();
+                let pm: PublicStoredMeme = sm.into();
+                if pm
+                    .sale_metadata
+                    .as_ref()
+                    .map(|sale| sale.is_listed)
+                    .unwrap_or(false)
+                {
                     Some(pm)
                 } else {
                     None
@@ -859,7 +933,7 @@ pub fn get_meme(meme_id: u64) -> Option<PublicStoredMeme> {
         let mut map = m.borrow_mut();
         if let Some(mut stored) = map.get(&meme_id) {
             // Increment view count
-            stored.market_data.views += 1;
+            stored.views = stored.views.saturating_add(1);
             map.insert(meme_id, stored.clone());
             Some(stored.into())
         } else {
@@ -872,11 +946,11 @@ pub fn get_meme(meme_id: u64) -> Option<PublicStoredMeme> {
 pub fn check_remaining_calls() -> u8 {
     let user = caller();
     let storable_user = StorablePrincipal::from(user);
-    
+
     // Get current day (in nanoseconds since epoch, converted to days)
     let now = time();
     let current_day = now / (24 * 60 * 60 * 1_000_000_000); // Convert ns to days
-    
+
     RATE.with(|r| {
         let rate_map = r.borrow();
         if let Some(usage) = rate_map.get(&storable_user) {
@@ -909,9 +983,13 @@ pub fn get_user_memes() -> Vec<PublicStoredMeme> {
             ids.sort_unstable_by(|a, b| b.cmp(a));
             MEMES.with(|m| {
                 let mem = m.borrow();
-                ids.into_iter().filter_map(|id| mem.get(&id).map(|sm| sm.into())).collect()
+                ids.into_iter()
+                    .filter_map(|id| mem.get(&id).map(|sm| sm.into()))
+                    .collect()
             })
-        } else { Vec::new() }
+        } else {
+            Vec::new()
+        }
     })
 }
 #[query]
@@ -922,7 +1000,15 @@ pub fn get_total_memes() -> u64 {
 pub fn get_user_meme_count() -> u32 {
     let user = caller();
     let storable_user = StorablePrincipal::from(user);
-    USER_MEMES.with(|um| um.borrow().get(&storable_user).map(|list| { let v: Vec<u64> = list.into(); v.len() as u32 }).unwrap_or(0))
+    USER_MEMES.with(|um| {
+        um.borrow()
+            .get(&storable_user)
+            .map(|list| {
+                let v: Vec<u64> = list.into();
+                v.len() as u32
+            })
+            .unwrap_or(0)
+    })
 }
 #[query]
 pub fn get_total_users() -> u64 {
@@ -937,7 +1023,12 @@ pub fn health() -> String {
 #[query]
 fn transform(args: TransformArgs) -> HttpResponse {
     let mut r = args.response;
-    r.headers.retain(|h| matches!(h.name.to_ascii_lowercase().as_str(), "content-type" | "content-length"));
+    r.headers.retain(|h| {
+        matches!(
+            h.name.to_ascii_lowercase().as_str(),
+            "content-type" | "content-length"
+        )
+    });
     r
 }
 
@@ -954,12 +1045,15 @@ pub async fn fetch_image_bytes_from_image_storage(url: &str) -> Result<Vec<u8>, 
 
     // Perform the async call to management canister
     let cycles: u64 = 21_000_000_000; // Attach enough cycles for HTTP outcall
-    let (response,): (HttpResponse,) = call_with_payment::<(CanisterHttpRequestArgument,), (HttpResponse,)>(
-        Principal::management_canister(),
-        "http_request",
-        (request,),
-        cycles
-    ).await.map_err(|e| format!("http_request call failed: {:?}", e))?;
+    let (response,): (HttpResponse,) =
+        call_with_payment::<(CanisterHttpRequestArgument,), (HttpResponse,)>(
+            Principal::management_canister(),
+            "http_request",
+            (request,),
+            cycles,
+        )
+        .await
+        .map_err(|e| format!("http_request call failed: {:?}", e))?;
 
     Ok(response.body)
 }

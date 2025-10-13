@@ -205,6 +205,8 @@ export const normalizeMeme = (m, extra = {}, userProfiles = new Map()) => {
   const createdAt =
     createdAtCandidates.find((value) => value && value > 0) ?? Date.now();
 
+  const saleMetadata = m?.sale_metadata ?? m?.market_data ?? null;
+
   return {
     id: toSafeIdString(m?.id ?? m?.meme_id ?? m?._id ?? m?.uuid ?? Date.now()),
     title:
@@ -218,11 +220,12 @@ export const normalizeMeme = (m, extra = {}, userProfiles = new Map()) => {
     creator,
     image_url,
     votes: score,
-    views: safeBigIntToNumber(m?.market_data?.views ?? m?.views ?? 0),
+    views: safeBigIntToNumber(m?.views ?? saleMetadata?.views ?? 0),
     created_at: createdAt,
     rank: safeBigIntToNumber(extra?.rank ?? m?.rank ?? 0),
     emoji: m?.emoji || "🖼️",
-    market_data: m?.market_data,
+    sale_metadata: saleMetadata,
+    market_data: saleMetadata,
     __raw: m,
   };
 };

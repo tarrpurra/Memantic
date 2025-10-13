@@ -237,6 +237,7 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
       const getCreatedAt = (meme) => safeBigIntToNumber(meme?.created_at || 0);
       const getVotes = (meme) => safeBigIntToNumber(meme?.votes || 0);
       const getViews = (meme) => safeBigIntToNumber(meme?.views || 0);
+      const getSale = (meme) => meme?.sale_metadata ?? meme?.market_data;
 
       if (sort === "newest") {
         arr.sort((a, b) => {
@@ -252,8 +253,8 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
         });
       } else if (sort === "listed") {
         arr.sort((a, b) => {
-          const aListed = a?.market_data?.is_listed ? 1 : 0;
-          const bListed = b?.market_data?.is_listed ? 1 : 0;
+          const aListed = getSale(a)?.is_listed ? 1 : 0;
+          const bListed = getSale(b)?.is_listed ? 1 : 0;
           if (aListed !== bListed) return bListed - aListed;
           const voteDiff = getVotes(b) - getVotes(a);
           if (voteDiff !== 0) return voteDiff;

@@ -91,7 +91,11 @@ const PreMarketplace = () => {
   );
 
   const listedCount = useMemo(
-    () => memes.filter((meme) => meme?.market_data?.is_listed).length,
+    () =>
+      memes.filter((meme) => {
+        const sale = meme?.sale_metadata ?? meme?.market_data;
+        return sale?.is_listed;
+      }).length,
     [memes]
   );
 

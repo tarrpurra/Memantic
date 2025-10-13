@@ -276,7 +276,7 @@ const Portfolio = () => {
   // Map canister records -> UI
   const mapToUi = (item) => {
     const memeData = unopt(item?.meme_data) || {};
-    const marketData = item?.market_data || {};
+    const marketData = item?.sale_metadata ?? item?.market_data ?? {};
     const votes = safeBigIntToNumber(item?.votes?.upvotes ?? item?.votes ?? 0);
 
     // Handle bigint conversion for earned ICP (from market data)
@@ -297,7 +297,7 @@ const Portfolio = () => {
       emoji: "🖼️",
       votes: votes,
       earnedIcp: Number.isFinite(earnedIcp) ? earnedIcp : 0,
-      views: safeBigIntToNumber(marketData?.views || item?.views || 0),
+      views: safeBigIntToNumber(item?.views || marketData?.views || 0),
       status,
       imageUrl: memeData?.image_url,
       // Market data
@@ -344,13 +344,16 @@ const Portfolio = () => {
               }
             },
             created_at: Date.now(),
-            market_data: {
+            sale_metadata: {
               is_listed: false,
               listing_price: null,
-              views: 0,
+              listed_at: null,
               total_sales: 0,
-              total_earned: 0
-            }
+              total_earned: 0,
+              last_sale_price: null,
+              last_sale_at: null
+            },
+            views: 0
           }
         ];
         console.log("Using sample data due to backend issues");
