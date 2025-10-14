@@ -14,6 +14,8 @@ import {
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import Navigation from "../components/Navigation";
+import backendService from "../services/backendService";
+import { useToast } from "../hooks/use-toast";
 
 const trendingMemes = [];
 
@@ -29,9 +31,32 @@ const slideVariants = {
   exit: { opacity: 0, scale: 0.96, y: -12 },
 };
 
+const unwrapOptional = (value) => (Array.isArray(value) ? value[0] : value);
+
+const formatPrincipalId = (principal) => {
+  if (!principal) return "-";
+  const text = principal?.toText?.() ?? principal?.toString?.() ?? String(principal);
+  if (text.length <= 10) return text;
+  return `${text.slice(0, 5)}...${text.slice(-3)}`;
+};
+
+const formatRanking = (rank) => {
+  const value = unwrapOptional(rank);
+  if (value === undefined || value === null) return "Unranked";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return "Unranked";
+  }
+  return `#${numeric}`;
+};
+
 const Marketplace = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const totalSlides = trendingMemes.length;
+  const [marketListings, setMarketListings] = useState([]);
+  const [loadingListings, setLoadingListings] = useState(true);
+  const [buyingId, setBuyingId] = useState(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (totalSlides > 1) {
@@ -41,6 +66,26 @@ const Marketplace = () => {
       return () => clearInterval(id);
     }
   }, [totalSlides]);
+
+  useEffect(() => {
+    const loadListings = async () => {
+      try {
+        await backendService.ensureReady();
+        const listings = await backendService.getMarketplaceListings(0, 20);
+        setMarketListings(listings);
+      } catch (error) {
+        console.error("Failed to load marketplace listings", error);
+        toast({
+          title: "Marketplace unavailable",
+          description: error.message ?? String(error),
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingListings(false);
+      }
+    };
+    loadListings();
+  }, [toast]);
 
   const currentMeme = useMemo(
     () => trendingMemes[currentSlide] ?? trendingMemes[0],
@@ -54,6 +99,55 @@ const Marketplace = () => {
       }
       return (prev - 1 + totalSlides) % totalSlides;
     });
+  };
+
+  const formatPrice = (value) => {
+    if (value === undefined || value === null) return "-";
+    const nat = typeof value === "bigint" ? value : BigInt(value);
+    const whole = nat / 100000000n;
+    const fraction = nat % 100000000n;
+    const fracStr = fraction.toString().padStart(8, "0").replace(/0+$/, "");
+    return `${whole}${fracStr ? `.${fracStr}` : ""} ICP`;
+  };
+
+  const refreshListings = async () => {
+    setLoadingListings(true);
+    try {
+      const listings = await backendService.getMarketplaceListings(0, 20);
+      setMarketListings(listings);
+    } catch (error) {
+      console.error("Failed to refresh listings", error);
+      toast({
+        title: "Refresh failed",
+        description: error.message ?? String(error),
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingListings(false);
+    }
+  };
+
+  const handleBuy = async (listing) => {
+    try {
+      const id = listing.listing?.listing_id ?? listing.listing_id;
+      const idText = id?.toString?.() ?? String(id);
+      setBuyingId(idText);
+      await backendService.buyFromListing(id, 1);
+      toast({
+        title: "Purchase successful",
+        description: "NFT purchased successfully.",
+      });
+      await refreshListings();
+    } catch (error) {
+      console.error("Purchase failed", error);
+      toast({
+        title: "Purchase failed",
+        description: error.message ?? String(error),
+        variant: "destructive",
+      });
+    } finally {
+      setBuyingId(null);
+    }
   };
 
   return (
@@ -322,6 +416,98 @@ const Marketplace = () => {
                   </table>
                 ) : (
                   <p className="text-sm text-muted-foreground py-8 text-center">No market data available yet.</p>
+                )}
+              </CardContent>
+            </Card>
+            <Card className="border-border/60 bg-background/80 shadow-card backdrop-blur-xl">
+              <CardHeader className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-3 text-lg font-semibold text-muted-foreground">
+                  <Activity className="h-5 w-5 text-primary" />
+                  Live Listings
+                </CardTitle>
+                <Button variant="outline" size="sm" onClick={refreshListings} disabled={loadingListings}>
+                  Refresh
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {loadingListings ? (
+                  <p className="text-sm text-muted-foreground">Loading listings...</p>
+                ) : marketListings.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No NFTs are currently listed for sale.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {marketListings.map((entry) => {
+                      const listing = entry.listing ?? entry;
+                      const listingId = listing.listing_id;
+                      const listingIdText = listingId?.toString?.() ?? String(listingId);
+                      const sellerText = formatPrincipalId(listing.seller);
+                      const floorPrice = formatPrice(unwrapOptional(entry.market?.floor_price));
+                      const totalVolume = formatPrice(entry.market?.total_volume);
+                      const rankingText = formatRanking(entry.market?.ranking);
+                      const listingPrice = formatPrice(listing.unit_price);
+                      const marketOwner = formatPrincipalId(unwrapOptional(entry.market?.current_owner));
+                      const editionSize = unwrapOptional(entry.edition_size);
+                      const isCollection = entry.is_collection;
+                      return (
+                        <div
+                          key={listingIdText}
+                          className="grid gap-4 rounded-2xl border border-border/60 bg-background/70 p-4 sm:grid-cols-[160px_1fr_auto] sm:items-center"
+                        >
+                          <div className="h-40 w-full overflow-hidden rounded-xl bg-muted">
+                            {entry.image_uri ? (
+                              <img src={entry.image_uri} alt={entry.name} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                                No preview
+                              </div>
+                            )}
+                          </div>
+                          <div className="space-y-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <p className="text-sm font-semibold text-foreground">{entry.name}</p>
+                                <p className="text-xs text-muted-foreground">Listing #{listingIdText}</p>
+                                <p className="text-xs text-muted-foreground">Seller {sellerText}</p>
+                                <p className="text-xs text-muted-foreground">Owner {marketOwner}</p>
+                              </div>
+                              <span className="text-sm font-semibold text-primary">{listingPrice}</span>
+                            </div>
+                            <div className="grid gap-x-4 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2">
+                              <span>Quantity Listed</span>
+                              <span className="text-right text-foreground">{Number(listing.quantity ?? 0)}</span>
+                              <span>Type</span>
+                              <span className="text-right text-foreground">
+                                {isCollection ? "Collection" : "Single"}
+                              </span>
+                              {isCollection && (
+                                <span className="col-span-2 flex items-center justify-between text-foreground">
+                                  <span>Edition Size</span>
+                                  <span>{editionSize ?? "-"}</span>
+                                </span>
+                              )}
+                              <span>Floor Price</span>
+                              <span className="text-right text-foreground">{floorPrice}</span>
+                              <span>Total Volume</span>
+                              <span className="text-right text-foreground">{totalVolume}</span>
+                              <span>Ranking</span>
+                              <span className="text-right text-foreground">{rankingText}</span>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end justify-between gap-3">
+                            <Button
+                              onClick={() => handleBuy(entry)}
+                              disabled={buyingId === listingIdText}
+                            >
+                              {buyingId === listingIdText ? "Buying..." : "Buy"}
+                            </Button>
+                            <span className="text-xs text-muted-foreground">
+                              Token {listing.token_id?.toString?.() ?? String(listing.token_id)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </CardContent>
             </Card>

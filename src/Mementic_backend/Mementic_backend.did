@@ -76,11 +76,63 @@ type Result_4 = variant { Ok : nat; Err : text };
 type Result_5 = variant { Ok : vec MintedPair; Err : text };
 type Result_6 = variant { Ok : PublicStoredMeme; Err : text };
 type Result_7 = variant { Ok : VoteResponse; Err : text };
+type Result_8 = variant { Ok : vec nat; Err : text };
 type SupportedStandard = record { url : text; name : text };
 type TokenMetadataEntry = record {
   value : MetadataValue;
   name : text;
   immutable : bool;
+};
+type NftMetadata = record {
+  name : text;
+  symbol : text;
+  description : opt text;
+  royalty_bps : opt nat16;
+  external_url : opt text;
+  attributes : vec record { text; text };
+  license : opt text;
+  image_uri : text;
+};
+type NftMarketInfo = record {
+  listed : bool;
+  listing_price : opt nat;
+  listed_quantity : nat32;
+  total_volume : nat;
+  floor_price : opt nat;
+  last_sale_price : opt nat;
+  last_sale_at : opt nat64;
+  total_sales : nat64;
+  ranking : opt nat32;
+  current_owner : opt principal;
+};
+type NftSummary = record {
+  meme_id : nat64;
+  token_id : nat;
+  name : text;
+  image_uri : text;
+  is_collection : bool;
+  edition_size : opt nat32;
+  owned_quantity : nat32;
+  market : NftMarketInfo;
+};
+type Listing = record {
+  listing_id : nat;
+  token_id : nat;
+  seller : principal;
+  unit_price : nat;
+  quantity : nat32;
+  created_at_ns : nat64;
+  expires_at_ns : opt nat64;
+  active : bool;
+};
+type MarketplaceListing = record {
+  listing : Listing;
+  meme_id : nat64;
+  name : text;
+  image_uri : text;
+  is_collection : bool;
+  edition_size : opt nat32;
+  market : NftMarketInfo;
 };
 type TokenRecord = record {
   meme_id : nat64;
@@ -90,17 +142,26 @@ type TokenRecord = record {
   mime_type : opt text;
   has_image : bool;
   minted_at : nat64;
+  minted_by : principal;
+  edition_number : opt nat32;
+  edition_size : opt nat32;
+  custom_metadata : opt NftMetadata;
 };
 type TokenSaleMetadata = record {
-  listing_price : opt nat64;
-  total_sales : nat64;
+  listing_price : opt nat;
+  listed_quantity : nat32;
   meme_id : nat64;
   token_id : nat;
-  last_sale_price : opt nat64;
+  total_sales : nat64;
+  total_earned : nat;
+  last_sale_price : opt nat;
   is_listed : bool;
   last_sale_at : opt nat64;
-  total_earned : nat64;
   listed_at : opt nat64;
+  floor_price : opt nat;
+  total_volume : nat;
+  current_owner : opt principal;
+  ranking_hint : opt nat32;
 };
 type TopEntry = record {
   upvotes : nat32;
@@ -184,6 +245,7 @@ service : (opt InitArgs) -> {
   // Return **Top 3** for a given week (for NFT mint step).
   // Fails if the week is not completed yet.
   get_top3_for_week : (nat64) -> (Result_3) query;
+  get_user_listings : (opt principal) -> (vec MarketplaceListing) query;
   get_total_memes : () -> (nat64) query;
   get_total_users : () -> (nat64) query;
   get_user_meme_count : () -> (nat32) query;
@@ -194,6 +256,7 @@ service : (opt InitArgs) -> {
   get_user_vote : (nat64) -> (opt VoteRecord) query;
   // Leaderboard for any week id. Returns None if week not found.
   get_week_leaderboard : (nat64, opt nat32) -> (opt WeeklyLeaderboard) query;
+  get_weekly_winners : (text) -> (vec nat64) query;
   health : () -> (text) query;
   icrc7_name : () -> (text) query;
   icrc7_owner_of : (vec nat) -> (vec opt principal) query;
@@ -204,24 +267,26 @@ service : (opt InitArgs) -> {
   // Increment view count for a meme
   increment_meme_views : (nat64) -> (Result_2);
   // Check if a meme has been minted as an NFT
-  is_meme_minted : (nat64) -> (bool) query;
-  // List a meme for sale on the marketplace
-  list_meme_for_sale : (nat64, nat64) -> (Result_2);
+  is_winner : (nat64) -> (bool) query;
+  list_for_sale : (nat, nat, nat32, opt nat64) -> (Result_4);
+  mint_collection_nft : (nat64, nat32, NftMetadata) -> (Result_8);
+  mint_single_nft : (nat64, NftMetadata) -> (Result_4);
   mint_to : (nat64) -> (Result_4);
   mint_week_top3_from_voting : (nat64) -> (Result_5);
   mint_week_top3_here : (nat64) -> (Result_5);
+  my_minted_nfts : (opt principal) -> (vec NftSummary) query;
   // Store a generated meme into marketplace (associated to caller)
   publish_meme : (MemeData) -> (Result_6);
-  // Record a sale (called internally or by marketplace canister)
-  record_meme_sale : (nat64, nat64) -> (Result_2);
   // Remove all memes from the marketplace (admin function)
   remove_all_memes_from_market : () -> (Result_1);
-  // Remove a meme from the marketplace
-  remove_meme_from_market : (nat64) -> (Result_2);
   // Remove your vote (works only for current active week)
   remove_vote : (nat64) -> (Result_7);
+  show_all_nfts_for_sale : (nat64, nat32) -> (vec MarketplaceListing) query;
   // Submit feedback from a user
   submit_feedback : (text, text, text, text, bool) -> (Result);
+  cancel_listing : (nat) -> (Result_2);
+  buy : (nat, nat32) -> (Result_2);
+  update_listing : (nat, opt nat, opt nat32, opt nat64) -> (Result_2);
   transform : (TransformArgs) -> (HttpResponse) query;
   update_user_profile : (opt text, opt text) -> (Result_2);
   // Cast or change a vote on a meme in the **current active week**.
