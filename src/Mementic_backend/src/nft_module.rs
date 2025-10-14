@@ -1,4 +1,4 @@
- // src/lib.rs
+// src/lib.rs
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_cdk::api::time;
 use ic_cdk_macros::{init, query, update};
@@ -376,6 +376,14 @@ pub fn get_sale_metadata_for_meme(meme_id: u64) -> Option<TokenSaleMetadata> {
     TOKEN_SALES.with(|sales| sales.borrow().get(&SNat(token_id)))
 }
 
+#[query]
+pub fn get_all_minted_tokens() -> Vec<TokenRecord> {
+    TOKENS.with(|t| {
+        let map = t.borrow();
+        map.iter().map(|entry| entry.value().clone()).collect()
+    })
+}
+
 pub fn mutate_sale_metadata<F>(token_id: &Nat, meme_id: u64, mutator: F) -> TokenSaleMetadata
 where
     F: FnOnce(&mut TokenSaleMetadata),
@@ -626,4 +634,23 @@ pub async fn mint_week_top3_from_voting(week_id: u64) -> Result<Vec<MintedPair>,
 
     WEEK_MINTED.with(|wm| wm.borrow_mut().insert(week_id, true));
     Ok(minted)
+}
+
+#[query]
+// This need to be fixed
+pub fn get_my_minted_tokens() -> Vec<TokenRecord> {
+    let user = ic_cdk::caller();
+    TOKENS.with(|t| {
+        let map = t.borrow();
+        map.iter()
+            .filter_map(|entry| {
+                let rec = entry.value();
+                if rec.owner == user {
+                    Some(rec.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    })
 }
