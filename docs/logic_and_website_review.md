@@ -1,7 +1,7 @@
 # Mementic Logic & Website Review
 
 ## Executive Summary
-- **Core NFT minting works but is single-track.** Weekly winners are minted automatically through `mint_week_top3_from_voting`, which simply iterates over the leaderboard and calls `mint_to` for each meme without giving creators any say in supply size or distribution preference.【F:src/Mementic_backend/src/nft_module.rs†L441-L458】
+- **Core NFT minting now supports flexible drops.** Weekly winners are still minted automatically, but `mint_to` now enforces winner ownership, validates top-3 status, and lets creators select between 1/1 and limited-edition releases via the new `MintingMode` variant.【F:src/Mementic_backend/src/nft_module.rs†L545-L704】【F:src/Mementic_backend/Mementic_backend.did†L52-L89】
 - **Marketplace state lives on memes, not NFTs.** Meme records capture pricing and sales statistics, whereas the NFT records only store ownership and media metadata, leaving no canonical place to track listings, provenance, or trade history on-chain.【F:src/Mementic_backend/src/http_outcall.rs†L154-L173】【F:src/Mementic_backend/src/nft_module.rs†L148-L156】
 - **Frontend surfaces a rich portfolio UI but depends on incomplete data.** The dashboard computes KPIs and renders skeletons, yet still falls back to sample rows when the backend call fails and performs per-item mint status checks that will not scale well.【F:src/Mementic_frontend/src/Pages/Portfolio.jsx†L117-L132】【F:src/Mementic_frontend/src/Pages/Portfolio.jsx†L323-L381】
 - **Infrastructure scaffolding is solid.** The frontend service class handles identity, root-key fetching, and actor creation defensively, positioning the app for both local and mainnet deployments.【F:src/Mementic_frontend/src/services/backendService.js†L20-L195】
@@ -13,7 +13,7 @@
 - Marketplace helpers already guard listing updates with ownership checks and maintain aggregate counters such as views and total earned at the meme level, which keeps essential economics on-chain.【F:src/Mementic_backend/src/http_outcall.rs†L154-L173】【F:src/Mementic_backend/src/http_outcall.rs†L500-L519】
 
 ### Gaps & Risks
-- **No mint-style preference.** Weekly minting always issues a single edition; there is no API for winners to request “collection” vs “1/1,” and the mint logic has no concept of remaining supply or delayed distribution.【F:src/Mementic_backend/src/nft_module.rs†L441-L458】
+- **Collection supply is per-mint, not configurable post-drop.** Although winners can now choose single or multi-edition runs, the supply is locked in at mint time and cannot be expanded or scheduled for later drops without rerunning the mint flow.【F:src/Mementic_backend/src/nft_module.rs†L545-L704】
 - **Token records lack sale metadata.** `TokenRecord` omits fields for list price, sale state, previous owners, or royalty configuration, so provenance cannot be reconstructed solely from NFT data.【F:src/Mementic_backend/src/nft_module.rs†L148-L156】
 - **Ownership index is append-only.** `push_owner` only ever pushes new IDs; without a corresponding removal routine, secondary transfers would leave stale ownership references and double-count holdings.【F:src/Mementic_backend/src/nft_module.rs†L307-L313】
 - **Global discovery endpoints are missing.** The NFT module exposes `icrc7_tokens_of` and `get_token`, but there is no pagination-friendly list of all tokens or richer owner views that join meme metadata, making marketplace browsing hard to implement.【F:src/Mementic_backend/src/nft_module.rs†L259-L289】

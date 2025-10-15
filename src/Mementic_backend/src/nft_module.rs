@@ -33,6 +33,9 @@ pub struct SPrincipal(pub Principal);
 #[derive(Clone, Debug, Default, CandidType, Serialize, Deserialize)]
 pub struct OwnerTokens(pub Vec<Nat>);
 
+#[derive(Clone, Debug, Default, CandidType, Serialize, Deserialize)]
+pub struct MemeTokenList(pub Vec<Nat>);
+
 // Wrapper for storing image bytes in stable map (so Vec<u8> is Storable)
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct ImageBlob(pub Vec<u8>);
@@ -87,6 +90,22 @@ impl Storable for OwnerTokens {
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         candid::Decode!(&bytes, OwnerTokens).expect("decode OwnerTokens")
+    }
+}
+
+impl Storable for MemeTokenList {
+    const BOUND: Bound = Bound::Unbounded;
+
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(candid::Encode!(&self).expect("encode MemeTokenList"))
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        candid::Encode!(&self).expect("encode MemeTokenList")
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        candid::Decode!(&bytes, MemeTokenList).expect("decode MemeTokenList")
     }
 }
 
@@ -228,7 +247,7 @@ thread_local! {
     static OWNER_INDEX: RefCell<StableBTreeMap<SPrincipal, OwnerTokens, Mem>> =
         RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(1)))));
 
-    static MINT_INDEX: RefCell<StableBTreeMap<u64, SNat, Mem>> =
+    static MINT_INDEX: RefCell<StableBTreeMap<u64, MemeTokenList, Mem>> =
         RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(2)))));
 
     static WEEK_MINTED: RefCell<StableBTreeMap<u64, bool, Mem>> =
@@ -347,7 +366,17 @@ pub fn get_token(token_id: Nat) -> Option<TokenRecord> {
 
 #[query]
 pub fn get_token_by_meme_id(meme_id: u64) -> Option<Nat> {
-    MINT_INDEX.with(|m| m.borrow().get(&meme_id).map(|sn| sn.0))
+    MINT_INDEX
+        .with(|m| m.borrow().get(&meme_id))
+        .and_then(|list| list.0.first().cloned())
+}
+
+#[query]
+pub fn get_tokens_by_meme_id(meme_id: u64) -> Vec<Nat> {
+    MINT_INDEX
+        .with(|m| m.borrow().get(&meme_id))
+        .map(|list| list.0.clone())
+        .unwrap_or_default()
 }
 
 #[query]
@@ -535,31 +564,73 @@ async fn voting_get_meme_data(
 
 // ---------- Public: mint Top-3 (now fetches image bytes before minting) ----------
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub enum MintingMode {
+    Single,
+    Collection { editions: u32 },
+}
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct MintedPair {
     pub meme_id: u64,
-    pub token_id: Nat,
+    pub token_ids: Vec<Nat>,
     pub owner: Principal,
 }
 
 #[update]
-async fn mint_to(meme_id: u64) -> Result<Nat, String> {
-    // Prevent double-minting for same meme
-    if let Some(existing) = MINT_INDEX.with(|mi| mi.borrow().get(&meme_id)) {
-        return Ok(existing.0);
+pub async fn mint_to(meme_id: u64, mode: MintingMode) -> Result<Vec<Nat>, String> {
+    let caller = ic_cdk::caller();
+    if caller == Principal::anonymous() {
+        return Err("Authentication required".into());
     }
+
+    let existing_tokens = get_tokens_by_meme_id(meme_id);
+
+    let to_mint = match mode {
+        MintingMode::Single => {
+            if !existing_tokens.is_empty() {
+                return Err("Meme has already been minted as an NFT".into());
+            }
+            1usize
+        }
+        MintingMode::Collection { editions } => {
+            if editions == 0 {
+                return Err("Collection supply must be greater than zero".into());
+            }
+            if editions > 50 {
+                return Err("Collection supply cannot exceed 50 editions".into());
+            }
+            if !existing_tokens.is_empty() {
+                return Err("A collection has already been minted for this meme".into());
+            }
+            editions as usize
+        }
+    };
 
     let voting_canister = ic_cdk::api::id();
     let stored_meme_data = voting_get_meme_data(voting_canister, meme_id)
         .await?
         .ok_or_else(|| format!("StoredMeme {} not found in voting canister", meme_id))?;
 
+    let admin = STATE.with(|s| s.borrow().admin);
+    if caller != stored_meme_data.owner && caller != admin {
+        return Err("Only the meme owner or collection admin can mint this meme".into());
+    }
+
+    let votes = crate::voting::get_meme_votes(meme_id)
+        .ok_or_else(|| "Meme has no recorded votes".to_string())?;
+    let top3 = crate::voting::get_top3_for_week(votes.created_week)?;
+    if !top3.iter().any(|entry| entry.meme_id == meme_id) {
+        return Err("Only top 3 weekly winners can be minted".into());
+    }
+
     let image_url = stored_meme_data.meme_data.image_url.clone();
     let image_format = stored_meme_data.meme_data.image_format.clone();
     let mime_type =
         guess_content_type(&image_format).unwrap_or_else(|| "application/octet-stream".into());
 
-    let image_bytes =
-        match crate::http_outcall::fetch_image_bytes_from_image_storage(&image_url).await {
+    let image_bytes = match STORED_IMAGES.with(|imgs| imgs.borrow().get(&meme_id)) {
+        Some(blob) => blob.0.clone(),
+        None => match crate::http_outcall::fetch_image_bytes_from_image_storage(&image_url).await {
             Ok(b) => b,
             Err(e) => {
                 return Err(format!(
@@ -567,41 +638,66 @@ async fn mint_to(meme_id: u64) -> Result<Nat, String> {
                     meme_id, e
                 ))
             }
-        };
-
-    // Store image bytes in STORED_IMAGES under meme_id
-    STORED_IMAGES.with(|imgs| {
-        imgs.borrow_mut().insert(meme_id, ImageBlob(image_bytes));
-    });
-
-    // Generate token_id and build token metadata
-    let token_id = next_token_id();
-    let mut metadata = build_metadata(&stored_meme_data, &token_id);
-
-    // Add content type to metadata (ensures downstream clients can read content type)
-    metadata.push(TokenMetadataEntry {
-        name: "icrc7:metadata:content_type".into(),
-        immutable: true,
-        value: MetadataValue::Text(mime_type.clone()),
-    });
-
-    let rec = TokenRecord {
-        token_id: token_id.clone(),
-        owner: stored_meme_data.owner,
-        minted_at: ic_cdk::api::time(),
-        meme_id,
-        metadata,
-        mime_type: Some(mime_type),
-        has_image: true,
+        },
     };
 
-    // Persist token record and indexes
-    TOKENS.with(|t| t.borrow_mut().insert(SNat(token_id.clone()), rec));
-    push_owner(stored_meme_data.owner, &token_id);
-    MINT_INDEX.with(|mi| mi.borrow_mut().insert(meme_id, SNat(token_id.clone())));
-    mutate_sale_metadata(&token_id, meme_id, |_| {});
+    // Store image bytes so subsequent reads can use cached value
+    STORED_IMAGES.with(|imgs| {
+        imgs.borrow_mut()
+            .insert(meme_id, ImageBlob(image_bytes.clone()));
+    });
 
-    Ok(token_id)
+    let total_editions = existing_tokens.len() + to_mint;
+    let mut all_tokens = existing_tokens.clone();
+    let mut minted_tokens = Vec::with_capacity(to_mint);
+
+    for edition_offset in 0..to_mint {
+        let token_id = next_token_id();
+        let mut metadata = build_metadata(&stored_meme_data, &token_id);
+        metadata.push(TokenMetadataEntry {
+            name: "icrc7:metadata:content_type".into(),
+            immutable: true,
+            value: MetadataValue::Text(mime_type.clone()),
+        });
+
+        if total_editions > 1 {
+            let edition_number = existing_tokens.len() + edition_offset + 1;
+            metadata.push(TokenMetadataEntry {
+                name: "meme:edition_number".into(),
+                immutable: true,
+                value: MetadataValue::Text(edition_number.to_string()),
+            });
+            metadata.push(TokenMetadataEntry {
+                name: "meme:edition_total".into(),
+                immutable: true,
+                value: MetadataValue::Text(total_editions.to_string()),
+            });
+        }
+
+        let rec = TokenRecord {
+            token_id: token_id.clone(),
+            owner: stored_meme_data.owner,
+            minted_at: ic_cdk::api::time(),
+            meme_id,
+            metadata,
+            mime_type: Some(mime_type.clone()),
+            has_image: true,
+        };
+
+        TOKENS.with(|t| t.borrow_mut().insert(SNat(token_id.clone()), rec));
+        push_owner(stored_meme_data.owner, &token_id);
+        mutate_sale_metadata(&token_id, meme_id, |_| {});
+
+        all_tokens.push(token_id.clone());
+        minted_tokens.push(token_id);
+    }
+
+    MINT_INDEX.with(|mi| {
+        mi.borrow_mut()
+            .insert(meme_id, MemeTokenList(all_tokens.clone()));
+    });
+
+    Ok(minted_tokens)
 }
 
 #[update]
@@ -620,14 +716,18 @@ pub async fn mint_week_top3_from_voting(week_id: u64) -> Result<Vec<MintedPair>,
 
     let mut minted: Vec<MintedPair> = Vec::new();
     for w in winners.into_iter() {
-        let token_id = mint_to(w.meme_id).await?;
+        let token_ids = mint_to(w.meme_id, MintingMode::Single).await?;
+        let primary = token_ids
+            .first()
+            .cloned()
+            .ok_or_else(|| "mint_to returned no token".to_string())?;
         // Fetch owner from token record
         let owner = TOKENS
-            .with(|t| t.borrow().get(&SNat(token_id.clone())).map(|rec| rec.owner))
+            .with(|t| t.borrow().get(&SNat(primary.clone())).map(|rec| rec.owner))
             .unwrap_or(Principal::anonymous());
         minted.push(MintedPair {
             meme_id: w.meme_id,
-            token_id,
+            token_ids,
             owner,
         });
     }

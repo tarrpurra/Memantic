@@ -549,6 +549,41 @@ class BackendService {
   }
 
   /**
+   * Retrieve all minted token IDs for a meme
+   */
+  async getMintedTokens(memeId) {
+    const result = await this._safeCall('get_tokens_by_meme_id', memeId);
+    return Array.isArray(result) ? result : [];
+  }
+
+  /**
+   * Mint a top-ranked meme into an NFT (single or collection)
+   */
+  async mintMeme(memeId, mode = { type: "single" }) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to mint your meme as an NFT");
+    }
+    const candidMode = this._toMintingModeVariant(mode);
+    const result = await this._safeCall('mint_to', memeId, candidMode);
+    return this._unwrapResult(result, "mint_to failed");
+  }
+
+  /**
+   * Fetch completed week periods
+   */
+  async getCompletedWeeks() {
+    return await this._safeCall('get_completed_weeks');
+  }
+
+  /**
+   * Fetch top 3 winners for a given week
+   */
+  async getTop3ForWeek(weekId) {
+    const result = await this._safeCall('get_top3_for_week', weekId);
+    return this._unwrapResult(result, "get_top3_for_week failed");
+  }
+
+  /**
     * Get user's vote on a specific meme
     */
   async getUserVote(memeId) {
@@ -757,6 +792,31 @@ class BackendService {
     if (voteType === "Upvote") return { Upvote: null };
     if (voteType === "Downvote") return { Downvote: null };
     throw new Error(`Invalid voteType: ${voteType} (expected "Upvote" or "Downvote")`);
+  }
+
+  _toMintingModeVariant(mode) {
+    if (mode && typeof mode === "object" && ("Single" in mode || "Collection" in mode)) {
+      return mode;
+    }
+
+    if (!mode || typeof mode !== "object") {
+      throw new Error("Minting mode must be an object");
+    }
+
+    const normalized = (mode.type || mode.kind || "single").toString().toLowerCase();
+    if (normalized === "single" || normalized === "1of1" || normalized === "one") {
+      return { Single: null };
+    }
+
+    if (normalized === "collection" || normalized === "editions") {
+      const editions = Number(mode.editions ?? mode.supply ?? 0);
+      if (!Number.isInteger(editions) || editions <= 0) {
+        throw new Error("Collection minting requires a positive integer edition count");
+      }
+      return { Collection: { editions } };
+    }
+
+    throw new Error(`Unsupported minting mode: ${JSON.stringify(mode)}`);
   }
 }
 

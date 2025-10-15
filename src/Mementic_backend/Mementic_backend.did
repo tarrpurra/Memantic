@@ -51,7 +51,8 @@ type MetadataValue = variant {
   Text : text;
   Array : vec MetadataValue;
 };
-type MintedPair = record { meme_id : nat64; token_id : nat; owner : principal };
+type MintingMode = variant { Single; Collection : record { editions : nat32 } };
+type MintedPair = record { meme_id : nat64; token_ids : vec nat; owner : principal };
 type NftImage = record { mime_type : text; image : blob };
 type PublicStoredMeme = record {
   id : nat64;
@@ -72,7 +73,7 @@ type Result = variant { Ok : text; Err : text };
 type Result_1 = variant { Ok : nat32; Err : text };
 type Result_2 = variant { Ok; Err : text };
 type Result_3 = variant { Ok : vec TopEntry; Err : text };
-type Result_4 = variant { Ok : nat; Err : text };
+type Result_4 = variant { Ok : vec nat; Err : text };
 type Result_5 = variant { Ok : vec MintedPair; Err : text };
 type Result_6 = variant { Ok : PublicStoredMeme; Err : text };
 type Result_7 = variant { Ok : VoteResponse; Err : text };
@@ -181,6 +182,7 @@ service : (opt InitArgs) -> {
   get_sale_metadata_for_meme : (nat64) -> (opt TokenSaleMetadata) query;
   get_token : (nat) -> (opt TokenRecord) query;
   get_token_by_meme_id : (nat64) -> (opt nat) query;
+  get_tokens_by_meme_id : (nat64) -> (vec nat) query;
   // Return **Top 3** for a given week (for NFT mint step).
   // Fails if the week is not completed yet.
   get_top3_for_week : (nat64) -> (Result_3) query;
@@ -207,7 +209,7 @@ service : (opt InitArgs) -> {
   is_meme_minted : (nat64) -> (bool) query;
   // List a meme for sale on the marketplace
   list_meme_for_sale : (nat64, nat64) -> (Result_2);
-  mint_to : (nat64) -> (Result_4);
+  mint_to : (nat64, MintingMode) -> (Result_4);
   mint_week_top3_from_voting : (nat64) -> (Result_5);
   mint_week_top3_here : (nat64) -> (Result_5);
   // Store a generated meme into marketplace (associated to caller)

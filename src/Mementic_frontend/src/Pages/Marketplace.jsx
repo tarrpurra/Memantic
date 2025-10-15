@@ -5,19 +5,21 @@ import {
   Activity,
   ArrowLeft,
   ArrowRight,
-  BarChart3,
   Flame,
+  Loader2,
   Sparkles,
   TrendingUp,
   Trophy,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Input } from "../components/ui/Input";
 import Navigation from "../components/Navigation";
+import backendService from "../services/backendService";
+import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../hooks/use-toast";
 
 const trendingMemes = [];
-
-const leaderboardEntries = [];
 
 const marketCollections = [];
 
@@ -30,8 +32,266 @@ const slideVariants = {
 };
 
 const Marketplace = () => {
+  const { principal, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
+
   const [currentSlide, setCurrentSlide] = useState(0);
   const totalSlides = trendingMemes.length;
+
+  const [topWinners, setTopWinners] = useState([]);
+  const [winnersLoading, setWinnersLoading] = useState(true);
+  const [winnersError, setWinnersError] = useState(null);
+  const [latestWeek, setLatestWeek] = useState(null);
+  const [mintDialog, setMintDialog] = useState({
+    open: false,
+    winner: null,
+    mode: "single",
+    editions: 10,
+    isSubmitting: false,
+    error: null,
+  });
+
+  const normalizeMintedTokens = (tokens) =>
+    Array.isArray(tokens)
+      ? tokens.map((id) => {
+          if (typeof id === "bigint") return id.toString();
+          if (typeof id === "object" && id?.toString) return id.toString();
+          return String(id);
+        })
+      : [];
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchTopWinners = async () => {
+      try {
+        setWinnersLoading(true);
+        setWinnersError(null);
+        await backendService.ensureReady();
+
+        const weeks = await backendService.getCompletedWeeks();
+        if (!Array.isArray(weeks) || weeks.length === 0) {
+          if (!cancelled) {
+            setLatestWeek(null);
+            setTopWinners([]);
+          }
+          return;
+        }
+
+        const sortedWeeks = [...weeks].sort(
+          (a, b) => Number(b?.week_id ?? 0) - Number(a?.week_id ?? 0)
+        );
+        const latest = sortedWeeks[0];
+        if (cancelled) return;
+        setLatestWeek(latest);
+
+        const winners = await backendService.getTop3ForWeek(latest.week_id);
+        if (cancelled) return;
+
+        const enriched = await Promise.all(
+          (winners || []).map(async (entry, index) => {
+            try {
+              const meme = await backendService.getMeme(entry.meme_id);
+              const mintedTokens = await backendService.getMintedTokens(entry.meme_id);
+              const captionField = meme?.meme_data?.caption;
+              const caption = Array.isArray(captionField)
+                ? captionField[0]
+                : captionField;
+              const prompt = meme?.meme_data?.prompt ?? "";
+              const ownerCandidate =
+                meme?.owner ?? meme?.meme_data?.owner ?? null;
+              const ownerPrincipal = ownerCandidate
+                ? typeof ownerCandidate === "object" && ownerCandidate.toText
+                  ? ownerCandidate.toText()
+                  : String(ownerCandidate)
+                : "";
+              const imageUrl = meme?.meme_data?.image_url ?? null;
+
+              return {
+                memeId: Number(entry.meme_id),
+                rank: index + 1,
+                upvotes: Number(entry.upvotes ?? 0),
+                ownerPrincipal,
+                meme,
+                imageUrl,
+                prompt,
+                title:
+                  (caption && String(caption).trim()) ||
+                  (prompt && String(prompt).trim()) ||
+                  `Meme #${entry.meme_id}`,
+                mintedTokens: normalizeMintedTokens(mintedTokens),
+              };
+            } catch (innerError) {
+              console.warn("Failed to enrich winner", entry?.meme_id, innerError);
+              return {
+                memeId: Number(entry.meme_id),
+                rank: index + 1,
+                upvotes: Number(entry.upvotes ?? 0),
+                ownerPrincipal: "",
+                meme: null,
+                imageUrl: null,
+                prompt: "",
+                title: `Meme #${entry.meme_id}`,
+                mintedTokens: [],
+              };
+            }
+          })
+        );
+
+        if (!cancelled) {
+          setTopWinners(enriched);
+        }
+      } catch (error) {
+        console.error("Failed to load top winners:", error);
+        if (!cancelled) {
+          setWinnersError(error?.message ?? "Failed to load top winners");
+          setTopWinners([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setWinnersLoading(false);
+        }
+      }
+    };
+
+    fetchTopWinners();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const shortPrincipal = (value) => {
+    if (!value) return "Unknown";
+    const text = String(value);
+    if (text.length <= 10) return text;
+    return `${text.slice(0, 5)}…${text.slice(-4)}`;
+  };
+
+  const formatTimestamp = (ns) => {
+    if (!ns) return null;
+    try {
+      const ms = Number(ns) / 1_000_000;
+      if (!Number.isFinite(ms)) return null;
+      return new Date(ms).toLocaleString();
+    } catch (error) {
+      console.warn("Failed to format timestamp", ns, error);
+      return null;
+    }
+  };
+
+  const canMintWinner = (winner) => {
+    if (!winner) return false;
+    if (!isAuthenticated || authLoading) return false;
+    if (!principal) return false;
+    const mintedCount = winner.mintedTokens?.length ?? 0;
+    return mintedCount === 0 && winner.ownerPrincipal === principal;
+  };
+
+  const openMintDialog = (winner) => {
+    if (!winner) return;
+    setMintDialog({
+      open: true,
+      winner,
+      mode: "single",
+      editions: 10,
+      isSubmitting: false,
+      error: null,
+    });
+  };
+
+  const closeMintDialog = () => {
+    setMintDialog({
+      open: false,
+      winner: null,
+      mode: "single",
+      editions: 10,
+      isSubmitting: false,
+      error: null,
+    });
+  };
+
+  const handleMintModeChange = (mode) => {
+    setMintDialog((prev) => ({ ...prev, mode, error: null }));
+  };
+
+  const handleEditionChange = (value) => {
+    setMintDialog((prev) => ({ ...prev, editions: value }));
+  };
+
+  const handleMintSubmit = async () => {
+    const winner = mintDialog.winner;
+    if (!winner) return;
+
+    try {
+      setMintDialog((prev) => ({ ...prev, isSubmitting: true, error: null }));
+
+      let modePayload;
+      if (mintDialog.mode === "single") {
+        modePayload = { type: "single" };
+      } else {
+        const parsed = Number(mintDialog.editions);
+        if (!Number.isInteger(parsed) || parsed < 2) {
+          throw new Error("Collections require at least 2 editions.");
+        }
+        if (parsed > 50) {
+          throw new Error("Collections are limited to 50 editions.");
+        }
+        modePayload = { type: "collection", editions: parsed };
+      }
+
+      const mintedTokens = await backendService.mintMeme(
+        winner.memeId,
+        modePayload
+      );
+      const normalized = normalizeMintedTokens(mintedTokens);
+
+      setTopWinners((prev) =>
+        prev.map((entry) =>
+          entry.memeId === winner.memeId
+            ? { ...entry, mintedTokens: normalized }
+            : entry
+        )
+      );
+
+      toast({
+        title: "NFT mint successful",
+        description:
+          mintDialog.mode === "single"
+            ? "Your 1/1 meme is now live on-chain."
+            : `Minted ${normalized.length} editions ready for collectors.`,
+      });
+
+      closeMintDialog();
+    } catch (error) {
+      console.error("Minting failed:", error);
+      setMintDialog((prev) => ({
+        ...prev,
+        error: error?.message ?? "Failed to mint NFT",
+      }));
+    } finally {
+      setMintDialog((prev) => ({ ...prev, isSubmitting: false }));
+      if (winner) {
+        try {
+          const refreshed = await backendService.getMintedTokens(winner.memeId);
+          const normalized = normalizeMintedTokens(refreshed);
+          setTopWinners((prev) =>
+            prev.map((entry) =>
+              entry.memeId === winner.memeId
+                ? { ...entry, mintedTokens: normalized }
+                : entry
+            )
+          );
+        } catch (refreshError) {
+          console.warn("Failed to refresh minted tokens:", refreshError);
+        }
+      }
+    }
+  };
+
+  const modalWinner = mintDialog.winner;
+  const modalMintedCount = modalWinner?.mintedTokens?.length ?? 0;
+  const allowMintAction = modalWinner ? canMintWinner(modalWinner) && modalMintedCount === 0 : false;
 
   useEffect(() => {
     if (totalSlides > 1) {
@@ -187,84 +447,137 @@ const Marketplace = () => {
             )}
 
             <Card className="border-border/50 bg-background/80 shadow-card backdrop-blur-xl">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-3 text-lg font-semibold text-muted-foreground">
-                    <Trophy className="h-5 w-5 text-primary" />
-                    Marketplace Leaderboard
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-3">
-                    {leaderboardEntries.length > 0 ? leaderboardEntries.map((entry, index) => (
-                      <div
-                        key={entry.id}
-                        className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-background/70 p-4 transition hover:border-primary/50 hover:bg-background/80"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-lg font-semibold text-muted-foreground">
+                  <Trophy className="h-5 w-5 text-primary" />
+                  Marketplace Leaderboard
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-3">
+                  {winnersLoading ? (
+                    <div className="flex items-center justify-center rounded-2xl border border-border/60 bg-background/60 p-6 text-sm text-muted-foreground">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" />
+                      Loading weekly champions…
+                    </div>
+                  ) : winnersError ? (
+                    <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+                      {winnersError}
+                    </div>
+                  ) : topWinners.length > 0 ? (
+                    topWinners.map((winner) => {
+                      const mintedCount = winner.mintedTokens?.length ?? 0;
+                      const canMint = canMintWinner(winner);
+                      return (
+                        <div
+                          key={winner.memeId}
+                          className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-background/70 p-4 transition hover:border-primary/50 hover:bg-background/80"
+                        >
+                          <div className="flex flex-wrap items-center gap-4">
                             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary">
-                              #{index + 1}
+                              #{winner.rank}
                             </span>
-                            <div>
-                              <p className="text-base font-semibold text-foreground">{entry.title}</p>
+                            {winner.imageUrl ? (
+                              <div className="h-16 w-16 overflow-hidden rounded-xl border border-border/60">
+                                <img
+                                  src={winner.imageUrl}
+                                  alt={winner.title}
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                />
+                              </div>
+                            ) : null}
+                            <div className="min-w-[12rem] flex-1">
+                              <p className="text-base font-semibold text-foreground">{winner.title}</p>
                               <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                                {entry.watchers} watchers
+                                Owner · {shortPrincipal(winner.ownerPrincipal)}
                               </p>
                             </div>
+                            <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 font-semibold text-primary">
+                                <TrendingUp className="h-3.5 w-3.5" />
+                                {winner.upvotes.toLocaleString()} votes
+                              </span>
+                              {mintedCount > 0 ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-3 py-1 font-semibold text-emerald-300">
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  Minted · {mintedCount} {mintedCount === 1 ? "edition" : "editions"}
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                            <TrendingUp className="h-3.5 w-3.5" /> {entry.change}
-                          </span>
+                          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+                            <span>
+                              Meme ID #{winner.memeId}
+                              {latestWeek?.week_id !== undefined && (
+                                <>
+                                  {" "}• Week {Number(latestWeek.week_id)}
+                                </>
+                              )}
+                            </span>
+                            {latestWeek?.end_time ? (
+                              <span className="text-muted-foreground/80">
+                                Finalized {formatTimestamp(latestWeek.end_time)}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-wrap gap-3">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="border border-border/60 bg-background/70"
+                              onClick={() => openMintDialog(winner)}
+                              disabled={!canMint}
+                            >
+                              {canMint ? "Convert to NFT" : mintedCount > 0 ? "Already minted" : "Minting locked"}
+                            </Button>
+                            {mintedCount > 0 ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="border-border/60 text-xs"
+                                onClick={() => openMintDialog(winner)}
+                              >
+                                View mint details
+                              </Button>
+                            ) : null}
+                          </div>
+                          {!isAuthenticated && (
+                            <p className="text-xs text-muted-foreground">
+                              Login to mint your winning meme as an NFT.
+                            </p>
+                          )}
+                          {canMint && !mintedCount && (
+                            <p className="text-xs text-foreground/80">
+                              You earned the top spot—choose between a single masterpiece or a limited collection when you mint.
+                            </p>
+                          )}
                         </div>
-                        <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-3">
-                          <div className="rounded-xl border border-border/60 bg-background/70 p-3">
-                            <p className="text-[0.6rem] uppercase tracking-[0.4em]">Top Offer</p>
-                            <p className="mt-2 text-sm font-semibold text-foreground">{entry.topOffer}</p>
-                          </div>
-                          <div className="rounded-xl border border-border/60 bg-background/70 p-3">
-                            <p className="text-[0.6rem] uppercase tracking-[0.4em]">Volume</p>
-                            <p className="mt-2 text-sm font-semibold text-foreground">{entry.volume}</p>
-                          </div>
-                          <div className="rounded-xl border border-border/60 bg-background/70 p-3">
-                            <p className="text-[0.6rem] uppercase tracking-[0.4em]">Floor</p>
-                            <p className="mt-2 text-sm font-semibold text-foreground">{entry.floor}</p>
-                          </div>
-                        </div>
-                      </div>
-                    )) : (
-                      <p className="text-sm text-muted-foreground">No leaderboard data available yet.</p>
-                    )}
-                  </div>
-
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="rounded-2xl border border-primary/40 bg-primary/5 p-5 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-primary">
-                        <BarChart3 className="h-4 w-4" /> Snapshot
-                      </div>
-                      <p className="mt-3 text-lg font-semibold text-foreground">0% of active bids are trending upward.</p>
-                      <p className="mt-3 text-xs">
-                        Marketplace activity shows steady growth with verified NFT drops and community-driven auctions.
+                      );
+                    })
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Top winners will appear once a weekly voting round completes.
+                    </p>
+                  )}
+                </div>
+                {latestWeek ? (
+                  <div className="rounded-2xl border border-border/60 bg-background/60 p-4 text-xs text-muted-foreground">
+                    <p className="font-semibold text-foreground">
+                      Week #{Number(latestWeek.week_id)} summary
+                    </p>
+                    {latestWeek.end_time ? (
+                      <p className="mt-1">
+                        Voting closed on {formatTimestamp(latestWeek.end_time)}
                       </p>
-                    </div>
-                    <div className="rounded-2xl border border-primary/30 bg-background/70 p-5 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-primary">
-                        <Activity className="h-4 w-4" /> Market Pulse
-                      </div>
-                      <p className="mt-3 text-lg font-semibold text-foreground">Average time to flip is now 0 minutes.</p>
-                      <div className="mt-4 grid gap-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                        <div className="flex items-center justify-between rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                          <span>Hot Offers</span>
-                          <span className="text-primary">0%</span>
-                        </div>
-                        <div className="flex items-center justify-between rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                          <span>Whale Activity</span>
-                          <span className="text-primary">0%</span>
-                        </div>
-                      </div>
-                    </div>
+                    ) : null}
+                    <p className="mt-1">
+                      Winning memes can be minted directly from this panel—choose your drop style and launch your NFT in seconds.
+                    </p>
                   </div>
-                </CardContent>
-              </Card>
+                ) : null}
+              </CardContent>
+            </Card>
           </div>
         </section>
 
@@ -371,6 +684,110 @@ const Marketplace = () => {
             )}
           </div>
         </section>
+        {mintDialog.open && modalWinner ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <Card className="w-full max-w-lg border-border/70 bg-background/95 shadow-2xl">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-muted-foreground">
+                  Mint #{modalWinner.memeId} · {modalWinner.title}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-2xl border border-border/60 bg-background/70 p-4 text-sm text-muted-foreground">
+                  <p className="font-semibold text-foreground">{modalWinner.title}</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.3em]">
+                    Owner · {shortPrincipal(modalWinner.ownerPrincipal)}
+                  </p>
+                  {modalMintedCount > 0 ? (
+                    <p className="mt-2 text-emerald-300">
+                      Already minted {modalMintedCount} {modalMintedCount === 1 ? "edition" : "editions"}.
+                    </p>
+                  ) : (
+                    <p className="mt-2">
+                      Choose how you want to drop this meme on-chain—keep it a 1/1 or launch a limited collection.
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    className={`rounded-2xl border px-4 py-3 text-left text-sm transition ${
+                      mintDialog.mode === "single"
+                        ? "border-primary/60 bg-primary/10 text-primary"
+                        : "border-border/60 bg-background/70 hover:border-primary/40"
+                    }`}
+                    onClick={() => handleMintModeChange("single")}
+                    disabled={mintDialog.isSubmitting}
+                  >
+                    <span className="block font-semibold">Single edition</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Mint a 1/1 masterpiece for collectors.
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-2xl border px-4 py-3 text-left text-sm transition ${
+                      mintDialog.mode === "collection"
+                        ? "border-primary/60 bg-primary/10 text-primary"
+                        : "border-border/60 bg-background/70 hover:border-primary/40"
+                    }`}
+                    onClick={() => handleMintModeChange("collection")}
+                    disabled={mintDialog.isSubmitting || modalMintedCount > 0}
+                  >
+                    <span className="block font-semibold">Limited collection</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Set a finite edition count for your drop.
+                    </span>
+                  </button>
+                </div>
+
+                {mintDialog.mode === "collection" && (
+                  <div className="space-y-2 text-sm">
+                    <label className="text-xs font-medium text-muted-foreground" htmlFor="mint-editions">
+                      Edition count (2 – 50)
+                    </label>
+                    <Input
+                      id="mint-editions"
+                      type="number"
+                      min={2}
+                      max={50}
+                      value={mintDialog.editions}
+                      onChange={(event) => handleEditionChange(event.target.value)}
+                      disabled={mintDialog.isSubmitting}
+                    />
+                  </div>
+                )}
+
+                {mintDialog.error ? (
+                  <p className="text-sm text-destructive">{mintDialog.error}</p>
+                ) : null}
+
+                <div className="flex flex-wrap justify-end gap-3">
+                  <Button variant="ghost" onClick={closeMintDialog} disabled={mintDialog.isSubmitting}>
+                    Close
+                  </Button>
+                  <Button
+                    onClick={handleMintSubmit}
+                    disabled={mintDialog.isSubmitting || !allowMintAction}
+                  >
+                    {mintDialog.isSubmitting ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Minting…
+                      </span>
+                    ) : allowMintAction ? (
+                      "Mint now"
+                    ) : modalMintedCount > 0 ? (
+                      "Mint complete"
+                    ) : (
+                      "Mint locked"
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
       </main>
     </div>
   );
