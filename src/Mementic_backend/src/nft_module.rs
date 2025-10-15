@@ -238,7 +238,7 @@ thread_local! {
 
     // NEW: store actual image bytes (ImageBlob wraps Vec<u8>)
     static STORED_IMAGES: RefCell<StableBTreeMap<u64, ImageBlob, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(4)))));
+        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(6)))));
 
     static TOKEN_SALES: RefCell<StableBTreeMap<SNat, TokenSaleMetadata, Mem>> =
         RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(5)))));
@@ -636,8 +636,7 @@ pub async fn mint_week_top3_from_voting(week_id: u64) -> Result<Vec<MintedPair>,
     Ok(minted)
 }
 
-#[query]
-// This need to be fixed
+#[update]
 pub fn get_my_minted_tokens() -> Vec<TokenRecord> {
     let user = ic_cdk::caller();
     TOKENS.with(|t| {

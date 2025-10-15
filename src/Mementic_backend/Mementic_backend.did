@@ -229,5 +229,5 @@ service : (opt InitArgs) -> {
   vote_meme : (nat64, VoteType) -> (Result_7);
   whoami : () -> (principal) query;
   get_all_minted_tokens : () -> (vec TokenRecord) query;
-  get_my_minted_tokens : () -> (vec TokenRecord) query;
+  get_my_minted_tokens : () -> (vec TokenRecord);
 }
