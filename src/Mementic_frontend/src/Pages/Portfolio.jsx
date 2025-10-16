@@ -24,6 +24,8 @@ import { FeedbackForm } from "../components/FeedbackForm";
 import Navigation from "../components/Navigation";
 
 import backendService from "../services/backendService";
+import MintingModal from "../components/MintingModal";
+import ListingModal from "../components/ListingModal";
 
 
 
@@ -110,6 +112,15 @@ const Portfolio = () => {
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
+  const [entitlements, setEntitlements] = useState([]);
+  const [winnerNotices, setWinnerNotices] = useState([]);
+  const [mintModalOpen, setMintModalOpen] = useState(false);
+  const [mintTarget, setMintTarget] = useState(null);
+  const [minting, setMinting] = useState(false);
+  const [listingModalOpen, setListingModalOpen] = useState(false);
+  const [listingTarget, setListingTarget] = useState(null);
+  const [listingLoading, setListingLoading] = useState(false);
+
   const [usernameInput, setUsernameInput] = useState(sanitizedUsername);
   const [usernameError, setUsernameError] = useState("");
   const [usernameSaved, setUsernameSaved] = useState(false);
@@ -140,34 +151,6 @@ const Portfolio = () => {
 
   const generatedMemes = nfts.filter(nft => !nft.isMinted);
   const mintedNFTs = nfts.filter(nft => nft.isMinted);
-
-  const handleSell = async (id) => {
-    try {
-      // List for 1 ICP (100000000 e8s)
-      const priceE8s = BigInt(100000000);
-      await backendService.listMemeForSale(BigInt(id), priceE8s);
-      toast({
-        title: "Meme listed for sale",
-        description: "Your meme is now available on the marketplace for 1 ICP.",
-      });
-      // Refresh the portfolio to show updated status
-      await fetchData();
-    } catch (error) {
-      console.error('Failed to list meme for sale:', error);
-      toast({
-        title: "Listing failed",
-        description: "Could not list your meme for sale. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleKeep = (id) => {
-    toast({
-      title: "Meme kept",
-      description: "Your meme will continue earning votes and may be minted as an NFT.",
-    });
-  };
 
   const handleLogout = async () => {
     await logout();
@@ -283,6 +266,149 @@ const Portfolio = () => {
     return Number(value) || 0;
   }
 
+  const unwrapOptional = (value) => (Array.isArray(value) ? value[0] : value);
+
+  function toMilliseconds(candidate) {
+    const value = unwrapOptional(candidate);
+    if (value == null) return 0;
+
+    if (typeof value === 'bigint') {
+      if (value > 1_000_000_000_000_000n) {
+        return Number(value / 1_000_000n);
+      }
+      if (value > 1_000_000_000_000n) {
+        return Number(value);
+      }
+      if (value > 1_000_000_000n) {
+        return Number(value * 1000n);
+      }
+      if (value > 1_000_000n) {
+        return Number(value / 1000n);
+      }
+      return Number(value);
+    }
+
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value) || value <= 0) return 0;
+      if (value > 1e15) return Math.floor(value / 1e6);
+      if (value > 1e12) return Math.floor(value);
+      if (value > 1e9) return Math.floor(value * 1000);
+      if (value > 1e6) return Math.floor(value / 1000);
+      return Math.floor(value);
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return 0;
+      try {
+        if (/^-?\d+n$/.test(trimmed)) {
+          return toMilliseconds(BigInt(trimmed.slice(0, -1)));
+        }
+        if (/^-?\d+$/.test(trimmed)) {
+          return toMilliseconds(BigInt(trimmed));
+        }
+        const num = Number(trimmed);
+        return toMilliseconds(num);
+      } catch {
+        return 0;
+      }
+    }
+
+    return 0;
+  }
+
+  const parseStatusVariant = (variant) => {
+    if (variant && typeof variant === 'object') {
+      const keys = Object.keys(variant);
+      if (keys.length > 0) {
+        return keys[0];
+      }
+    }
+    return 'Unknown';
+  };
+
+  const normalizeEntitlements = (rawList) => {
+    if (!Array.isArray(rawList)) return [];
+    return rawList.map((item) => {
+      const status = parseStatusVariant(item?.status);
+      const mintedTokenIds = Array.isArray(item?.minted_token_ids)
+        ? item.minted_token_ids.map((token) => {
+            if (typeof token === 'bigint') return token.toString();
+            if (typeof token === 'number') return Math.floor(token).toString();
+            if (typeof token === 'string') return token;
+            return '';
+          }).filter(Boolean)
+        : [];
+
+      return {
+        entitlementId: safeBigIntToNumber(item?.entitlement_id ?? 0),
+        memeId: safeBigIntToNumber(item?.meme_id ?? 0),
+        owner:
+          item?.owner && typeof item.owner === 'object' && item.owner.toText
+            ? item.owner.toText()
+            : item?.owner ?? '',
+        weekId: safeBigIntToNumber(item?.week_id ?? 0),
+        rank: safeBigIntToNumber(item?.rank ?? 0),
+        memeTitle: item?.meme_title ?? 'Untitled Meme',
+        createdAtMs: toMilliseconds(item?.created_at),
+        expiresAtMs: toMilliseconds(item?.expires_at),
+        usedAtMs: toMilliseconds(item?.used_at),
+        status,
+        mintedTokenIds,
+        message: item?.message ?? null,
+        raw: item,
+      };
+    });
+  };
+
+  const normalizeWinnerNotices = (rawList) => {
+    if (!Array.isArray(rawList)) return [];
+    return rawList.map((notice) => ({
+      entitlementId: safeBigIntToNumber(notice?.entitlement_id ?? 0),
+      memeId: safeBigIntToNumber(notice?.meme_id ?? 0),
+      memeTitle: notice?.meme_title ?? 'Untitled Meme',
+      rank: safeBigIntToNumber(notice?.rank ?? 0),
+      weekId: safeBigIntToNumber(notice?.week_id ?? 0),
+      issuedAtMs: toMilliseconds(notice?.issued_at),
+      expiresAtMs: toMilliseconds(notice?.expires_at),
+      usedAtMs: toMilliseconds(notice?.used_at),
+      status: parseStatusVariant(notice?.status),
+      message: notice?.message ?? '',
+    }));
+  };
+
+  const formatMintCountdown = (expiresAtMs) => {
+    if (!expiresAtMs) return 'Mint window expired';
+    const remaining = expiresAtMs - Date.now();
+    if (remaining <= 0) return 'Mint window expired';
+
+    const minutes = Math.floor(remaining / 60000);
+    if (minutes >= 1440) {
+      const days = Math.floor(minutes / 1440);
+      const hours = Math.floor((minutes % 1440) / 60);
+      return `${days}d ${hours}h left`;
+    }
+    if (minutes >= 60) {
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return `${hours}h ${mins}m left`;
+    }
+    return `${minutes}m left`;
+  };
+
+  const formatDateTime = (ms) => {
+    if (!ms) return '';
+    try {
+      return new Date(ms).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
+    } catch {
+      return '';
+    }
+  };
+
   // Map canister records -> UI
   const mapToUi = (item) => {
     const memeData = unopt(item?.meme_data) || {};
@@ -375,22 +501,68 @@ const Portfolio = () => {
         return;
       }
 
-      // Check minting status for each meme
-      const ui = await Promise.all(mine.map(async (item, index) => {
-        const baseUi = mapToUi(item);
-        try {
-          // Add a small delay to avoid overwhelming the backend
-          if (index > 0) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-          const isMinted = await backendService.isMemeMinted(BigInt(baseUi.id));
-          return { ...baseUi, isMinted: Boolean(isMinted) };
-        } catch (error) {
-          console.warn(`Failed to check minting status for meme ${baseUi.id}:`, error);
-          return { ...baseUi, isMinted: false };
-        }
-      }));
+      let entRaw = [];
+      let noticesRaw = [];
+      try {
+        entRaw = await backendService.getMyMintEntitlements();
+      } catch (error) {
+        console.warn("Failed to fetch mint entitlements:", error);
+      }
 
+      try {
+        noticesRaw = await backendService.getWinnerNotices();
+      } catch (error) {
+        console.warn("Failed to fetch winner notices:", error);
+      }
+
+      const normalizedEntitlements = normalizeEntitlements(entRaw);
+      const normalizedNotices = normalizeWinnerNotices(noticesRaw);
+
+      const entitlementMap = new Map();
+      normalizedEntitlements.forEach((ent) => {
+        const existing = entitlementMap.get(ent.memeId) || [];
+        existing.push(ent);
+        entitlementMap.set(ent.memeId, existing);
+      });
+
+      // Check minting status for each meme
+      const ui = await Promise.all(
+        mine.map(async (item, index) => {
+          const baseUi = mapToUi(item);
+          const numericId = Number(baseUi.id);
+          const entitlementList = Number.isFinite(numericId)
+            ? entitlementMap.get(numericId) || []
+            : [];
+
+          let isMinted = false;
+          try {
+            if (index > 0) {
+              await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+            if (/^\d+$/.test(baseUi.id)) {
+              isMinted = await backendService.isMemeMinted(BigInt(baseUi.id));
+            }
+          } catch (error) {
+            console.warn(`Failed to check minting status for meme ${baseUi.id}:`, error);
+          }
+
+          const activeEntitlement = entitlementList.find((ent) => ent.status === 'Active') || null;
+          const usedEntitlements = entitlementList
+            .filter((ent) => ent.status === 'Used')
+            .sort((a, b) => (b.usedAtMs || 0) - (a.usedAtMs || 0));
+
+          return {
+            ...baseUi,
+            isMinted: Boolean(isMinted),
+            entitlements: entitlementList,
+            activeEntitlement,
+            mintedEntitlement: usedEntitlements.length > 0 ? usedEntitlements[0] : null,
+          };
+        })
+      );
+
+      setEntitlements(normalizedEntitlements);
+      setWinnerNotices(normalizedNotices);
       setNfts(ui);
     } catch (e) {
       console.error("Error loading portfolio:", e);
@@ -405,6 +577,129 @@ const Portfolio = () => {
       setLoading(false);
     }
   }
+
+  const findNftByMemeId = (memeId) =>
+    nfts.find((nft) => {
+      const numericId = Number(nft.id);
+      return Number.isFinite(numericId) && numericId === memeId;
+    });
+
+  const openMintModal = (nft) => {
+    setMintTarget(nft);
+    setMintModalOpen(true);
+  };
+
+  const closeMintModal = () => {
+    setMintModalOpen(false);
+    setMintTarget(null);
+  };
+
+  const handleMintConfirm = async ({ memeId, mintType, editions }) => {
+    try {
+      setMinting(true);
+      const idAsString = typeof memeId === "string" ? memeId : String(memeId);
+      if (!/^\d+$/.test(idAsString)) {
+        throw new Error("Invalid meme identifier for minting");
+      }
+
+      const mintMode =
+        (mintType ?? "").toLowerCase() === "collection"
+          ? (() => {
+              const total = Number(editions);
+              if (!Number.isInteger(total) || total < 2 || total > 50) {
+                throw new Error("Collection supply must be between 2 and 50 editions");
+              }
+              return { type: "collection", editions: total };
+            })()
+          : { type: "single" };
+
+      await backendService.mintMeme(BigInt(idAsString), mintMode);
+      toast({
+        title: "Your meme has been minted!",
+        description: "Mint entitlement consumed successfully.",
+      });
+      closeMintModal();
+      await fetchData();
+    } catch (error) {
+      console.error("Minting failed:", error);
+      toast({
+        title: "Minting failed",
+        description: error.message || "Could not mint your meme. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setMinting(false);
+    }
+  };
+
+  const openListingModal = (nft) => {
+    setListingTarget(nft);
+    setListingModalOpen(true);
+  };
+
+  const closeListingModal = () => {
+    setListingTarget(null);
+    setListingModalOpen(false);
+  };
+
+  const handleListingConfirm = async (memeId, options = {}) => {
+    try {
+      setListingLoading(true);
+      const idAsString = typeof memeId === "string" ? memeId : String(memeId);
+      if (!/^\d+$/.test(idAsString)) {
+        throw new Error("Invalid meme identifier for listing");
+      }
+
+      const price = Number(options.price);
+      if (!Number.isFinite(price) || price <= 0) {
+        throw new Error("Listing requires a positive price");
+      }
+
+      const priceE8s = BigInt(Math.round(price * 100000000));
+      await backendService.listMemeForSale(BigInt(idAsString), priceE8s);
+      toast({
+        title: "Listing created successfully!",
+        description: "Your NFT is now visible on the marketplace.",
+      });
+      closeListingModal();
+      await fetchData();
+    } catch (error) {
+      console.error("Listing failed:", error);
+      toast({
+        title: "Listing failed",
+        description: error.message || "Could not list your NFT. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setListingLoading(false);
+    }
+  };
+
+  const handleDelist = async (memeId) => {
+    try {
+      setListingLoading(true);
+      const idAsString = typeof memeId === "string" ? memeId : String(memeId);
+      if (!/^\d+$/.test(idAsString)) {
+        throw new Error("Invalid meme identifier for delisting");
+      }
+
+      await backendService.removeMemeFromMarket(BigInt(idAsString));
+      toast({
+        title: "Listing removed",
+        description: "Your NFT has been delisted from the marketplace.",
+      });
+      await fetchData();
+    } catch (error) {
+      console.error("Failed to remove listing:", error);
+      toast({
+        title: "Delisting failed",
+        description: error.message || "Could not remove the listing. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setListingLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -427,6 +722,9 @@ const Portfolio = () => {
           const updatedNfts = await Promise.all(
             nfts.map(async (nft) => {
               try {
+                if (!/^\d+$/.test(String(nft.id))) {
+                  return nft;
+                }
                 const memeIdBigInt = BigInt(nft.id);
                 const voteData = await backendService.getMemeVotes(memeIdBigInt);
 
@@ -667,12 +965,73 @@ const Portfolio = () => {
                 </Button>
               </div>
             </div>
+        </CardContent>
+      </Card>
+
+      {winnerNotices.length > 0 && (
+        <Card className="border-amber-300/40 bg-amber-500/10 text-amber-900 dark:text-amber-100 shadow-lg shadow-amber-500/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Crown className="h-5 w-5 text-amber-600" />
+              Weekly Winners
+            </CardTitle>
+            <p className="text-sm text-amber-700/80 dark:text-amber-200/80">
+              Mint your winning memes before the window closes.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {winnerNotices.map((notice) => {
+              const targetNft = findNftByMemeId(notice.memeId);
+              const countdown = formatMintCountdown(notice.expiresAtMs);
+              return (
+                <div
+                  key={notice.entitlementId}
+                  className="flex flex-col gap-2 rounded-xl border border-amber-400/40 bg-white/60 px-4 py-3 text-sm shadow-sm dark:bg-amber-900/40 md:flex-row md:items-center md:justify-between"
+                >
+                  <div>
+                    <p className="font-semibold text-amber-900 dark:text-amber-100">
+                      {notice.message || `🎉 Your meme "${notice.memeTitle}" placed #${notice.rank} in Week ${notice.weekId}.`}
+                    </p>
+                    <p className="text-xs text-amber-800/80 dark:text-amber-200/80">
+                      Mint window {countdown} • Mint before {formatDateTime(notice.expiresAtMs)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        notice.status === 'Active'
+                          ? 'bg-amber-500 text-black'
+                          : notice.status === 'Used'
+                          ? 'bg-emerald-500/90 text-black'
+                          : 'bg-rose-500/90 text-white'
+                      }`}
+                    >
+                      {notice.status === 'Active'
+                        ? 'Active'
+                        : notice.status === 'Used'
+                        ? 'Minted'
+                        : 'Expired'}
+                    </span>
+                    {notice.status === 'Active' && targetNft && (
+                      <Button
+                        size="sm"
+                        className="bg-gradient-to-r from-amber-400 to-rose-400 text-black hover:opacity-90"
+                        onClick={() => openMintModal(targetNft)}
+                      >
+                        Mint Meme
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
+      )}
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Performance Overview */}
-          <Card className="border-primary/20 bg-gradient-to-br from-card/80 to-card/60 text-card-foreground shadow-lg shadow-primary/10">
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Performance Overview */}
+        <Card className="border-primary/20 bg-gradient-to-br from-card/80 to-card/60 text-card-foreground shadow-lg shadow-primary/10">
             <CardHeader className="pb-4">
               <CardTitle className="text-xl font-semibold text-card-foreground flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-primary" />
@@ -901,6 +1260,18 @@ const Portfolio = () => {
                         {/* Top Section - Badges */}
                         <div className="flex justify-between items-start">
                           <div className="flex flex-wrap gap-2">
+                            {nft.activeEntitlement && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/90 px-3 py-1 text-xs font-semibold text-black shadow">
+                                🏆 You won this week!
+                              </span>
+                            )}
+                            {!nft.activeEntitlement &&
+                              Array.isArray(nft.entitlements) &&
+                              nft.entitlements.some((ent) => ent.status === 'Expired') && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/80 px-3 py-1 text-xs font-semibold text-white">
+                                  Mint window expired
+                                </span>
+                              )}
                           </div>
 
                           {/* Action indicators */}
@@ -943,6 +1314,27 @@ const Portfolio = () => {
                               })}
                             </p>
                           </div>
+
+                          {nft.activeEntitlement ? (
+                            <div className="space-y-2">
+                              <p className="text-xs text-white/80">
+                                Mint window closes in {formatMintCountdown(nft.activeEntitlement.expiresAtMs)}
+                              </p>
+                              <Button
+                                size="sm"
+                                className="w-full bg-gradient-to-r from-amber-400 to-rose-400 text-black hover:opacity-90"
+                                onClick={() => openMintModal(nft)}
+                                disabled={minting && mintTarget?.id === nft.id}
+                              >
+                                Mint Meme
+                              </Button>
+                            </div>
+                          ) : (
+                            Array.isArray(nft.entitlements) &&
+                            nft.entitlements.some((ent) => ent.status === 'Expired') && (
+                              <p className="text-xs text-rose-200/80">Mint window expired</p>
+                            )
+                          )}
                         </div>
                       </div>
                     </div>
@@ -985,7 +1377,7 @@ const Portfolio = () => {
               <CardContent>
                 <CardTitle className="text-xl">No minted NFTs yet</CardTitle>
                 <p className="mt-3 text-sm text-foreground/80">
-                  Top-performing memes are automatically minted when they reach the spotlight.
+                  Your Top-3 winners will appear here after you mint them from your portfolio.
                 </p>
               </CardContent>
             </Card>
@@ -1031,6 +1423,19 @@ const Portfolio = () => {
                         <p className="mt-2 text-sm font-semibold text-purple-100">Minted NFT</p>
                       </div>
                     </div>
+                    {nft.mintedEntitlement && (
+                      <div className="rounded-xl bg-white/5 p-3 text-xs text-purple-100/80">
+                        <p className="uppercase tracking-wide text-purple-200/70">
+                          Week {nft.mintedEntitlement.weekId} winner
+                        </p>
+                        <p className="mt-2 text-sm font-semibold text-purple-100">
+                          {formatDateTime(nft.mintedEntitlement.usedAtMs)
+                            ? `Minted on ${formatDateTime(nft.mintedEntitlement.usedAtMs)}`
+                            : "Minted"}
+                          {` • #${nft.mintedEntitlement.rank} finish`}
+                        </p>
+                      </div>
+                    )}
                     {typeof nft.listingPrice === "number" && (
                       <div className="rounded-xl bg-white/5 p-3 text-xs text-purple-100/80">
                         <p className="uppercase tracking-wide text-purple-200/70">Last listing</p>
@@ -1038,13 +1443,33 @@ const Portfolio = () => {
                       </div>
                     )}
                     <div className="flex flex-wrap gap-3">
+                      {nft.isListed ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDelist(nft.id)}
+                          className="border-rose-300 text-rose-100 hover:bg-rose-500/20"
+                          disabled={listingLoading}
+                        >
+                          Delist from marketplace
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => openListingModal(nft)}
+                          className="bg-gradient-to-r from-amber-400 to-rose-400 text-black hover:opacity-90"
+                          disabled={listingLoading}
+                        >
+                          List on marketplace
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => navigate("/marketplace")}
                         className="border-secondary/40 text-foreground hover:bg-secondary/10"
                       >
-                        View on marketplace
+                        View marketplace
                       </Button>
                     </div>
                   </CardContent>
@@ -1059,16 +1484,33 @@ const Portfolio = () => {
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/20 text-accent-foreground">
               <MessageSquare className="h-6 w-6" />
             </div>
-            <div>
-              <h2 className="text-2xl font-semibold text-card-foreground">Share your feedback</h2>
-              <p className="text-sm text-foreground/80">
-                Help us shape the next wave of meme tools and creator features.
-              </p>
-            </div>
+          <div>
+            <h2 className="text-2xl font-semibold text-card-foreground">Share your feedback</h2>
+            <p className="text-sm text-foreground/80">
+              Help us shape the next wave of meme tools and creator features.
+            </p>
+          </div>
           </div>
           <FeedbackForm />
         </section>
       </main>
+
+      <MintingModal
+        isOpen={mintModalOpen}
+        onClose={closeMintModal}
+        meme={mintTarget}
+        entitlement={mintTarget?.activeEntitlement ?? null}
+        onConfirm={handleMintConfirm}
+        isMinting={minting}
+      />
+
+      <ListingModal
+        isOpen={listingModalOpen}
+        onClose={closeListingModal}
+        nft={listingTarget}
+        onConfirm={handleListingConfirm}
+        isProcessing={listingLoading}
+      />
     </div>
   );
 }

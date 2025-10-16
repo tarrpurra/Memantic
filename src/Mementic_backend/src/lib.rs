@@ -1,3 +1,4 @@
+mod entitlements;
 mod feedback;
 mod http_outcall;
 mod nft_module;
@@ -38,10 +39,15 @@ pub use http_outcall::{
 
 pub use voting::{
     finalize_finished_weeks, finalize_week, get_completed_weeks, get_current_leaderboard,
-    get_current_week_status, get_meme_votes, get_top3_for_week, get_top_liked_memes,
-    get_user_vote, get_voting_stats, get_week_leaderboard, remove_vote, vote_meme,
-    LeaderboardEntry, MemeVotes, TopEntry, TopLikedLeaderboard, VoteRecord, VoteResponse,
-    VoteType, WeeklyLeaderboard, WeeklyPeriod,
+    get_current_week_status, get_meme_votes, get_top3_for_week, get_top_liked_memes, get_user_vote,
+    get_voting_stats, get_week_leaderboard, remove_vote, vote_meme, LeaderboardEntry, MemeVotes,
+    TopEntry, TopLikedLeaderboard, VoteRecord, VoteResponse, VoteType, WeeklyLeaderboard,
+    WeeklyPeriod,
+};
+
+pub use entitlements::{
+    get_entitlements_for_meme, get_my_mint_entitlements, get_my_winner_notices, EntitlementStatus,
+    MintEntitlement, WinnerNotice,
 };
 
 pub use nft_module::{
@@ -59,9 +65,7 @@ pub use nft_module::{
     icrc7_total_supply,
     // minting
     mint_to,
-    mint_week_top3_from_voting,
     MetadataValue,
-    MintedPair,
     MintingMode,
     NftImage,
     SupportedStandard,
@@ -82,11 +86,6 @@ pub use user_profiles::{
 #[query]
 pub fn whoami() -> Principal {
     ic_cdk::caller()
-}
-
-#[update]
-pub async fn mint_week_top3_here(week_id: u64) -> Result<Vec<MintedPair>, String> {
-    nft_module::mint_week_top3_from_voting(week_id).await
 }
 
 ic_cdk::export_candid!();

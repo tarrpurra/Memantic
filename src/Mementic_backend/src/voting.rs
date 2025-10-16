@@ -272,70 +272,26 @@ fn get_top_memes_for_week_stable(week_id: u64, limit: usize) -> Vec<(u64, MemeVo
 #[update]
 fn close_finished_weeks() {
     let now = ic_cdk::api::time();
-    WEEKLY_PERIODS.with(|wp| {
-        let mut periods = wp.borrow_mut();
-
-        // gather only unfinished & expired
-        let to_close: Vec<u64> = periods
+    let to_finalize: Vec<u64> = WEEKLY_PERIODS.with(|wp| {
+        let periods = wp.borrow();
+        periods
             .iter()
-            .filter_map(|e| {
-                let p = e.value(); // owned in ic-stable-structures 0.7; if &T in your build, clone()
-                if !p.is_completed && now > p.end_time {
-                    Some(*e.key())
+            .filter_map(|entry| {
+                let period = entry.value();
+                if !period.is_completed && now > period.end_time {
+                    Some(*entry.key())
                 } else {
                     None
                 }
             })
-            .collect();
-
-        for week_id in to_close {
-            if let Some(mut p) = periods.get(&week_id) {
-                p.is_completed = true;
-                periods.insert(week_id, p); // write back
-
-                // Automatically mint NFTs for top 3 memes of completed week
-                mint_top3_for_completed_week(week_id);
-            }
-        }
+            .collect()
     });
-}
 
-/// Automatically mint NFTs for the top 3 memes of a completed week
-fn mint_top3_for_completed_week(week_id: u64) {
-    ic_cdk::println!("Attempting to mint NFTs for completed week: {}", week_id);
-
-    // Spawn an async task to mint the NFTs
-    ic_cdk::spawn(async move {
-        match crate::nft_module::mint_week_top3_from_voting(week_id).await {
-            Ok(minted_pairs) => {
-                ic_cdk::println!(
-                    "Successfully minted {} NFTs for week {}",
-                    minted_pairs.len(),
-                    week_id
-                );
-                for pair in minted_pairs {
-                    let minted_list = if pair.token_ids.is_empty() {
-                        "(no tokens)".to_string()
-                    } else {
-                        pair.token_ids
-                            .iter()
-                            .map(|id| id.to_string())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    };
-                    ic_cdk::println!(
-                        "Minted NFT(s) [{}] for meme {} owned by {}",
-                        minted_list,
-                        pair.meme_id,
-                        pair.owner
-                    );
-                }
-            }
-            Err(e) => {
-                ic_cdk::println!("Failed to mint NFTs for week {}: {}", week_id, e);
-            }
+    for week_id in to_finalize {
+        if let Err(err) = finalize_week(week_id) {
+            ic_cdk::println!("Failed to finalize finished week {}: {}", week_id, err);
         }
-    });
+    }
 }
 
 // ---------- Main voting ----------
@@ -755,11 +711,7 @@ pub fn finalize_week(week_id: u64) -> Result<(), String> {
         let mut periods = wp.borrow_mut();
         if let Some(mut p) = periods.get(&week_id) {
             p.is_completed = true;
-            periods.insert(week_id, p.clone());
-
-            // Automatically mint NFTs for top 3 memes of completed week
-            mint_top3_for_completed_week(week_id);
-
+            periods.insert(week_id, p);
             Ok(())
         } else {
             // Try to create the week if it doesn't exist
@@ -776,16 +728,29 @@ pub fn finalize_week(week_id: u64) -> Result<(), String> {
                     meme_count: 0,
                 };
                 periods.insert(week_id, new_period);
-
-                // Automatically mint NFTs for top 3 memes of completed week
-                mint_top3_for_completed_week(week_id);
-
                 Ok(())
             } else {
                 Err("Cannot finalize future week".into())
             }
         }
-    })
+    })?;
+
+    let winners = match get_top3_for_week(week_id) {
+        Ok(top) => top,
+        Err(e) => {
+            ic_cdk::println!("Week {} finalized without leaderboard data: {}", week_id, e);
+            Vec::new()
+        }
+    };
+
+    if let Err(err) = crate::entitlements::create_entitlements_for_week(week_id, &winners) {
+        return Err(format!(
+            "Failed to issue mint entitlements for week {}: {}",
+            week_id, err
+        ));
+    }
+
+    Ok(())
 }
 
 /// Delete a meme and all associated data (votes, user votes)
