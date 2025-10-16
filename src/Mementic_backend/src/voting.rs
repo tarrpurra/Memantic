@@ -158,6 +158,12 @@ pub struct LeaderboardEntry {
     pub rank: u32,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
+pub struct TopLikedLeaderboard {
+    pub total_ranked: u32,
+    pub top_memes: Vec<LeaderboardEntry>,
+}
+
 /// Minimal data your NFT canister will need
 #[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
 pub struct TopEntry {
@@ -547,6 +553,51 @@ pub fn get_current_leaderboard(limit: Option<u32>) -> WeeklyLeaderboard {
         period: period.clone(),
         top_memes: entries,
         is_active: !period.is_completed && now <= period.end_time,
+    }
+}
+
+/// Global leaderboard based on most upvotes across all weeks.
+#[query]
+pub fn get_top_liked_memes(limit: Option<u32>) -> TopLikedLeaderboard {
+    let lim = limit.unwrap_or(3).max(1).min(50) as usize;
+
+    let mut items: Vec<(u64, MemeVotes)> = VOTES.with(|v| {
+        v.borrow()
+            .iter()
+            .map(|entry| (*entry.key(), entry.value().clone()))
+            .collect()
+    });
+
+    use std::cmp::Ordering;
+
+    items.sort_by(|a, b| {
+        b.1.upvotes
+            .cmp(&a.1.upvotes)
+            .then_with(|| a.1.downvotes.cmp(&b.1.downvotes))
+            .then_with(|| b.1.last_vote_time.cmp(&a.1.last_vote_time))
+            .then_with(|| a.0.cmp(&b.0))
+    });
+
+    if items.len() > lim {
+        items.truncate(lim);
+    }
+
+    let top_memes = items
+        .into_iter()
+        .enumerate()
+        .map(|(index, (meme_id, mv))| LeaderboardEntry {
+            meme_id,
+            meme_data: get_meme(meme_id),
+            votes: mv,
+            rank: (index + 1) as u32,
+        })
+        .collect();
+
+    let total_ranked = VOTES.with(|v| v.borrow().len() as u32);
+
+    TopLikedLeaderboard {
+        total_ranked,
+        top_memes,
     }
 }
 

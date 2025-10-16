@@ -328,9 +328,9 @@ const Auction = () => {
               return backendService.getAllMemes();
             }),
           backendService
-            .getCurrentLeaderboard(5)
+            .getTopLikedMemes(5)
             .catch((leaderboardError) => {
-              console.warn("getCurrentLeaderboard failed", leaderboardError);
+              console.warn("getTopLikedMemes failed", leaderboardError);
               return null;
             }),
         ]);
@@ -355,10 +355,16 @@ const Auction = () => {
                 rank: entry?.rank ?? index + 1,
                 votes: entry?.votes,
               });
+              const likeCount = safeBigIntToNumber(entry?.votes?.upvotes ?? normalized.votes ?? 0);
+              const downvoteCount = safeBigIntToNumber(entry?.votes?.downvotes ?? 0);
               return {
                 ...normalized,
                 rank: normalized.rank || index + 1,
-                votes: safeBigIntToNumber(entry?.votes ?? normalized.votes),
+                votes: likeCount,
+                likeCount,
+                downvoteCount,
+                voteScore: normalized.votes,
+                voteDetails: entry?.votes ?? null,
               };
             })
             .filter(Boolean)

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "../ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/Card";
-import { Crown, TrendingUp, Timer, User, Eye, Heart } from "lucide-react";
-import { formatNumber, getWeekEndIST, formatRemaining, ensureArray, normalizeMeme, safeBigIntToNumber } from "../../utils/marketplaceUtils";
+import { Card, CardContent } from "../ui/Card";
+import { Crown, User, Eye, Heart } from "lucide-react";
+import { formatNumber, ensureArray, normalizeMeme, safeBigIntToNumber } from "../../utils/marketplaceUtils";
 import backendService from "../../services/backendService";
 
 const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
@@ -15,16 +15,17 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
   );
 
   const totalVotes = useMemo(
-    () => ensureArray(topMemes).reduce(
-      (acc, meme) => acc + safeBigIntToNumber(meme?.votes || 0),
-      0
-    ),
+    () =>
+      ensureArray(topMemes).reduce(
+        (acc, meme) => acc + safeBigIntToNumber(meme?.likeCount ?? meme?.votes ?? 0),
+        0
+      ),
     [topMemes]
   );
 
   const shareOfTop = useMemo(() => {
     if (!totalVotes || topTrending.length === 0) return 0;
-    const leadVotes = safeBigIntToNumber(topTrending[0]?.votes || 0);
+    const leadVotes = safeBigIntToNumber(topTrending[0]?.likeCount ?? topTrending[0]?.votes ?? 0);
     return Math.round((leadVotes / totalVotes) * 100);
   }, [topTrending, totalVotes]);
 
@@ -35,8 +36,8 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
 
     const fetchTopMemes = async () => {
       try {
-        const res = await backendService.getCurrentLeaderboard(3);
-        const entries = ensureArray(res?.top_memes);
+        const res = await backendService.getTopLikedMemes(3);
+        const entries = ensureArray(res?.top_memes ?? res);
 
         // Get unique owners for profile fetching
         const uniqueOwners = [...new Set(entries.map(e => {
@@ -66,24 +67,32 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
           const pm = Array.isArray(e?.meme_data)
             ? e.meme_data[0]
             : e?.meme_data;
-          if (pm) {
-            return normalizeMeme(pm, { rank: e?.rank, votes: e?.votes }, userProfiles);
-          }
-          return normalizeMeme(
-            {
-              id: e?.meme_id,
-              title: `Meme #${e?.meme_id ?? "?"}`,
-              owner: e?.owner,
-              meme_data: e?.meme_data,
-            },
-            { rank: e?.rank, votes: e?.votes },
-            userProfiles
-          );
+          const normalized = pm
+            ? normalizeMeme(pm, { rank: e?.rank, votes: e?.votes }, userProfiles)
+            : normalizeMeme(
+                {
+                  id: e?.meme_id,
+                  title: `Meme #${e?.meme_id ?? "?"}`,
+                  owner: e?.owner,
+                  meme_data: e?.meme_data,
+                },
+                { rank: e?.rank, votes: e?.votes },
+                userProfiles
+              );
+
+          const likeCount = safeBigIntToNumber(e?.votes?.upvotes ?? normalized.votes ?? 0);
+          const downvoteCount = safeBigIntToNumber(e?.votes?.downvotes ?? 0);
+
+          return {
+            ...normalized,
+            votes: likeCount,
+            likeCount,
+            downvoteCount,
+            voteScore: normalized.votes,
+            voteDetails: e?.votes ?? null,
+          };
         });
-        // Filter to current week only
-        const weekStart = getWeekStartIST();
-        const filteredArr = arr.filter(m => m.created_at >= weekStart.getTime());
-        if (!cancelled) setTopMemes(filteredArr);
+        if (!cancelled) setTopMemes(arr);
       } catch (e) {
         if (!cancelled) console.warn("Failed to load top memes:", e);
       } finally {
@@ -110,7 +119,7 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
           <div className="flex items-center justify-between">
             <div className="inline-flex items-center gap-2 text-sm text-primary">
               <Crown className="h-5 w-5" />
-              <span className="text-lg font-semibold text-foreground">Weekly Leaderboard</span>
+              <span className="text-lg font-semibold text-foreground">Top Liked Leaderboard</span>
             </div>
             <div className="flex items-center gap-4">
               <div className="text-center">
@@ -129,13 +138,13 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
                 </h2>
                 <p className="text-base text-muted-foreground">
                   {topTrending[0]
-                    ? `Holding ${formatNumber(topTrending[0]?.votes || 0)} votes and ${formatNumber(topTrending[0]?.views || 0)} views.`
+                    ? `Holding ${formatNumber(topTrending[0]?.likeCount ?? topTrending[0]?.votes ?? 0)} likes and ${formatNumber(topTrending[0]?.views || 0)} views.`
                     : "Publish your meme to claim the first spot on this week's board."}
                 </p>
                 <div className="flex flex-wrap gap-6 text-sm text-muted-foreground">
                   <span className="flex items-center gap-2">
                     <Heart className="h-5 w-5 text-pink-300" />
-                    <span className="font-semibold">{formatNumber(topTrending[0]?.votes || 0)}</span> votes
+                    <span className="font-semibold">{formatNumber(topTrending[0]?.likeCount ?? topTrending[0]?.votes ?? 0)}</span> likes
                   </span>
                   <span className="flex items-center gap-2">
                     <Eye className="h-5 w-5 text-blue-300" />
@@ -199,7 +208,7 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
               <div className="bg-y rounded-xl border border-border/40 p-4 ">
                 <h3 className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2 ">
                   <Crown className="h-5 w-5 text-primary" />
-                  Top 3 Trending
+                  Top 3 Most Liked
                 </h3>
                 <div className="space-y-3">
                   {loadingTop ? (
@@ -253,7 +262,7 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
                               <span className="flex items-center gap-1">
                                 <Heart className="h-3 w-3 text-red-500" />
-                                {formatNumber(meme.votes)}
+                                {formatNumber(meme.likeCount ?? meme.votes ?? 0)}
                               </span>
                               <span className="flex items-center gap-1">
                                 <Eye className="h-3 w-3 text-blue-500" />

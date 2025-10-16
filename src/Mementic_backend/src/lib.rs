@@ -38,9 +38,10 @@ pub use http_outcall::{
 
 pub use voting::{
     finalize_finished_weeks, finalize_week, get_completed_weeks, get_current_leaderboard,
-    get_current_week_status, get_meme_votes, get_top3_for_week, get_user_vote, get_voting_stats,
-    get_week_leaderboard, remove_vote, vote_meme, LeaderboardEntry, MemeVotes, TopEntry,
-    VoteRecord, VoteResponse, VoteType, WeeklyLeaderboard, WeeklyPeriod,
+    get_current_week_status, get_meme_votes, get_top3_for_week, get_top_liked_memes,
+    get_user_vote, get_voting_stats, get_week_leaderboard, remove_vote, vote_meme,
+    LeaderboardEntry, MemeVotes, TopEntry, TopLikedLeaderboard, VoteRecord, VoteResponse,
+    VoteType, WeeklyLeaderboard, WeeklyPeriod,
 };
 
 pub use nft_module::{
