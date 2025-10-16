@@ -75,6 +75,16 @@ const SkeletonTile = () => (
   </Card>
 );
 
+const LoadingState = ({ message }) => (
+  <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 text-foreground">
+    <Navigation />
+    <main className="mx-auto flex w-full max-w-4xl flex-col items-center justify-center gap-6 px-4 py-24 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full border-4 border-primary border-t-transparent animate-spin" />
+      <p className="text-sm text-muted-foreground">{message}</p>
+    </main>
+  </div>
+);
+
 const Portfolio = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -451,6 +461,14 @@ const Portfolio = () => {
       clearInterval(refreshInterval);
     };
   }, [isAuthenticated, loading, nfts]);
+
+  if (authLoading) {
+    return <LoadingState message="Connecting to your identity…" />;
+  }
+
+  if (!isAuthenticated) {
+    return <LoadingState message="Redirecting you to the login experience…" />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 text-foreground">

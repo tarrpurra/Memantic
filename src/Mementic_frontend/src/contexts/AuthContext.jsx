@@ -247,51 +247,76 @@ export const AuthProvider = ({ children }) => {
   };
 
   const loginWithInternetIdentity = async () => {
-    try {
-      setIsLoading(true);
-      if (!authClient) {
-        throw new Error("Auth client not initialized");
-      }
-
-      // AuthClient.login() opens a popup and returns a Promise that resolves when login is complete
-        await authClient.login({
-          identityProvider: getIdentityProvider(),
-        });
-
-        // After successful login, update state
-        const identity = authClient.getIdentity();
-        const principalText = identity.getPrincipal().toText();
-
-        setIsAuthenticated(true);
-        setPrincipal(principalText);
-        setActiveProvider("internet-identity");
-
-        // Update backend service with identity
-        await attachIdentityToBackend(identity);
-
-        // Load user profile from backend
-        const resolvedUsername = await loadUserProfile();
-      persistAuthState({
-        principal: principalText,
-        username: resolvedUsername,
-        provider: "internet-identity",
-      });
-
-      await loadUserData();
-      return true;
-    } catch (error) {
-      console.error("Internet Identity login failed:", error);
-      setIsAuthenticated(false);
-      setPrincipal(null);
-      setUsername("");
-      setActiveProvider(null);
-      setRemainingCalls(0);
-      persistAuthState(null);
-      await clearBackendAuth();
-      throw error;
-    } finally {
-      setIsLoading(false);
+    if (!authClient) {
+      throw new Error("Auth client not initialized");
     }
+
+    setIsLoading(true);
+
+    return new Promise((resolve, reject) => {
+      try {
+        authClient.login({
+          identityProvider: getIdentityProvider(),
+          onSuccess: async () => {
+          try {
+            const identity = authClient.getIdentity();
+            const principalText = identity.getPrincipal().toText();
+
+            setIsAuthenticated(true);
+            setPrincipal(principalText);
+            setActiveProvider("internet-identity");
+
+            await attachIdentityToBackend(identity);
+
+            const resolvedUsername = await loadUserProfile();
+
+            persistAuthState({
+              principal: principalText,
+              username: resolvedUsername,
+              provider: "internet-identity",
+            });
+
+            await loadUserData();
+            resolve(true);
+          } catch (error) {
+            console.error("Internet Identity post-login handling failed:", error);
+            setIsAuthenticated(false);
+            setPrincipal(null);
+            setUsername("");
+            setActiveProvider(null);
+            setRemainingCalls(0);
+            persistAuthState(null);
+            await clearBackendAuth();
+            reject(error);
+          } finally {
+            setIsLoading(false);
+          }
+        },
+        onError: async (error) => {
+          console.error("Internet Identity login failed:", error);
+          setIsAuthenticated(false);
+          setPrincipal(null);
+          setUsername("");
+          setActiveProvider(null);
+          setRemainingCalls(0);
+          persistAuthState(null);
+          await clearBackendAuth();
+          setIsLoading(false);
+          reject(error ?? new Error("Internet Identity login was cancelled"));
+        },
+      });
+      } catch (error) {
+        console.error("Internet Identity login threw before opening:", error);
+        setIsAuthenticated(false);
+        setPrincipal(null);
+        setUsername("");
+        setActiveProvider(null);
+        setRemainingCalls(0);
+        persistAuthState(null);
+        setIsLoading(false);
+        reject(error);
+      }
+    });
   };
 
   // Keep backward compatibility
