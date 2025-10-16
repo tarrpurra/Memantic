@@ -250,9 +250,6 @@ thread_local! {
     static MINT_INDEX: RefCell<StableBTreeMap<u64, MemeTokenList, Mem>> =
         RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(2)))));
 
-    static WEEK_MINTED: RefCell<StableBTreeMap<u64, bool, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(3)))));
-
     static STATE: RefCell<CollectionState> = RefCell::new(CollectionState::default());
 
     // NEW: store actual image bytes (ImageBlob wraps Vec<u8>)
@@ -569,13 +566,6 @@ pub enum MintingMode {
     Collection { editions: u32 },
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
-pub struct MintedPair {
-    pub meme_id: u64,
-    pub token_ids: Vec<Nat>,
-    pub owner: Principal,
-}
-
 #[update]
 pub async fn mint_to(meme_id: u64, mode: MintingMode) -> Result<Vec<Nat>, String> {
     let caller = ic_cdk::caller();
@@ -611,9 +601,8 @@ pub async fn mint_to(meme_id: u64, mode: MintingMode) -> Result<Vec<Nat>, String
         .await?
         .ok_or_else(|| format!("StoredMeme {} not found in voting canister", meme_id))?;
 
-    let admin = STATE.with(|s| s.borrow().admin);
-    if caller != stored_meme_data.owner && caller != admin {
-        return Err("Only the meme owner or collection admin can mint this meme".into());
+    if caller != stored_meme_data.owner {
+        return Err("Only the winning meme owner can mint this NFT".into());
     }
 
     let votes = crate::voting::get_meme_votes(meme_id)
@@ -622,6 +611,10 @@ pub async fn mint_to(meme_id: u64, mode: MintingMode) -> Result<Vec<Nat>, String
     if !top3.iter().any(|entry| entry.meme_id == meme_id) {
         return Err("Only top 3 weekly winners can be minted".into());
     }
+
+    let request_time = ic_cdk::api::time();
+    let (entitlement_id, _) =
+        crate::entitlements::require_active_entitlement(caller, meme_id, request_time)?;
 
     let image_url = stored_meme_data.meme_data.image_url.clone();
     let image_format = stored_meme_data.meme_data.image_format.clone();
@@ -650,6 +643,7 @@ pub async fn mint_to(meme_id: u64, mode: MintingMode) -> Result<Vec<Nat>, String
     let total_editions = existing_tokens.len() + to_mint;
     let mut all_tokens = existing_tokens.clone();
     let mut minted_tokens = Vec::with_capacity(to_mint);
+    let minted_at = ic_cdk::api::time();
 
     for edition_offset in 0..to_mint {
         let token_id = next_token_id();
@@ -677,7 +671,7 @@ pub async fn mint_to(meme_id: u64, mode: MintingMode) -> Result<Vec<Nat>, String
         let rec = TokenRecord {
             token_id: token_id.clone(),
             owner: stored_meme_data.owner,
-            minted_at: ic_cdk::api::time(),
+            minted_at,
             meme_id,
             metadata,
             mime_type: Some(mime_type.clone()),
@@ -697,43 +691,9 @@ pub async fn mint_to(meme_id: u64, mode: MintingMode) -> Result<Vec<Nat>, String
             .insert(meme_id, MemeTokenList(all_tokens.clone()));
     });
 
+    crate::entitlements::mark_entitlement_used(entitlement_id, minted_tokens.clone())?;
+
     Ok(minted_tokens)
-}
-
-#[update]
-pub async fn mint_week_top3_from_voting(week_id: u64) -> Result<Vec<MintedPair>, String> {
-    assert_admin();
-
-    if WEEK_MINTED.with(|wm| wm.borrow().get(&week_id).unwrap_or(false)) {
-        // already minted; proceed to recompute response
-    }
-
-    let voting_canister = ic_cdk::api::id();
-    let winners = voting_get_top3_for_week(voting_canister, week_id).await?;
-    if winners.is_empty() {
-        return Ok(vec![]);
-    }
-
-    let mut minted: Vec<MintedPair> = Vec::new();
-    for w in winners.into_iter() {
-        let token_ids = mint_to(w.meme_id, MintingMode::Single).await?;
-        let primary = token_ids
-            .first()
-            .cloned()
-            .ok_or_else(|| "mint_to returned no token".to_string())?;
-        // Fetch owner from token record
-        let owner = TOKENS
-            .with(|t| t.borrow().get(&SNat(primary.clone())).map(|rec| rec.owner))
-            .unwrap_or(Principal::anonymous());
-        minted.push(MintedPair {
-            meme_id: w.meme_id,
-            token_ids,
-            owner,
-        });
-    }
-
-    WEEK_MINTED.with(|wm| wm.borrow_mut().insert(week_id, true));
-    Ok(minted)
 }
 
 #[query]

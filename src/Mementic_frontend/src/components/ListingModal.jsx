@@ -1,12 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 
-const ListingModal = ({ isOpen, onClose, nft, onConfirm }) => {
+const ListingModal = ({ isOpen, onClose, nft, onConfirm, isProcessing = false }) => {
   const [price, setPrice] = useState("");
   const [auctionType, setAuctionType] = useState("fixed_price");
   const [duration, setDuration] = useState("7"); // days
   const [royalties, setRoyalties] = useState("5");
+
+  useEffect(() => {
+    if (isOpen) {
+      setPrice("");
+      setAuctionType("fixed_price");
+      setDuration("7");
+      setRoyalties("5");
+    }
+  }, [isOpen]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -64,6 +73,7 @@ const ListingModal = ({ isOpen, onClose, nft, onConfirm }) => {
                 placeholder="0.00"
                 required
                 className="mt-1"
+                disabled={isProcessing}
               />
             </div>
 
@@ -73,6 +83,7 @@ const ListingModal = ({ isOpen, onClose, nft, onConfirm }) => {
                 value={auctionType}
                 onChange={(e) => setAuctionType(e.target.value)}
                 className="w-full mt-1 px-3 py-2 border border-input bg-background rounded-md text-sm"
+                disabled={isProcessing}
               >
                 <option value="fixed_price">Fixed Price</option>
                 <option value="timed_auction">Timed Auction</option>
@@ -89,6 +100,7 @@ const ListingModal = ({ isOpen, onClose, nft, onConfirm }) => {
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
                   className="mt-1"
+                  disabled={isProcessing}
                 />
               </div>
             )}
@@ -103,6 +115,7 @@ const ListingModal = ({ isOpen, onClose, nft, onConfirm }) => {
                 onChange={(e) => setRoyalties(e.target.value)}
                 placeholder="5"
                 className="mt-1"
+                disabled={isProcessing}
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Percentage of future sales you receive
@@ -114,8 +127,12 @@ const ListingModal = ({ isOpen, onClose, nft, onConfirm }) => {
             <Button type="button" variant="outline" onClick={onClose} className="flex-1">
               Cancel
             </Button>
-            <Button type="submit" className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500">
-              List NFT
+            <Button
+              type="submit"
+              className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500"
+              disabled={isProcessing}
+            >
+              {isProcessing ? "Listing…" : "List NFT"}
             </Button>
           </div>
         </form>

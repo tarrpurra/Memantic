@@ -45,19 +45,28 @@ type MemeVotes = record {
   downvotes : nat32;
   created_week : nat64;
 };
+type EntitlementStatus = variant { Active; Used; Expired };
 type MetadataValue = variant {
   Map : vec record { text; MetadataValue };
   Blob : blob;
   Text : text;
   Array : vec MetadataValue;
 };
-type MintedPair = record {
-  meme_id : nat64;
-  owner : principal;
-  token_ids : vec nat;
-};
 type MintingMode = variant { Collection : record { editions : nat32 }; Single };
 type NftImage = record { mime_type : text; image : blob };
+type MintEntitlement = record {
+  entitlement_id : nat64;
+  meme_id : nat64;
+  owner : principal;
+  week_id : nat64;
+  rank : nat8;
+  meme_title : text;
+  created_at : nat64;
+  expires_at : nat64;
+  status : EntitlementStatus;
+  used_at : opt nat64;
+  minted_token_ids : vec nat;
+};
 type PublicStoredMeme = record {
   id : nat64;
   sale_metadata : opt TokenSaleMetadata;
@@ -78,7 +87,6 @@ type Result_1 = variant { Ok : nat32; Err : text };
 type Result_2 = variant { Ok; Err : text };
 type Result_3 = variant { Ok : vec TopEntry; Err : text };
 type Result_4 = variant { Ok : vec nat; Err : text };
-type Result_5 = variant { Ok : vec MintedPair; Err : text };
 type Result_6 = variant { Ok : PublicStoredMeme; Err : text };
 type Result_7 = variant { Ok : VoteResponse; Err : text };
 type SupportedStandard = record { url : text; name : text };
@@ -147,6 +155,18 @@ type WeeklyPeriod = record {
   is_completed : bool;
   start_time : nat64;
 };
+type WinnerNotice = record {
+  entitlement_id : nat64;
+  meme_id : nat64;
+  meme_title : text;
+  rank : nat8;
+  week_id : nat64;
+  issued_at : nat64;
+  expires_at : nat64;
+  used_at : opt nat64;
+  status : EntitlementStatus;
+  message : text;
+};
 service : (opt InitArgs) -> {
   // Approve feedback for public display (admin function)
   approve_feedback : (nat64) -> (Result);
@@ -186,13 +206,16 @@ service : (opt InitArgs) -> {
   get_meme : (nat64) -> (opt PublicStoredMeme) query;
   // Get per-meme votes
   get_meme_votes : (nat64) -> (opt MemeVotes) query;
+  get_my_mint_entitlements : () -> (vec MintEntitlement) query;
   get_my_minted_tokens : () -> (vec TokenRecord) query;
+  get_my_winner_notices : () -> (vec WinnerNotice) query;
   get_nft_image : (nat) -> (opt NftImage) query;
   get_sale_metadata : (nat) -> (opt TokenSaleMetadata) query;
   get_sale_metadata_for_meme : (nat64) -> (opt TokenSaleMetadata) query;
   get_token : (nat) -> (opt TokenRecord) query;
   get_token_by_meme_id : (nat64) -> (opt nat) query;
   get_tokens_by_meme_id : (nat64) -> (vec nat) query;
+  get_entitlements_for_meme : (nat64) -> (vec MintEntitlement) query;
   // Return **Top 3** for a given week (for NFT mint step).
   // Fails if the week is not completed yet.
   get_top3_for_week : (nat64) -> (Result_3) query;
@@ -222,8 +245,6 @@ service : (opt InitArgs) -> {
   // List a meme for sale on the marketplace
   list_meme_for_sale : (nat64, nat64) -> (Result_2);
   mint_to : (nat64, MintingMode) -> (Result_4);
-  mint_week_top3_from_voting : (nat64) -> (Result_5);
-  mint_week_top3_here : (nat64) -> (Result_5);
   // Store a generated meme into marketplace (associated to caller)
   publish_meme : (MemeData) -> (Result_6);
   // Record a sale (called internally or by marketplace canister)

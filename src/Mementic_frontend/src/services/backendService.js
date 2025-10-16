@@ -544,6 +544,30 @@ class BackendService {
   }
 
   /**
+   * Retrieve mint entitlements for the authenticated user
+   */
+  async getMyMintEntitlements() {
+    const result = await this._safeCall('get_my_mint_entitlements');
+    return Array.isArray(result) ? result : [];
+  }
+
+  /**
+   * Retrieve mint entitlements linked to a specific meme
+   */
+  async getEntitlementsForMeme(memeId) {
+    const result = await this._safeCall('get_entitlements_for_meme', memeId);
+    return Array.isArray(result) ? result : [];
+  }
+
+  /**
+   * Winner notifications for the authenticated user
+   */
+  async getWinnerNotices() {
+    const result = await this._safeCall('get_my_winner_notices');
+    return Array.isArray(result) ? result : [];
+  }
+
+  /**
     * Check if a meme has been minted as NFT
     */
   async isMemeMinted(memeId) {
