@@ -194,7 +194,7 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
             <div className="space-y-6">
               {/* Featured Meme Image */}
               {topTrending[0]?.image_url && (
-                <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-card/20 aspect-square">
+                <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-card/20 aspect-[4/3] max-h-64">
                   <img
                     src={topTrending[0].image_url}
                     alt={topTrending[0].title}
