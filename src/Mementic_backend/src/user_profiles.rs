@@ -103,11 +103,3 @@ pub fn get_user_profile_by_principal(principal: Principal) -> Option<UserProfile
         profiles.borrow().get(&storable_principal)
     })
 }
-
-#[ic_cdk::query]
-pub fn get_all_user_profiles() -> Vec<UserProfile> {
-    USER_PROFILES.with(|profiles| {
-        let map = profiles.borrow();
-        map.iter().map(|entry| entry.value()).collect()
-    })
-}

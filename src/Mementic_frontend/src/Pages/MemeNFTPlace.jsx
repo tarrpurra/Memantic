@@ -62,7 +62,19 @@ const MemeNFTPlace = () => {
       <Navigation />
 
       <main className="relative z-10">
-        <section className="px-5 py-16 sm:px-8">
+        {/* Coming Soon Banner */}
+        <section className="px-5 py-8 sm:px-8">
+          <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
+            <div className="rounded-2xl border-2 border-dashed border-primary/50 bg-primary/5 px-8 py-4">
+              <h2 className="text-2xl font-bold text-primary">🚀 Coming Soon</h2>
+              <p className="mt-2 text-muted-foreground">
+                The Meme NFT Launchpad is under development. Stay tuned for updates!
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="px-5 py-8 sm:px-8">
           <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               <Sparkles className="h-4 w-4 text-primary" />

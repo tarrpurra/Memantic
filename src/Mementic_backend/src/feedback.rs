@@ -149,6 +149,12 @@ pub fn get_approved_feedback(limit: Option<u32>) -> Vec<Feedback> {
 /// Get all feedback (admin function)
 #[query]
 pub fn get_all_feedback() -> Vec<Feedback> {
+    let caller = ic_cdk::caller();
+    let admin = crate::nft_module::get_admin();
+    if caller != admin {
+        ic_cdk::trap("Unauthorized: admin only");
+    }
+
     FEEDBACK.with(|f| {
         let feedback_map = f.borrow();
         let mut all_feedback: Vec<Feedback> = feedback_map
@@ -166,6 +172,12 @@ pub fn get_all_feedback() -> Vec<Feedback> {
 /// Approve feedback for public display (admin function)
 #[update]
 pub fn approve_feedback(feedback_id: u64) -> Result<String, String> {
+    let caller = ic_cdk::caller();
+    let admin = crate::nft_module::get_admin();
+    if caller != admin {
+        return Err("Admin access required".to_string());
+    }
+
     FEEDBACK.with(|f| {
         let mut feedback_map = f.borrow_mut();
         if let Some(mut feedback) = feedback_map.get(&feedback_id) {
@@ -181,6 +193,12 @@ pub fn approve_feedback(feedback_id: u64) -> Result<String, String> {
 /// Delete feedback (admin function)
 #[update]
 pub fn delete_feedback(feedback_id: u64) -> Result<String, String> {
+    let caller = ic_cdk::caller();
+    let admin = crate::nft_module::get_admin();
+    if caller != admin {
+        return Err("Admin access required".to_string());
+    }
+
     FEEDBACK.with(|f| {
         let mut feedback_map = f.borrow_mut();
         if feedback_map.contains_key(&feedback_id) {

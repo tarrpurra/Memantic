@@ -13,7 +13,7 @@ const ThemeToggle = () => {
       variant="outline"
       size="icon"
       aria-label="Toggle theme"
-      className="relative h-10 w-10 overflow-hidden rounded-full border border-border/70 bg-card/80 backdrop-blur shadow-sm"
+      className="relative h-10 w-10 overflow-hidden rounded-full border border-border/70 bg-card/80 backdrop-blur shadow-sm hover:bg-white dark:hover:bg-black transition-colors"
       onClick={toggleTheme}
     >
       <Sun

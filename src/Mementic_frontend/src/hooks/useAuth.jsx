@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { AuthClient } from "@dfinity/auth-client";
+import { HttpAgent } from "@dfinity/agent";
 import { getIdentityProvider } from "../config/environment";
 
 export function useAuth() {
   const [principal, setPrincipal] = useState(null);
   const [client, setClient] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [agent, setAgent] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -37,16 +39,24 @@ export function useAuth() {
           // Verify it's not the anonymous principal
           if (principalText !== "2vxsx-fae") {
             setPrincipal(principalText);
+
+            // Create and set agent with identity
+            const newAgent = new HttpAgent({ identity });
+            setAgent(newAgent);
           } else {
             console.log("Anonymous principal detected, clearing session");
             await authClient.logout();
             setPrincipal(null);
+            setAgent(null);
           }
+        } else {
+          setAgent(null);
         }
       } catch (error) {
         console.error("Auth initialization error:", error);
         if (isMounted) {
           setPrincipal(null);
+          setAgent(null);
         }
       } finally {
         if (isMounted) {
@@ -86,15 +96,21 @@ export function useAuth() {
               // Verify it's not the anonymous principal
               if (principalText && principalText !== "2vxsx-fae") {
                 setPrincipal(principalText);
+
+                // Create and set agent with identity
+                const newAgent = new HttpAgent({ identity });
+                setAgent(newAgent);
                 resolve(true);
               } else {
                 console.error("Login failed: received anonymous principal");
                 setPrincipal(null);
+                setAgent(null);
                 resolve(false);
               }
             } catch (error) {
               console.error("Error getting identity after login:", error);
               setPrincipal(null);
+              setAgent(null);
               resolve(false);
             } finally {
               setIsLoading(false);
@@ -103,6 +119,7 @@ export function useAuth() {
           onError: (error) => {
             console.error("Login error:", error);
             setPrincipal(null);
+            setAgent(null);
             setIsLoading(false);
             resolve(false);
           }
@@ -111,6 +128,7 @@ export function useAuth() {
     } catch (error) {
       console.error("Login process error:", error);
       setIsLoading(false);
+      setAgent(null);
       return false;
     }
   }, [client]);
@@ -127,17 +145,32 @@ export function useAuth() {
       
       await client.logout();
       setPrincipal(null);
+      setAgent(null);
       console.log("Logout successful");
       return true;
     } catch (error) {
       console.error("Logout error:", error);
-      // Even if logout fails, clear the principal locally
       setPrincipal(null);
+      setAgent(null);
       return false;
     } finally {
       setIsLoading(false);
     }
   }, [client]);
+
+  // Helper to ensure agent is present for update calls
+  const requireAgent = () => {
+    if (!agent) {
+      throw new Error("Authenticated agent required for update calls. User may not be logged in.");
+    }
+    return agent;
+  };
+
+  useEffect(() => {
+    if (isAuthenticated && !agent) {
+      console.warn("User is authenticated but agent is missing. Update calls will fail.");
+    }
+  }, [isAuthenticated, agent]);
 
   // Helper to check if user is authenticated (not anonymous)
   const isAuthenticated = principal !== null && principal !== "2vxsx-fae" && !isLoading;
@@ -148,6 +181,8 @@ export function useAuth() {
     logout, 
     isLoading,
     isAuthenticated,
-    client
+    client,
+    agent, // Expose the agent for backend calls
+    requireAgent // Helper to enforce agent usage
   };
 }

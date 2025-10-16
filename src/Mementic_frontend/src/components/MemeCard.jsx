@@ -51,6 +51,7 @@ export const MemeCard = ({
       : Number(rawVotes) || 0;
   const image = meme?.image_url || meme?.imageUrl || "";
   const memeId = meme?.id || meme?.meme_id;
+  const sale = meme?.sale_metadata ?? meme?.market_data;
 
   // Enhanced ownership detection with multiple fallback methods
   const checkOwnership = () => {
@@ -395,6 +396,13 @@ export const MemeCard = ({
                     {title}
                   </h3>
                   <p className="text-white/80 text-sm">by @{creator}</p>
+                  <p className="text-white/60 text-xs">
+                    {new Date(meme?.created_at || Date.now()).toLocaleString("en-IN", {
+                      timeZone: "Asia/Kolkata",
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })}
+                  </p>
                 </div>
 
                 {/* Quick Action Buttons - Visible on Hover */}
@@ -573,19 +581,19 @@ export const MemeCard = ({
                       <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
                         <span className="font-medium">Created:</span>
                         <span>
-                          {new Date(
-                            meme?.created_at
-                          ).toLocaleDateString()}
+                          {new Date(meme?.created_at || Date.now()).toLocaleString("en-IN", {
+                            timeZone: "Asia/Kolkata",
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
                         </span>
                       </div>
-                      {meme?.market_data?.is_listed && (
+                      {sale?.is_listed && (
                         <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
                           <span className="font-medium">Price:</span>
                           <span className="font-semibold text-green-600">
-                            {meme.market_data.listing_price
-                              ? (
-                                  meme.market_data.listing_price / 100000000
-                                ).toFixed(2)
+                            {sale.listing_price
+                              ? (sale.listing_price / 100000000).toFixed(2)
                               : "N/A"}{" "}
                             ICP
                           </span>

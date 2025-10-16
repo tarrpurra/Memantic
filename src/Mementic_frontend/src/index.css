@@ -2,251 +2,272 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 1) Remove @theme - use :root instead */
+/* ── Mementic Creator Studio Theme (Mint/Violet/Blue) ──
+   Mint        #00FFA3 → hsl(158 100% 50%)
+   Soft Violet #7C3AED → hsl(262 83% 58%)
+   ElectricBlu #3B82F6 → hsl(217 91% 60%)
+   Dark Grey   #121212 → hsl(0 0% 7%)
+   Light Neutr #F4F4F4 → hsl(0 0% 96%)
+*/
+
+/* 1) Tokens via :root */
+/* ---------- Subtle Creator Studio Palette (softer + readable) ---------- */
+/* Mint-Teal, Soft Violet, Clear Sky Blue, Slate neutrals */
+
 :root {
   color-scheme: light;
-  --background: 210 38% 97%;
-  --foreground: 222 47% 11%;
+
+  /* Neutrals */
+  --background: 220 33% 98%;        /* #F6F8FC very soft off-white */
+  --foreground: 222 47% 11%;        /* #0F172A slate-900 */
 
   --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
-
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
 
-  --primary: 248 86% 60%;
-  --primary-foreground: 210 40% 98%;
+  /* Brand (desaturated vs neon) */
+  --primary: 168 64% 40%;           /* soft mint-teal ~ #22C7AB */
+  --primary-foreground: 210 40% 98%; /* near-white for legibility */
 
-  --secondary: 172 59% 45%;
+  --secondary: 262 63% 54%;         /* soft violet ~ #7C3AED toned */
   --secondary-foreground: 210 40% 98%;
 
-  --accent: 22 89% 60%;
+  --accent: 207 90% 55%;            /* sky blue ~ #3B82F6 toned */
   --accent-foreground: 210 40% 98%;
 
-  --muted: 210 40% 96%;
-  --muted-foreground: 222 28% 36%;
+  /* UI neutrals */
+  --muted: 215 25% 92%;             /* light slate */
+  --muted-foreground: 220 17% 46%;   /* slate-500 */
 
-  --destructive: 0 84% 63%;
+  /* Status (kept soft) */
+  --destructive: 2 75% 54%;         /* gentle red */
   --destructive-foreground: 210 40% 98%;
 
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 248 86% 60%;
+  --border: 215 20% 86%;
+  --input: 215 20% 86%;
+  --ring: 207 90% 55%;
 
-  --gradient-primary: linear-gradient(135deg, hsl(248 86% 60%), hsl(172 59% 45%));
-  --gradient-secondary: linear-gradient(135deg, hsl(199 86% 92%), hsl(172 59% 90%));
-  --gradient-background: radial-gradient(circle at top, hsl(248 86% 85% / 0.45), transparent 55%),
-    radial-gradient(circle at bottom, hsl(172 59% 82% / 0.3), transparent 65%),
-    linear-gradient(180deg, hsl(210 38% 97%), hsl(210 44% 93%));
-  --gradient-hero: linear-gradient(135deg, hsl(199 86% 92%) 0%, hsl(248 86% 95%) 50%, hsl(172 59% 90%) 100%);
-  --gradient-card: linear-gradient(150deg, hsl(0 0% 100% / 0.9) 0%, hsl(0 0% 100% / 0.75) 100%);
-  --gradient-glow: radial-gradient(circle at top, hsl(248 86% 65% / 0.18), transparent 60%);
+  /* Charts (balanced) */
+  --chart-1: 168 64% 40%;
+  --chart-2: 207 82% 48%;
+  --chart-3: 262 63% 54%;
+  --chart-4: 168 40% 32%;
+  --chart-5: 207 60% 42%;
 
-  --shadow-glow: 0 40px 80px hsl(248 86% 55% / 0.15);
-  --shadow-glow-secondary: 0 35px 70px hsl(172 59% 45% / 0.18);
-  --shadow-card: 0 18px 48px hsl(210 40% 30% / 0.1);
-  --shadow-elevation: 0 12px 30px hsl(210 40% 40% / 0.12);
+  /* SOFT gradients (low alpha, no neon) */
+  --gradient-primary: linear-gradient(
+    120deg,
+    hsl(168 64% 40% / 0.28) 0%,
+    hsl(262 63% 54% / 0.22) 50%,
+    hsl(207 90% 55% / 0.20) 100%
+  );
+  --gradient-secondary: linear-gradient(
+    135deg,
+    hsl(262 63% 54% / 0.24) 0%,
+    hsl(168 64% 40% / 0.22) 100%
+  );
+  --gradient-background: radial-gradient(
+      1200px 600px at 10% -10%,
+      hsl(262 63% 54% / 0.08),
+      transparent
+    ),
+    radial-gradient(
+      900px 500px at 90% 0%,
+      hsl(207 90% 55% / 0.08),
+      transparent
+    ),
+    linear-gradient(180deg, hsl(220 33% 98%), hsl(0 0% 100%));
+  --gradient-hero: linear-gradient(
+    115deg,
+    hsl(168 64% 40% / 0.18) 0%,
+    hsl(207 90% 55% / 0.18) 50%,
+    hsl(262 63% 54% / 0.18) 100%
+  );
+  --gradient-card: linear-gradient(
+    150deg,
+    hsl(0 0% 100% / 0.85) 0%,
+    hsl(0 0% 100% / 0.72) 100%
+  );
 
-  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-bounce: all 0.45s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  /* Shadows (no harsh glow) */
+  --shadow-glow: 0 10px 30px hsl(207 90% 25% / 0.10);
+  --shadow-glow-secondary: 0 10px 30px hsl(262 63% 25% / 0.10);
+  --shadow-card: 0 6px 24px hsl(220 10% 30% / 0.08);
+  --shadow-elevation: 0 16px 40px hsl(220 10% 20% / 0.10);
 
-  --radius: 0.85rem;
+  --transition-smooth: all 0.28s cubic-bezier(.4,0,.2,1);
+  --transition-bounce: all 0.42s cubic-bezier(.33,1.4,.2,1);
+  --radius: 0.9rem;
 }
 
 .dark {
   color-scheme: dark;
-  --background: 222 42% 9%;
-  --foreground: 210 40% 98%;
 
-  --card: 222 36% 12% / 0.96;
-  --card-foreground: 210 40% 98%;
+  --background: 222 47% 8%;        /* #0B1220 subtle navy, not true black */
+  --foreground: 210 40% 96%;        /* near-white */
 
-  --popover: 222 36% 12% / 0.92;
-  --popover-foreground: 210 40% 98%;
+  --card: 222 47% 11%;              /* #0F172A */
+  --card-foreground: 210 40% 96%;
+  --popover: 222 47% 10%;
+  --popover-foreground: 210 40% 96%;
 
-  --primary: 248 86% 68%;
-  --primary-foreground: 222 47% 12%;
+  --primary: 168 64% 46%;           /* mint-teal brighter only a bit */
+  --primary-foreground: 222 47% 8%;
+  --secondary: 262 63% 60%;
+  --secondary-foreground: 222 47% 8%;
+  --accent: 207 85% 62%;
+  --accent-foreground: 222 47% 8%;
 
-  --secondary: 172 59% 55%;
-  --secondary-foreground: 222 47% 10%;
+  --muted: 222 22% 16%;
+  --muted-foreground: 215 20% 78%;
 
-  --accent: 22 89% 60%;
-  --accent-foreground: 210 40% 98%;
-
-  --muted: 222 38% 18%;
-  --muted-foreground: 214 32% 80%;
-
-  --destructive: 0 84% 60%;
+  --destructive: 2 75% 56%;
   --destructive-foreground: 210 40% 98%;
 
-  --border: 222 38% 20%;
-  --input: 222 38% 20%;
-  --ring: 248 86% 68%;
+  --border: 222 22% 18%;
+  --input: 222 22% 18%;
+  --ring: 207 85% 62%;
 
-  --gradient-primary: linear-gradient(135deg, hsl(248 68% 55%), hsl(172 59% 52%));
-  --gradient-secondary: linear-gradient(135deg, hsl(248 40% 16%), hsl(222 45% 12%));
-  --gradient-background: radial-gradient(circle at 20% -10%, hsl(248 86% 45% / 0.35), transparent 60%),
-    radial-gradient(circle at 80% 110%, hsl(172 59% 45% / 0.25), transparent 65%),
-    linear-gradient(180deg, hsl(222 42% 11%), hsl(222 42% 7%));
-  --gradient-hero: linear-gradient(135deg, hsl(248 45% 18%) 0%, hsl(222 45% 12%) 50%, hsl(172 42% 18%) 100%);
-  --gradient-card: linear-gradient(150deg, hsl(222 36% 16% / 0.96) 0%, hsl(222 36% 10% / 0.85) 100%);
-  --gradient-glow: radial-gradient(circle at top, hsl(248 86% 65% / 0.35), transparent 60%);
+  --chart-1: 168 64% 46%;
+  --chart-2: 207 85% 62%;
+  --chart-3: 262 63% 60%;
+  --chart-4: 168 45% 36%;
+  --chart-5: 207 60% 52%;
 
-  --shadow-glow: 0 40px 90px hsl(248 86% 55% / 0.25);
-  --shadow-glow-secondary: 0 35px 80px hsl(172 59% 55% / 0.28);
-  --shadow-card: 0 20px 50px hsl(222 40% 4% / 0.6);
-  --shadow-elevation: 0 16px 40px hsl(222 40% 5% / 0.7);
+  /* Dark gradients: just a tint */
+  --gradient-primary: linear-gradient(
+    120deg,
+    hsl(168 64% 46% / 0.18) 0%,
+    hsl(262 63% 60% / 0.16) 50%,
+    hsl(207 85% 62% / 0.16) 100%
+  );
+  --gradient-secondary: linear-gradient(
+    135deg,
+    hsl(262 63% 60% / 0.16) 0%,
+    hsl(168 64% 46% / 0.16) 100%
+  );
+  --gradient-background: radial-gradient(
+      1000px 500px at 10% -10%,
+      hsl(262 63% 54% / 0.10),
+      transparent
+    ),
+    radial-gradient(
+      800px 400px at 90% 0%,
+      hsl(207 90% 55% / 0.10),
+      transparent
+    ),
+    linear-gradient(180deg, hsl(222 47% 8%), hsl(222 47% 10%));
+  --gradient-hero: linear-gradient(
+    115deg,
+    hsl(168 64% 46% / 0.16) 0%,
+    hsl(207 85% 62% / 0.16) 50%,
+    hsl(262 63% 60% / 0.16) 100%
+  );
+  --gradient-card: linear-gradient(
+    150deg,
+    hsl(222 47% 12% / 0.96) 0%,
+    hsl(222 47% 10% / 0.88) 100%
+  );
+
+  --shadow-glow: 0 10px 30px hsl(207 90% 10% / 0.18);
+  --shadow-glow-secondary: 0 10px 30px hsl(262 63% 10% / 0.18);
+  --shadow-card: 0 10px 30px hsl(222 40% 2% / 0.45);
+  --shadow-elevation: 0 20px 48px hsl(222 40% 1% / 0.55);
 }
 
-/* 2) Add custom utilities using @layer utilities */
+
+/* 2) Utilities (unchanged API, new tokens) */
 @layer utilities {
-  .bg-gradient-hero {
-    background-image: var(--gradient-hero);
-  }
-  .bg-gradient-primary {
-    background-image: var(--gradient-primary);
-  }
-  .bg-gradient-secondary {
-    background-image: var(--gradient-secondary);
-  }
-  .bg-gradient-background {
-    background-image: var(--gradient-background);
-  }
-  .bg-gradient-card {
-    background-image: var(--gradient-card);
-  }
-  .bg-gradient-glow {
-    background-image: var(--gradient-glow);
-  }
+  .bg-gradient-hero { background-image: var(--gradient-hero); }
+  .bg-gradient-primary { background-image: var(--gradient-primary); }
+  .bg-gradient-secondary { background-image: var(--gradient-secondary); }
+  .bg-gradient-background { background-image: var(--gradient-background); }
+  .bg-gradient-card { background-image: var(--gradient-card); }
+  .bg-gradient-glow { background-image: var(--gradient-glow); }
 
-  .shadow-glow {
-    box-shadow: var(--shadow-glow);
-  }
-  .shadow-glow-secondary {
-    box-shadow: var(--shadow-glow-secondary);
-  }
-  .shadow-card {
-    box-shadow: var(--shadow-card);
-  }
-  .shadow-elevation {
-    box-shadow: var(--shadow-elevation);
-  }
+  .shadow-glow { box-shadow: var(--shadow-glow); }
+  .shadow-glow-secondary { box-shadow: var(--shadow-glow-secondary); }
+  .shadow-card { box-shadow: var(--shadow-card); }
+  .shadow-elevation { box-shadow: var(--shadow-elevation); }
 
-  .transition-smooth {
-    transition: var(--transition-smooth);
-  }
-  .transition-bounce {
-    transition: var(--transition-bounce);
-  }
+  .transition-smooth { transition: var(--transition-smooth); }
+  .transition-bounce { transition: var(--transition-bounce); }
 
   .glass-surface {
     @apply border border-border/60 bg-card/70 backdrop-blur-lg shadow-card;
   }
-  .section-wrapper {
-    @apply px-5 py-16 sm:px-8 lg:px-12;
+  .section-wrapper { @apply px-5 py-16 sm:px-8 lg:px-12; }
+
+  /* Hero FX tint shifted toward violet/blue with a hint of mint */
+  .hero-aurora {
+    position: absolute; inset: 0; opacity: 0.75;
+    background:
+      radial-gradient(circle at 20% 20%, hsl(262 83% 58% / 0.28), transparent 55%),
+      radial-gradient(circle at 80% 30%, hsl(217 91% 60% / 0.24), transparent 60%),
+      radial-gradient(circle at 50% 80%, hsl(158 100% 50% / 0.20), transparent 65%);
+    animation: aurora-shift 18s ease-in-out infinite;
+  }
+  .hero-grid {
+    position: absolute; inset: 0; opacity: 0.35;
+    background-image:
+      linear-gradient(hsl(0 0% 80% / 0.10) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(0 0% 80% / 0.10) 1px, transparent 1px);
+    background-size: 120px 120px;
+    mask-image: radial-gradient(circle at center, rgba(255,255,255,0.9), transparent 75%);
+    animation: grid-shift 30s linear infinite;
+  }
+  .hero-sparkles {
+    position: absolute; inset: 0; mix-blend-mode: screen; opacity: 0.65;
+    background-image:
+      radial-gradient(2px 2px at 20% 30%, hsl(158 100% 50% / 0.35), transparent),
+      radial-gradient(2px 2px at 80% 40%, hsl(262 83% 58% / 0.38), transparent),
+      radial-gradient(2px 2px at 60% 70%, hsl(217 91% 60% / 0.34), transparent);
+    animation: sparkle-pulse 8s ease-in-out infinite;
   }
 }
 
-/* 3) Base styles */
+/* 3) Base */
 @layer base {
-  * {
-    @apply border-border;
-  }
-
+  * { @apply border-border; }
   body {
     @apply bg-gradient-background text-foreground antialiased transition-colors duration-300;
     min-height: 100vh;
   }
 }
 
-/* 4) Component styles */
+/* 4) Components (unchanged behavior) */
 @layer components {
   .hero-button {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    isolation: isolate;
-    overflow: hidden;
+    position: relative; display: inline-flex; align-items: center; justify-content: center;
+    isolation: isolate; overflow: hidden;
   }
-
   .hero-button::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.45) 40%, transparent 60%);
-    transform: translateX(-120%);
-    transition: transform 0.6s ease-in-out;
-    pointer-events: none;
-    z-index: 1;
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+    background: linear-gradient(120deg, transparent 20%, rgba(255,255,255,0.45) 40%, transparent 60%);
+    transform: translateX(-120%); transition: transform 0.6s ease-in-out;
   }
-
   .hero-button:hover::before,
-  .hero-button:focus-visible::before {
-    transform: translateX(120%);
-  }
-}
-@layer utilities {
-  .hero-aurora {
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(circle at 20% 20%, rgba(139, 92, 246, 0.25), transparent 55%),
-      radial-gradient(circle at 80% 30%, rgba(34, 211, 238, 0.22), transparent 60%),
-      radial-gradient(circle at 50% 80%, rgba(59, 130, 246, 0.18), transparent 65%);
-    animation: aurora-shift 18s ease-in-out infinite;
-    opacity: 0.75;
-  }
-
-  .hero-grid {
-    position: absolute;
-    inset: 0;
-    background-image: linear-gradient(rgba(148, 163, 184, 0.1) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
-    background-size: 120px 120px;
-    mask-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.9), transparent 75%);
-    animation: grid-shift 30s linear infinite;
-    opacity: 0.35;
-  }
-
-  .hero-sparkles {
-    position: absolute;
-    inset: 0;
-    background-image: radial-gradient(2px 2px at 20% 30%, rgba(255, 255, 255, 0.35), transparent),
-      radial-gradient(2px 2px at 80% 40%, rgba(255, 255, 255, 0.4), transparent),
-      radial-gradient(2px 2px at 60% 70%, rgba(255, 255, 255, 0.3), transparent);
-    animation: sparkle-pulse 8s ease-in-out infinite;
-    opacity: 0.65;
-    mix-blend-mode: screen;
-  }
+  .hero-button:focus-visible::before { transform: translateX(120%); }
 }
 
+/* Animations (same) */
 @keyframes aurora-shift {
-  0% {
-    transform: translate3d(-5%, -5%, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(5%, 5%, 0) scale(1.05);
-  }
-  100% {
-    transform: translate3d(-5%, 0, 0) scale(1);
-  }
+  0% { transform: translate3d(-5%, -5%, 0) scale(1); }
+  50% { transform: translate3d(5%, 5%, 0) scale(1.05); }
+  100% { transform: translate3d(-5%, 0, 0) scale(1); }
 }
-
 @keyframes grid-shift {
-  0% {
-    transform: translate3d(0, 0, 0);
-  }
-  100% {
-    transform: translate3d(-60px, -60px, 0);
-  }
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-60px, -60px, 0); }
+}
+@keyframes sparkle-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
 }
 
-@keyframes sparkle-pulse {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 0.8;
-  }
+.ultra-regular {
+  font-family: "Ultra", serif;
+  font-weight: 400;
+  font-style: normal;
 }

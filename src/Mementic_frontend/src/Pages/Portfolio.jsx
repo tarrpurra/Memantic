@@ -110,10 +110,59 @@ const Portfolio = () => {
 
   const displayName =
     sanitizedUsername || (principal ? `${principal.slice(0, 8)}...${principal.slice(-6)}` : "Not logged in");
-  const displayTitle = sanitizedUsername || principal || "";
   const principalPreview = principal
     ? `${principal.slice(0, 8)}...${principal.slice(-6)}`
     : "";
+
+  // Calculate portfolio stats
+  const totalVotes = nfts.reduce((sum, nft) => sum + nft.votes, 0);
+  const totalEarnings = nfts.reduce((sum, nft) => sum + nft.earnedIcp, 0);
+  const totalViews = nfts.reduce((sum, nft) => sum + nft.views, 0);
+  const avgEarningsPerVote = totalVotes > 0 ? totalEarnings / totalVotes : 0;
+
+  const generatedCount = nfts.length;
+  const mintedCount = nfts.filter(nft => nft.isMinted).length;
+  const listedCount = nfts.filter(nft => nft.isListed).length;
+  const totalSales = nfts.reduce((sum, nft) => sum + (nft.totalSales || 0), 0);
+
+  const mintedProgress = generatedCount > 0 ? Math.round((mintedCount / generatedCount) * 100) : 0;
+  const listedProgress = generatedCount > 0 ? Math.round((listedCount / generatedCount) * 100) : 0;
+
+  const generatedMemes = nfts.filter(nft => !nft.isMinted);
+  const mintedNFTs = nfts.filter(nft => nft.isMinted);
+
+  const handleSell = async (id) => {
+    try {
+      // List for 1 ICP (100000000 e8s)
+      const priceE8s = BigInt(100000000);
+      await backendService.listMemeForSale(BigInt(id), priceE8s);
+      toast({
+        title: "Meme listed for sale",
+        description: "Your meme is now available on the marketplace for 1 ICP.",
+      });
+      // Refresh the portfolio to show updated status
+      await fetchData();
+    } catch (error) {
+      console.error('Failed to list meme for sale:', error);
+      toast({
+        title: "Listing failed",
+        description: "Could not list your meme for sale. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleKeep = (id) => {
+    toast({
+      title: "Meme kept",
+      description: "Your meme will continue earning votes and may be minted as an NFT.",
+    });
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
+  };
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -227,7 +276,7 @@ const Portfolio = () => {
   // Map canister records -> UI
   const mapToUi = (item) => {
     const memeData = unopt(item?.meme_data) || {};
-    const marketData = item?.market_data || {};
+    const marketData = item?.sale_metadata ?? item?.market_data ?? {};
     const votes = safeBigIntToNumber(item?.votes?.upvotes ?? item?.votes ?? 0);
 
     // Handle bigint conversion for earned ICP (from market data)
@@ -248,7 +297,7 @@ const Portfolio = () => {
       emoji: "🖼️",
       votes: votes,
       earnedIcp: Number.isFinite(earnedIcp) ? earnedIcp : 0,
-      views: safeBigIntToNumber(marketData?.views || item?.views || 0),
+      views: safeBigIntToNumber(item?.views || marketData?.views || 0),
       status,
       imageUrl: memeData?.image_url,
       // Market data
@@ -295,13 +344,16 @@ const Portfolio = () => {
               }
             },
             created_at: Date.now(),
-            market_data: {
+            sale_metadata: {
               is_listed: false,
               listing_price: null,
-              views: 25,
+              listed_at: null,
               total_sales: 0,
-              total_earned: 0
-            }
+              total_earned: 0,
+              last_sale_price: null,
+              last_sale_at: null
+            },
+            views: 0
           }
         ];
         console.log("Using sample data due to backend issues");
@@ -398,732 +450,459 @@ const Portfolio = () => {
       clearTimeout(initialRefreshTimer);
       clearInterval(refreshInterval);
     };
-  }, [isAuthenticated, loading, nfts.length, refreshing]);
-
-  const totalEarnings = useMemo(
-    () => nfts.reduce((sum, x) => sum + (x.earnedIcp || 0), 0),
-    [nfts]
-  );
-  const totalVotes = useMemo(
-    () => nfts.reduce((sum, x) => sum + (x.votes || 0), 0),
-    [nfts]
-  );
-  const totalViews = useMemo(
-    () => nfts.reduce((sum, x) => sum + (x.views || 0), 0),
-    [nfts]
-  );
-  const totalSales = useMemo(
-    () => nfts.reduce((sum, x) => sum + (x.totalSales || 0), 0),
-    [nfts]
-  );
-  const listedCount = useMemo(
-    () => nfts.filter(x => x.isListed).length,
-    [nfts]
-  );
-  const mintedCount = useMemo(
-    () => nfts.filter(x => x.isMinted).length,
-    [nfts]
-  );
-  const generatedCount = useMemo(
-    () => nfts.filter(x => !x.isMinted).length,
-    [nfts]
-  );
-  const avgEarningsPerVote = useMemo(
-    () => totalVotes > 0 ? (totalEarnings / totalVotes) * 100 : 0,
-    [totalEarnings, totalVotes]
-  );
-
-  // Separate memes into categories
-  const generatedMemes = useMemo(
-    () => nfts.filter(nft => !nft.isMinted),
-    [nfts]
-  );
-  const mintedNFTs = useMemo(
-    () => nfts.filter(nft => nft.isMinted),
-    [nfts]
-  );
-
-  const handleLogout = async () => {
-    try {
-      const success = await logout();
-      if (success) {
-        toast({
-          title: "Logged Out Successfully 👋",
-          description: "You have been safely logged out of your account.",
-        });
-        navigate("/");
-      } else {
-        toast({
-          title: "Logout Error",
-          description: "There was an issue logging out. Please try again.",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Logout error:", error);
-      toast({
-        title: "Logout Error",
-        description: "An unexpected error occurred during logout.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Listing actions
-  const handleSell = async (nftId) => {
-    try {
-      // For now, use a default price. In a real app, you'd show a price input dialog
-      const defaultPriceE8s = 100000000; // 1 ICP in e8s
-      await backendService.listMemeForSale(BigInt(nftId), defaultPriceE8s);
-
-      toast({
-        title: "Meme listed for sale! 📈",
-        description: "Your meme is now available on the marketplace.",
-      });
-
-      // Refresh data
-      await fetchData();
-    } catch (e) {
-      console.error("Sell error:", e);
-      toast({
-        title: "Listing failed",
-        description: e?.message || "Could not list this meme for sale.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleKeep = async (nftId) => {
-    try {
-      await backendService.removeMemeFromMarket(BigInt(nftId));
-
-      toast({
-        title: "Meme kept in portfolio 💎",
-        description: "Your meme will continue earning from votes.",
-      });
-
-      // Refresh data
-      await fetchData();
-    } catch (e) {
-      console.error("Keep error:", e);
-      toast({
-        title: "Action failed",
-        description: e?.message || "Could not remove from marketplace.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Loading gate
-  if (authLoading || !isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <div className="text-lg text-muted-foreground">
-            Loading your portfolio...
-          </div>
-        </div>
-      </div>
-    );
-  }
+  }, [isAuthenticated, loading, nfts]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 text-foreground">
       <Navigation />
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 pb-16 pt-10">
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-secondary/10 text-foreground shadow-lg shadow-primary/10">
+          <CardContent className="p-8">
+            <div className="flex flex-col gap-8">
+              {/* Header Section */}
+              <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+                <div className="space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-[0.3em] text-primary/70 pt-3">Creator Profile</p>
+                  <h1 className="text-3xl font-semibold md:text-4xl">
+                    {displayName || "Anonymous"}
+                  </h1>
+                  <p className="max-w-md text-sm text-foreground/80">
+                    Track your meme creations, earnings, and momentum across the Mementic universe.
+                  </p>
+                </div>
+              </div>
 
-      {/* Page Header */}
-      <div className="border-b border-border bg-gradient-to-r from-background via-card/50 to-background backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate("/marketplace")}
-                className="hover:bg-primary/10"
-              >
-                <ArrowUp className="w-5 h-5" />
-              </Button>
-              <div>
-                <div className="flex items-center gap-4 mb-3">
-                  <div className="p-3 bg-gradient-to-br from-primary/20 to-primary/10 rounded-xl">
-                    <Sparkles className="w-8 h-8 text-primary" />
+              {/* Stats Grid */}
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-2xl border border-primary/30 bg-primary/10 p-4 text-center">
+                  <div className="flex items-center justify-center mb-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
                   </div>
+                  <p className="text-xs uppercase tracking-wide text-primary/70">Voting Power</p>
+                  <p className="mt-2 text-2xl font-semibold text-primary">{totalVotes.toLocaleString()}</p>
+                  <p className="text-xs text-primary/60 mt-1">Total upvotes</p>
+                </div>
+
+                <div className="rounded-2xl border border-secondary/30 bg-secondary/10 p-4 text-center">
+                  <div className="flex items-center justify-center mb-2">
+                    <Crown className="h-5 w-5 text-secondary" />
+                  </div>
+                  <p className="text-xs uppercase tracking-wide text-secondary/70">Memes Created</p>
+                  <p className="mt-2 text-2xl font-semibold text-secondary">{generatedCount.toLocaleString()}</p>
+                  <p className="text-xs text-secondary/60 mt-1">Total generated</p>
+                </div>
+
+                <div className="rounded-2xl border border-accent/30 bg-accent/10 p-4 text-center">
+                  <div className="flex items-center justify-center mb-2">
+                    <TrendingUp className="h-5 w-5 text-accent" />
+                  </div>
+                  <p className="text-xs uppercase tracking-wide text-accent/70">Minted NFTs</p>
+                  <p className="mt-2 text-2xl font-semibold text-accent">{mintedCount.toLocaleString()}</p>
+                  <p className="text-xs text-accent/60 mt-1">On-chain assets</p>
+                </div>
+
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-center">
+                  <div className="flex items-center justify-center mb-2">
+                    <Coins className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <p className="text-xs uppercase tracking-wide text-amber-600/70">Total Sales</p>
+                  <p className="mt-2 text-2xl font-semibold text-amber-600">{totalSales.toLocaleString()}</p>
+                  <p className="text-xs text-amber-600/60 mt-1">Marketplace transactions</p>
+                </div>
+              </div>
+
+              {/* Principal Info */}
+              <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+                <div className="flex items-center justify-between">
                   <div>
-                    <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                      My Portfolio
-                    </h1>
-                    <p className="text-muted-foreground text-lg">
-                      Track your meme creations and earnings
-                    </p>
+                    <span className="text-xs uppercase tracking-wide text-primary/70">Principal ID</span>
+                    <span className="mt-2 block text-sm font-mono text-foreground" title={principal}>
+                      {principal ? principalPreview : "Not connected"}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-primary/70">Marketplace Listings</p>
+                    <p className="text-lg font-semibold text-primary">{listedCount.toLocaleString()}</p>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* User Info + Logout */}
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-muted/20 rounded-lg">
-                <User className="w-4 h-4 text-muted-foreground" />
-                <span
-                  className="text-sm font-medium text-muted-foreground"
-                  title={displayTitle}
-                >
-                  {displayName}
-                </span>
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  setRefreshing(true);
-                  try {
-                    await fetchData();
-                    toast({
-                      title: "Portfolio Refreshed! 🔄",
-                      description: "Your vote counts and stats have been updated.",
-                    });
-                  } catch (error) {
-                    toast({
-                      title: "Refresh Failed",
-                      description: "Could not refresh portfolio data.",
-                      variant: "destructive",
-                    });
-                  } finally {
-                    setRefreshing(false);
-                  }
-                }}
-                disabled={refreshing || loading}
-                title="Refresh vote counts and stats"
-              >
-                {refreshing ? (
-                  <div className="w-4 h-4 border border-current border-t-transparent rounded-full animate-spin mr-2" />
-                ) : (
-                  <ArrowUp className="w-4 h-4 mr-2" />
-                )}
-                <span className="hidden sm:inline">Refresh</span>
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLogout}
-                className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 hover:border-red-300"
-              >
-                <ArrowDown className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">Logout</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Account Info Card - Mobile */}
-        <Card className="mb-6 sm:hidden">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <User className="w-5 h-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">Logged in as:</p>
-                  <p className="text-xs text-muted-foreground" title={displayTitle}>
-                    {displayName}
-                  </p>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLogout}
-                className="text-red-600 bg-gradient-to-t from-red-500 to-red-50 border-red-200 hero-button"
-              >
-                <ArrowDown className="w-4 h-4 mr-2" />
-                Logout
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Error banner */}
-        {error && (
-          <Card className="mb-6 border-destructive/30 bg-destructive/5">
-            <CardContent className="p-4 text-sm">{error}</CardContent>
-          </Card>
-        )}
-
-        <Card
-          className={`mb-8 backdrop-blur-sm ${
-            hasUsername ? "border-border/60 bg-background/80" : "border-primary/40 bg-primary/5"
-          }`}
-        >
-          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <CardTitle className="text-xl">Creator profile</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Set your public username once and we’ll show it across the marketplace, auctions, and studio.
-              </p>
-            </div>
-            {hasUsername && !showUsernameEditor && (
-              <Button variant="ghost" size="sm" onClick={handleEditUsername}>
-                Change username
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-                  Public username
-                </p>
-                <p className="text-lg font-semibold text-foreground">
-                  {hasUsername ? sanitizedUsername : "Not set"}
-                </p>
-                {principal && (
-                  <p className="mt-2 text-xs text-muted-foreground" title={principal}>
-                    Principal: {principalPreview}
-                  </p>
-                )}
-              </div>
+              {/* Username Editor */}
               {usernameSaved && !showUsernameEditor && (
-                <div className="rounded-md border border-emerald-400/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200">
+                <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-200">
                   Username updated successfully.
                 </div>
               )}
-            </div>
 
-            {showUsernameEditor ? (
-              <form onSubmit={handleUsernameSubmit} className="space-y-3">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <User className="h-4 w-4 text-primary" />
-                  <span>Choose how you appear to other creators</span>
-                </div>
-                <Input
-                  value={usernameInput}
-                  onChange={(event) => {
-                    setUsernameInput(event.target.value);
-                    setUsernameError("");
-                    setUsernameSaved(false);
-                  }}
-                  placeholder="e.g. MemeMaestro"
-                  maxLength={32}
-                  disabled={savingUsername}
-                />
-                {usernameError && <p className="text-xs text-destructive">{usernameError}</p>}
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button type="submit" disabled={savingUsername} className="sm:flex-1">
-                    {savingUsername ? "Saving…" : "Save username"}
-                  </Button>
-                  {hasUsername && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="sm:flex-1"
-                      onClick={handleCancelUsername}
-                      disabled={savingUsername}
-                    >
-                      Cancel
+              {showUsernameEditor ? (
+                <form onSubmit={handleUsernameSubmit} className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm text-foreground/80">
+                    <User className="h-4 w-4 text-primary" />
+                    <span>Choose how you appear to other creators</span>
+                  </div>
+                  <Input
+                    value={usernameInput}
+                    onChange={(event) => {
+                      setUsernameInput(event.target.value);
+                      setUsernameError("");
+                      setUsernameSaved(false);
+                    }}
+                    placeholder="e.g. MemeMaestro"
+                    maxLength={32}
+                    disabled={savingUsername}
+                    className="bg-background text-foreground placeholder:text-muted-foreground"
+                  />
+                  {usernameError && <p className="text-xs text-destructive">{usernameError}</p>}
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button type="submit" disabled={savingUsername} className="sm:flex-1">
+                      {savingUsername ? "Saving…" : "Save username"}
                     </Button>
-                  )}
+                    {hasUsername && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="sm:flex-1"
+                        onClick={handleCancelUsername}
+                        disabled={savingUsername}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </form>
+              ) : (
+                <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-foreground/80">
+                    {hasUsername
+                      ? "Your username is visible everywhere instead of your principal."
+                      : "Pick a username so your principal stays private."}
+                  </p>
+                  <div className="flex items-center gap-3">
+                    {!hasUsername && (
+                      <Button size="sm" variant="secondary" onClick={handleEditUsername}>
+                        Add username
+                      </Button>
+                    )}
+                    {hasUsername && (
+                      <Button size="sm" variant="ghost" onClick={handleEditUsername}>
+                        Edit username
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </form>
-            ) : (
-              <div className="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                <p>
-                  {hasUsername
-                    ? "Your username is visible everywhere instead of your principal."
-                    : "Pick a username so your principal stays private."}
-                </p>
-                {!hasUsername && (
-                  <Button size="sm" onClick={handleEditUsername}>
-                    Add username
-                  </Button>
-                )}
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate("/myplace")}
+                  className="bg-primary hover:bg-primary"
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Create meme
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/marketplace")}
+                  className="border-primary/40 text-foreground hover:bg-primary"
+                >
+                  Browse marketplace
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    setRefreshing(true);
+                    try {
+                      await fetchData();
+                      toast({
+                        title: "Portfolio refreshed",
+                        description: "Your latest stats are now up to date.",
+                      });
+                    } catch (error) {
+                      toast({
+                        title: "Refresh failed",
+                        description: "Could not refresh portfolio data.",
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setRefreshing(false);
+                    }
+                  }}
+                  disabled={refreshing || loading}
+                  className="border-primary/40 text-foreground hover:bg-primary/10"
+                >
+                  {refreshing ? (
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border border-current border-t-transparent" />
+                  ) : (
+                    <ArrowUp className="mr-2 h-4 w-4" />
+                  )}
+                  Refresh
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={handleLogout}
+                  className="text-rose-800 hover:bg-rose-500"
+                >
+                  <ArrowDown className="mr-2 h-4 w-4" />
+                  Logout
+                </Button>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
 
-        {/* Stats Overview */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-6 mb-8">
-          {loading ? (
-            Array.from({ length: 8 }).map((_, i) => (
-              <SkeletonStat key={i} />
-            ))
-          ) : (
-            <>
-              <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/20 border-yellow-200">
-                <CardContent className="p-6 text-center">
-                  <Coins className="w-8 h-8 mx-auto mb-3 text-yellow-600" />
-                  <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">
-                    {totalEarnings.toFixed(2)}
-                  </div>
-                  <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">ICP Earned</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-red-200">
-                <CardContent className="p-6 text-center">
-                  <Crown className="w-8 h-8 mx-auto mb-3 text-red-600" />
-                  <div className="text-2xl font-bold text-red-700 dark:text-red-300">
-                    {totalVotes.toLocaleString()}
-                  </div>
-                  <p className="text-sm text-red-600 dark:text-red-400 font-medium">Total Votes</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200">
-                <CardContent className="p-6 text-center">
-                  <Sparkles className="w-8 h-8 mx-auto mb-3 text-blue-600" />
-                  <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                    {totalViews.toLocaleString()}
-                  </div>
-                  <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Total Views</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200">
-                <CardContent className="p-6 text-center">
-                  <TrendingUp className="w-8 h-8 mx-auto mb-3 text-green-600" />
-                  <div className="text-2xl font-bold text-green-700 dark:text-green-300">
-                    {generatedCount}
-                  </div>
-                  <p className="text-sm text-green-600 dark:text-green-400 font-medium">Generated Memes</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-purple-200">
-                <CardContent className="p-6 text-center">
-                  <Crown className="w-8 h-8 mx-auto mb-3 text-purple-600" />
-                  <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
-                    {mintedCount}
-                  </div>
-                  <p className="text-sm text-purple-600 dark:text-purple-400 font-medium">Minted NFTs</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 border-orange-200">
-                <CardContent className="p-6 text-center">
-                  <ArrowUp className="w-8 h-8 mx-auto mb-3 text-orange-600" />
-                  <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">
-                    {totalSales}
-                  </div>
-                  <p className="text-sm text-orange-600 dark:text-orange-400 font-medium">Total Sales</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 border-indigo-200">
-                <CardContent className="p-6 text-center">
-                  <User className="w-8 h-8 mx-auto mb-3 text-indigo-600" />
-                  <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">
-                    {listedCount}
-                  </div>
-                  <p className="text-sm text-indigo-600 dark:text-indigo-400 font-medium">Listed for Sale</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-pink-50 to-pink-100 dark:from-pink-900/20 dark:to-pink-800/20 border-pink-200">
-                <CardContent className="p-6 text-center">
-                  <TrendingUp className="w-8 h-8 mx-auto mb-3 text-pink-600" />
-                  <div className="text-2xl font-bold text-pink-700 dark:text-pink-300">
-                    {avgEarningsPerVote.toFixed(3)} ICP
-                  </div>
-                  <p className="text-sm text-pink-600 dark:text-pink-400 font-medium">Per Vote</p>
-                </CardContent>
-              </Card>
-            </>
-          )}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Performance Overview */}
+          <Card className="border-primary/20 bg-gradient-to-br from-card/80 to-card/60 text-card-foreground shadow-lg shadow-primary/10">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-xl font-semibold text-card-foreground flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                Performance Overview
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Visual breakdown of your portfolio metrics
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Custom Bar Chart */}
+              <div className="space-y-4">
+                <div className="h-64 w-full">
+                  <svg viewBox="0 0 400 200" className="w-full h-full">
+                    {/* Grid lines */}
+                    <defs>
+                      <pattern id="grid" width="40" height="20" patternUnits="userSpaceOnUse">
+                        <path d="M 40 0 L 0 0 0 20" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.1"/>
+                      </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#grid)" />
+
+                    {/* Bars */}
+                    {[
+                      { label: 'ICP Earned', value: totalEarnings, max: Math.max(totalEarnings * 1.5, 10), color: 'hsl(var(--primary))', icon: Coins },
+                      { label: 'Total Views', value: totalViews, max: Math.max(totalViews * 1.5, 1000), color: 'hsl(var(--secondary))', icon: Sparkles },
+                      { label: 'Avg ICP/Vote', value: avgEarningsPerVote, max: Math.max(avgEarningsPerVote * 1.5, 1), color: 'hsl(var(--accent))', icon: TrendingUp },
+                      { label: 'Listed %', value: listedProgress, max: 100, color: 'hsl(45 86% 58%)', icon: ArrowUp }
+                    ].map((metric, index) => {
+                      const barHeight = (metric.value / metric.max) * 120;
+                      const x = 60 + index * 80;
+                      const y = 160 - barHeight;
+
+                      return (
+                        <g key={metric.label}>
+                          {/* Bar */}
+                          <rect
+                            x={x}
+                            y={y}
+                            width="40"
+                            height={barHeight}
+                            fill={metric.color}
+                            rx="4"
+                            className="transition-all duration-500 hover:opacity-80"
+                          />
+
+                          {/* Value label on top of bar */}
+                          <text
+                            x={x + 20}
+                            y={y - 8}
+                            textAnchor="middle"
+                            className="text-xs font-semibold fill-current"
+                          >
+                            {metric.label === 'ICP Earned' ? `${metric.value.toFixed(1)}` :
+                             metric.label === 'Total Views' ? `${(metric.value / 1000).toFixed(0)}K` :
+                             metric.label === 'Avg ICP/Vote' ? `${(metric.value / 1000).toFixed(2)}` :
+                             `${metric.value}%`}
+                          </text>
+
+                          {/* X-axis label */}
+                          <text
+                            x={x + 20}
+                            y={180}
+                            textAnchor="middle"
+                            className="text-xs fill-muted-foreground"
+                          >
+                            {metric.label.split(' ')[0]}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+
+                {/* Legend */}
+                <div className="flex flex-wrap justify-center gap-4 text-xs">
+                  {[
+                    { label: 'ICP Earned', color: 'bg-primary', icon: Coins },
+                    { label: 'Total Views', color: 'bg-secondary', icon: Sparkles },
+                    { label: 'Avg ICP/Vote', color: 'bg-accent', icon: TrendingUp },
+                    { label: 'Listed Share', color: 'bg-amber-500', icon: ArrowUp }
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center gap-1">
+                      <div className={`w-3 h-3 rounded ${item.color}`} />
+                      <span className="text-muted-foreground">{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Portfolio Progress */}
+          <Card className="border-secondary/20 bg-gradient-to-br from-card/80 to-card/60 text-card-foreground shadow-lg shadow-secondary/10">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-xl font-semibold text-card-foreground flex items-center gap-2">
+                <Crown className="h-5 w-5 text-secondary" />
+                Portfolio Progress
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Track your journey from creation to NFT
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Minting Progress */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-card-foreground">NFT Minting Progress</span>
+                  <span className="text-sm text-secondary font-semibold">{mintedProgress}%</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-gradient-to-r from-secondary to-accent h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${mintedProgress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {mintedCount} of {generatedCount} memes minted as NFTs
+                </p>
+              </div>
+
+              {/* Marketplace Progress */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-card-foreground">Marketplace Activity</span>
+                  <span className="text-sm text-primary font-semibold">{listedCount} listed</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-gradient-to-r from-primary to-accent h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${listedProgress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {listedCount > 0 ? `${listedCount} memes currently listed for sale` : "No memes currently listed for sale"}
+                </p>
+              </div>
+
+              {/* Quick Stats */}
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="text-center p-3 rounded-lg bg-muted/50">
+                  <p className="text-2xl font-bold text-primary">{generatedCount.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Created</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-muted/50">
+                  <p className="text-2xl font-bold text-secondary">{mintedCount.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Minted</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Generated Memes & Marketplace Section */}
-        <div className="space-y-8">
-          <div className="flex items-center justify-between">
+        <section className="space-y-10">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="p-2 bg-gradient-to-br from-green-100 to-green-200 dark:from-green-900/30 dark:to-green-800/30 rounded-lg">
-                <Sparkles className="w-6 h-6 text-green-600" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/20 text-primary-foreground">
+                <Sparkles className="h-6 w-6" />
               </div>
               <div>
-                <h2 className="text-3xl font-bold text-green-700 dark:text-green-300">My Generated Memes</h2>
-                <p className="text-muted-foreground">Memes you've created and are earning from</p>
+                <h2 className="text-2xl font-semibold text-foreground">Generated Memes</h2>
+                <p className="text-sm text-foreground/80">
+                  Keep your meme factory buzzing and convert momentum into NFTs.
+                </p>
               </div>
             </div>
-            <Button onClick={() => navigate("/myplace")} className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700">
-              <Sparkles className="w-4 h-4 mr-2" />
-              Create New Meme
+            <Button onClick={() => navigate("/myplace")} className="bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg shadow-primary/20">
+              <Sparkles className="mr-2 h-4 w-4" />
+              Create new meme
             </Button>
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
                 <SkeletonTile key={i} />
               ))}
             </div>
           ) : generatedMemes.length === 0 ? (
-            <Card className="py-12 text-center">
+            <Card className="border border-dashed border-primary/40 bg-muted/40 py-16 text-center text-foreground">
               <CardContent>
-                <CardTitle className="mb-2">No Generated Memes yet</CardTitle>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Create your first meme and start earning from votes or list it for sale.
+                <CardTitle className="text-xl">No generated memes yet</CardTitle>
+                <p className="mt-3 text-sm text-foreground/80">
+                  Launch your first meme to start earning votes and collector attention.
                 </p>
-                <Button onClick={() => navigate("/myplace")}>
-                  Create Meme
+                <Button onClick={() => navigate("/myplace")} className="mt-6 bg-primary text-primary-foreground">
+                  Start creating
                 </Button>
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {generatedMemes.map((nft) => (
-                <Card key={nft.id} className="group">
+                <Card key={nft.id} className="border border-primary/20 bg-card shadow-lg shadow-primary/10">
                   <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-start justify-between gap-4">
                       {nft.imageUrl ? (
                         <img
                           src={nft.imageUrl}
                           alt={nft.title}
-                          className="w-16 h-16 object-contain rounded-lg group-hover:scale-105 transition-transform"
+                          className="h-16 w-16 rounded-xl object-cover"
                         />
                       ) : (
-                        <div className="text-4xl mb-4 group-hover:animate-float">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary/20 text-3xl">
                           {nft.emoji}
                         </div>
                       )}
-                      <div className="flex-1 ml-4">
-                        <h3 className="font-bold text-lg mb-1 line-clamp-2">
-                          {nft.title}
-                        </h3>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Crown className="w-4 h-4 text-red-500" />
-                          <span className="font-medium text-red-600">{nft.votes} likes</span>
-                        </div>
+                      <div className="flex-1 space-y-1">
+                        <h3 className="text-lg font-semibold text-card-foreground line-clamp-2">{nft.title}</h3>
+                        <p className="text-xs uppercase tracking-wide text-primary/70">#{nft.id}</p>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2 text-sm">
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">❤️ Likes:</span>
-                         <span className="font-bold text-red-600 flex items-center gap-1">
-                           <Crown className="w-3 h-3" />
-                           {nft.votes.toLocaleString()}
-                         </span>
-                       </div>
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">👁️ Views:</span>
-                         <span className="font-medium text-blue-600">
-                           {nft.views.toLocaleString()}
-                         </span>
-                       </div>
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">💰 Earned:</span>
-                         <span className="font-bold text-yellow-600">
-                           {nft.earnedIcp.toFixed(4)} ICP
-                         </span>
-                       </div>
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">📅 Created:</span>
-                         <span className="font-medium text-gray-600 text-xs">
-                           {new Date(nft.created_at || Date.now()).toLocaleDateString("en-IN", {
-                             timeZone: "Asia/Kolkata",
-                             dateStyle: "short",
-                           })}
-                         </span>
-                       </div>
-
-                       {/* Market Information */}
-                       {nft.isListed && (
-                         <div className="flex justify-between">
-                           <span className="text-muted-foreground">Listed Price:</span>
-                           <span className="font-medium text-green-600">
-                             {nft.listingPrice?.toFixed(2)} ICP
-                           </span>
-                         </div>
-                       )}
-
-                       {nft.totalSales > 0 && (
-                         <>
-                           <div className="flex justify-between">
-                             <span className="text-muted-foreground">Total Sales:</span>
-                             <span className="font-medium">{nft.totalSales}</span>
-                           </div>
-                           {nft.lastSalePrice && (
-                             <div className="flex justify-between">
-                               <span className="text-muted-foreground">Last Sale:</span>
-                               <span className="font-medium text-blue-600">
-                                 {nft.lastSalePrice.toFixed(2)} ICP
-                               </span>
-                             </div>
-                           )}
-                         </>
-                       )}
-
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">Status:</span>
-                         <span className={`font-medium ${nft.isListed ? 'text-green-600' : 'text-blue-600'}`}>
-                           {nft.isListed ? 'Listed for Sale' : 'Earning from Votes'}
-                         </span>
-                       </div>
-                     </div>
-
-                    <div className="flex gap-2">
-                      {nft.isListed ? (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => handleKeep(nft.id)}
-                          >
-                            Remove from Market
-                          </Button>
-                          <Button
-                            variant="default"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => navigate("/marketplace")}
-                          >
-                            View in Market
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => handleSell(nft.id)}
-                          >
-                            List for Sale
-                          </Button>
-                          <Button
-                            variant="default"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => navigate("/marketplace")}
-                          >
-                            View Market
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Minted NFTs Section */}
-        <div className="space-y-8 mt-16">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="p-2 bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900/30 dark:to-purple-800/30 rounded-lg">
-                <Crown className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <h2 className="text-3xl font-bold text-purple-700 dark:text-purple-300">My Minted NFTs</h2>
-                <p className="text-muted-foreground">Rare collectible NFTs from your top-performing memes</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-sm text-muted-foreground">
-                NFTs that have been minted as collectibles
-              </div>
-              <div className="text-xs text-purple-600 font-medium">
-                🏆 Exclusive Digital Assets
-              </div>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <SkeletonTile key={i} />
-              ))}
-            </div>
-          ) : mintedNFTs.length === 0 ? (
-            <Card className="py-12 text-center">
-              <CardContent>
-                <CardTitle className="mb-2">No Minted NFTs yet</CardTitle>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Your top-performing memes will be minted as NFTs automatically.
-                </p>
-                <Button variant="outline" onClick={() => navigate("/marketplace")}>
-                  View Marketplace
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {mintedNFTs.map((nft) => (
-                <Card key={nft.id} className="group border-purple-200">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      {nft.imageUrl ? (
-                        <img
-                          src={nft.imageUrl}
-                          alt={nft.title}
-                          className="w-16 h-16 object-contain rounded-lg group-hover:scale-105 transition-transform"
-                        />
-                      ) : (
-                        <div className="text-4xl mb-4 group-hover:animate-float">
-                          {nft.emoji}
-                        </div>
-                      )}
-                      <div className="flex-1 ml-4">
-                        <h3 className="font-bold text-lg mb-1 line-clamp-2">
-                          {nft.title}
-                        </h3>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Crown className="w-4 h-4 text-red-500" />
-                          <span className="font-medium text-red-600">{nft.votes} likes</span>
-                        </div>
+                  <CardContent className="space-y-4 text-sm text-foreground/80">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl bg-white/5 p-3">
+                        <p className="text-xs uppercase tracking-wide text-indigo-200/70">Votes</p>
+                        <p className="mt-2 text-xl font-semibold text-amber-100">{nft.votes.toLocaleString()}</p>
+                      </div>
+                      <div className="rounded-xl bg-white/5 p-3">
+                        <p className="text-xs uppercase tracking-wide text-indigo-200/70">Views</p>
+                        <p className="mt-2 text-xl font-semibold text-sky-100">{nft.views.toLocaleString()}</p>
+                      </div>
+                      <div className="rounded-xl bg-white/5 p-3">
+                        <p className="text-xs uppercase tracking-wide text-indigo-200/70">Earned</p>
+                        <p className="mt-2 text-xl font-semibold text-emerald-100">{nft.earnedIcp.toFixed(4)} ICP</p>
+                      </div>
+                      <div className="rounded-xl bg-white/5 p-3">
+                        <p className="text-xs uppercase tracking-wide text-indigo-200/70">Status</p>
+                        <p className="mt-2 text-sm font-semibold text-emerald-100">{nft.status === 'selling' ? 'Listed' : 'Earning'}</p>
                       </div>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2 text-sm">
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">❤️ Likes:</span>
-                         <span className="font-bold text-red-600 flex items-center gap-1">
-                           <Crown className="w-3 h-3" />
-                           {nft.votes.toLocaleString()}
-                         </span>
-                       </div>
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">👁️ Views:</span>
-                         <span className="font-medium text-blue-600">
-                           {nft.views.toLocaleString()}
-                         </span>
-                       </div>
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">💰 Earned:</span>
-                         <span className="font-bold text-yellow-600">
-                           {nft.earnedIcp.toFixed(4)} ICP
-                         </span>
-                       </div>
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">📅 Created:</span>
-                         <span className="font-medium text-gray-600 text-xs">
-                           {new Date(nft.created_at || Date.now()).toLocaleDateString("en-IN", {
-                             timeZone: "Asia/Kolkata",
-                             dateStyle: "short",
-                           })}
-                         </span>
-                       </div>
-
-                       <div className="flex justify-between">
-                         <span className="text-muted-foreground">Status:</span>
-                         <span className="font-medium text-purple-600 flex items-center gap-1">
-                           <Crown className="w-3 h-3" />
-                           🏆 Minted NFT
-                         </span>
-                       </div>
-                     </div>
-
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-3">
                       <Button
                         variant="default"
                         size="sm"
-                        className="flex-1"
-                        onClick={() => navigate("/marketplace")}
+                        onClick={() => handleSell(nft.id)}
+                        className="bg-gradient-to-r from-primary to-secondary"
                       >
-                        View NFT
+                        List for sale
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleKeep(nft.id)}
+                        className="border-primary/40 text-foreground hover:bg-primary/10"
+                      >
+                        Keep earning
                       </Button>
                     </div>
                   </CardContent>
@@ -1131,27 +910,123 @@ const Portfolio = () => {
               ))}
             </div>
           )}
-         </div>
+        </section>
 
-         {/* Feedback Section */}
-         <div className="space-y-8 mt-16">
-           <div className="flex items-center justify-between">
-             <div className="flex items-center gap-4">
-               <div className="p-2 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 rounded-lg">
-                 <MessageSquare className="w-6 h-6 text-blue-600" />
-               </div>
-               <div>
-                 <h2 className="text-3xl font-bold text-blue-700 dark:text-blue-300">Share Your Feedback</h2>
-                 <p className="text-muted-foreground">Help us improve Mementic with your thoughts</p>
-               </div>
-             </div>
-           </div>
+        <section className="space-y-10">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary/20 text-secondary-foreground">
+                <Crown className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-semibold text-foreground">Minted NFTs</h2>
+                <p className="text-sm text-foreground/80">
+                  Celebrate the memes that made it on-chain and keep an eye on collector interest.
+                </p>
+              </div>
+            </div>
+            <Button onClick={() => navigate("/marketplace")} className="bg-gradient-to-r from-secondary to-accent text-secondary-foreground shadow-lg shadow-secondary/20">
+              Visit marketplace
+            </Button>
+          </div>
 
-           <FeedbackForm />
-         </div>
-       </div>
-     </div>
-   );
- };
+          {loading ? (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <SkeletonTile key={i} />
+              ))}
+            </div>
+          ) : mintedNFTs.length === 0 ? (
+            <Card className="border border-dashed border-secondary/40 bg-muted/40 py-16 text-center text-secondary-foreground">
+              <CardContent>
+                <CardTitle className="text-xl">No minted NFTs yet</CardTitle>
+                <p className="mt-3 text-sm text-foreground/80">
+                  Top-performing memes are automatically minted when they reach the spotlight.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {mintedNFTs.map((nft) => (
+                <Card key={nft.id} className="border border-secondary/30 bg-card shadow-lg shadow-secondary/10">
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-4">
+                      {nft.imageUrl ? (
+                        <img
+                          src={nft.imageUrl}
+                          alt={nft.title}
+                          className="h-16 w-16 rounded-xl object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-secondary/20 text-3xl">
+                          {nft.emoji}
+                        </div>
+                      )}
+                      <div className="flex-1 space-y-1">
+                        <h3 className="text-lg font-semibold text-card-foreground line-clamp-2">{nft.title}</h3>
+                        <p className="text-xs uppercase tracking-wide text-secondary/70">#{nft.id}</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4 text-sm text-foreground/80">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl bg-white/5 p-3">
+                        <p className="text-xs uppercase tracking-wide text-purple-200/70">Votes</p>
+                        <p className="mt-2 text-xl font-semibold text-amber-100">{nft.votes.toLocaleString()}</p>
+                      </div>
+                      <div className="rounded-xl bg-white/5 p-3">
+                        <p className="text-xs uppercase tracking-wide text-purple-200/70">Views</p>
+                        <p className="mt-2 text-xl font-semibold text-sky-100">{nft.views.toLocaleString()}</p>
+                      </div>
+                      <div className="rounded-xl bg-white/5 p-3">
+                        <p className="text-xs uppercase tracking-wide text-purple-200/70">Earned</p>
+                        <p className="mt-2 text-xl font-semibold text-emerald-100">{nft.earnedIcp.toFixed(4)} ICP</p>
+                      </div>
+                      <div className="rounded-xl bg-white/5 p-3">
+                        <p className="text-xs uppercase tracking-wide text-purple-200/70">Status</p>
+                        <p className="mt-2 text-sm font-semibold text-purple-100">Minted NFT</p>
+                      </div>
+                    </div>
+                    {typeof nft.listingPrice === "number" && (
+                      <div className="rounded-xl bg-white/5 p-3 text-xs text-purple-100/80">
+                        <p className="uppercase tracking-wide text-purple-200/70">Last listing</p>
+                        <p className="mt-2 text-base font-semibold text-purple-100">{nft.listingPrice.toFixed(2)} ICP</p>
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate("/marketplace")}
+                        className="border-secondary/40 text-foreground hover:bg-secondary/10"
+                      >
+                        View on marketplace
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
 
-export default Portfolio;
+        <section className="space-y-6 rounded-3xl border border-primary/20 bg-card p-8 shadow-lg shadow-primary/10">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/20 text-accent-foreground">
+              <MessageSquare className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-semibold text-card-foreground">Share your feedback</h2>
+              <p className="text-sm text-foreground/80">
+                Help us shape the next wave of meme tools and creator features.
+              </p>
+            </div>
+          </div>
+          <FeedbackForm />
+        </section>
+      </main>
+    </div>
+  );
+}
+
+export default Portfolio

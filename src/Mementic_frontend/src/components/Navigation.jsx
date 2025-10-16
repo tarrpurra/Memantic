@@ -6,10 +6,10 @@ import { useAuth } from "../contexts/AuthContext";
 
 // Static navigation - always shows the same 5 items regardless of current page
 const NAV_LINKS = [
-  { label: "Market Place", href: "/marketplace", icon: Store, type: "route" },
   { label: "Pre Market Place", href: "/pre-marketplace", icon: ShoppingBag, type: "route" },
+  { label: "Market Place", href: "/marketplace", icon: Store, type: "route" },
   { label: "Auction", href: "/auction", icon: Gavel, type: "route" },
-  { label: "MemeNFT LaunchPad", href: "/meme-nft", icon: Gem, type: "route" },
+  { label: "LaunchPad", href: "/meme-nft", icon: Gem, type: "route" },
   { label: "Meme Studio", href: "/myplace", icon: PenTool, type: "route" },
 ];
 
@@ -87,15 +87,17 @@ const Navigation = () => {
     username?.trim() || (principal ? `${principal.slice(0, 8)}...` : "Login");
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/40 bg-background/75 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-border/40 bg-gradient-primary backdrop-blur-xl">
       <div className="flex w-full items-center gap-6 px-5 py-4 sm:px-8">
         <div className="flex flex-1 items-center gap-3">
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-cyan-400 text-white shadow-glow">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <span>Mementic</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="flex items-center gap-2 text-lg font-semibold hover:opacity-80 transition-opacity"
+          >
+              <img src="/logo.png" alt="Logo" className="h-7 w-7" />
+            <span className="text-yellow-300 text-2xl ultra-regular">Mementic</span>
+          </button>
         </div>
 
         <nav className="hidden flex-1 items-center justify-center gap-2 lg:flex w-10">
@@ -116,7 +118,7 @@ const Navigation = () => {
                 <Icon className="h-4 w-4 flex-shrink-0" />
                 <span className="w-40 text-center">{link.label}</span>
                 <span
-                  className={`pointer-events-none absolute inset-x-4 bottom-0 h-0.5 origin-center scale-x-0 rounded-full bg-gradient-to-r from-purple-500 via-purple-400 to-cyan-400 transition-transform duration-300 ${
+                  className={`pointer-events-none absolute inset-x-4 bottom-0 h-0.5 origin-center scale-x-0 rounded-full bg-secondary transition-transform duration-300 ${
                     isActive ? "scale-x-100" : "group-hover:scale-x-100"
                   }`}
                 />
