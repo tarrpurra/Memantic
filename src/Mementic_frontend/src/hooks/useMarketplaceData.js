@@ -29,8 +29,8 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
       setLoadingTop(true);
       setErrorMsg("");
       try {
-        const res = await backendService.getCurrentLeaderboard(3);
-        const entries = ensureArray(res?.top_memes);
+        const res = await backendService.getTopLikedMemes(3);
+        const entries = ensureArray(res?.top_memes ?? res);
 
         // Get unique owners for profile fetching
         const uniqueOwners = [...new Set(entries.map(e => {
@@ -60,24 +60,32 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
           const pm = Array.isArray(e?.meme_data)
             ? e.meme_data[0]
             : e?.meme_data;
-          if (pm) {
-            return normalizeMeme(pm, { rank: e?.rank, votes: e?.votes }, userProfiles);
-          }
-          return normalizeMeme(
-            {
-              id: e?.meme_id,
-              title: `Meme #${e?.meme_id ?? "?"}`,
-              owner: e?.owner,
-              meme_data: e?.meme_data,
-            },
-            { rank: e?.rank, votes: e?.votes },
-            userProfiles
-          );
+          const normalized = pm
+            ? normalizeMeme(pm, { rank: e?.rank, votes: e?.votes }, userProfiles)
+            : normalizeMeme(
+                {
+                  id: e?.meme_id,
+                  title: `Meme #${e?.meme_id ?? "?"}`,
+                  owner: e?.owner,
+                  meme_data: e?.meme_data,
+                },
+                { rank: e?.rank, votes: e?.votes },
+                userProfiles
+              );
+
+          const likeCount = safeBigIntToNumber(e?.votes?.upvotes ?? normalized.votes ?? 0);
+          const downvoteCount = safeBigIntToNumber(e?.votes?.downvotes ?? 0);
+
+          return {
+            ...normalized,
+            votes: likeCount,
+            likeCount,
+            downvoteCount,
+            voteScore: normalized.votes,
+            voteDetails: e?.votes ?? null,
+          };
         });
-        // Filter to current week only
-        const weekStart = getWeekStartIST();
-        const filteredArr = arr.filter(m => m.created_at >= weekStart.getTime());
-        if (!cancelled) setTopMemes(filteredArr);
+        if (!cancelled) setTopMemes(arr);
       } catch (e) {
         if (!cancelled) setErrorMsg("Failed to load top memes.");
       } finally {

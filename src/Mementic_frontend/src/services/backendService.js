@@ -497,6 +497,14 @@ class BackendService {
   }
 
   /**
+   * Get top liked memes across all weeks
+   */
+  async getTopLikedMemes(limit = 3) {
+    const limitOpt = typeof limit === "number" ? [limit] : [];
+    return await this._safeCall('get_top_liked_memes', limitOpt);
+  }
+
+  /**
     * Vote on a meme
     */
   async voteMeme(memeId, voteType) {

@@ -85,20 +85,28 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
 
     // optimistic update
     setMemes((prev) =>
-      ensureArray(prev).map((m) =>
-        String(m.id) === String(memeId)
-          ? { ...m, votes: safeBigIntToNumber(m.votes || 0) + 1 }
-          : m
-      )
+      ensureArray(prev).map((m) => {
+        if (String(m.id) !== String(memeId)) return m;
+        const currentLikes = safeBigIntToNumber(m.likeCount ?? m.votes ?? 0);
+        return {
+          ...m,
+          votes: currentLikes + 1,
+          likeCount: currentLikes + 1,
+        };
+      })
     );
 
     // Also update top memes if this meme is in the top 3
     setTopMemes((prev) =>
-      ensureArray(prev).map((m) =>
-        String(m.id) === String(memeId)
-          ? { ...m, votes: safeBigIntToNumber(m.votes || 0) + 1 }
-          : m
-      )
+      ensureArray(prev).map((m) => {
+        if (String(m.id) !== String(memeId)) return m;
+        const currentLikes = safeBigIntToNumber(m.likeCount ?? m.votes ?? 0);
+        return {
+          ...m,
+          votes: currentLikes + 1,
+          likeCount: currentLikes + 1,
+        };
+      })
     );
 
     try {
@@ -117,9 +125,9 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
       // Refresh the leaderboard after successful vote
       setTimeout(() => {
         backendService
-          .getCurrentLeaderboard(3)
+          .getTopLikedMemes(3)
           .then(async (res) => {
-            const entries = ensureArray(res?.top_memes);
+            const entries = ensureArray(res?.top_memes ?? res);
 
             // Get unique owners for profile fetching
             const uniqueOwners = [...new Set(entries.map(e => {
@@ -149,18 +157,27 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
               const pm = Array.isArray(e?.meme_data)
                 ? e.meme_data[0]
                 : e?.meme_data;
-              if (pm) {
-                return normalizeMeme(pm, { rank: e?.rank, votes: e?.votes }, userProfiles);
-              }
-              return normalizeMeme(
-                { id: e?.meme_id, owner: e?.owner, meme_data: e?.meme_data },
-                { rank: e?.rank, votes: e?.votes },
-                userProfiles
-              );
+              const normalized = pm
+                ? normalizeMeme(pm, { rank: e?.rank, votes: e?.votes }, userProfiles)
+                : normalizeMeme(
+                    { id: e?.meme_id, owner: e?.owner, meme_data: e?.meme_data },
+                    { rank: e?.rank, votes: e?.votes },
+                    userProfiles
+                  );
+
+              const likeCount = safeBigIntToNumber(e?.votes?.upvotes ?? normalized.votes ?? 0);
+              const downvoteCount = safeBigIntToNumber(e?.votes?.downvotes ?? 0);
+
+              return {
+                ...normalized,
+                votes: likeCount,
+                likeCount,
+                downvoteCount,
+                voteScore: normalized.votes,
+                voteDetails: e?.votes ?? null,
+              };
             });
-            const weekStart = getWeekStartIST();
-            const filteredArr = arr.filter(m => m.created_at >= weekStart.getTime());
-            setTopMemes(filteredArr);
+            setTopMemes(arr);
           })
           .catch((err) => console.warn("Failed to refresh leaderboard:", err));
       }, 1000);
@@ -170,13 +187,17 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
       // revert optimistic update
       setMemes((prev) =>
         ensureArray(prev).map((m) =>
-          String(m.id) === String(memeId) ? { ...m, votes: currentVotes } : m
+          String(m.id) === String(memeId)
+            ? { ...m, votes: currentVotes, likeCount: currentVotes }
+            : m
         )
       );
 
       setTopMemes((prev) =>
         ensureArray(prev).map((m) =>
-          String(m.id) === String(memeId) ? { ...m, votes: currentVotes } : m
+          String(m.id) === String(memeId)
+            ? { ...m, votes: currentVotes, likeCount: currentVotes }
+            : m
         )
       );
 
