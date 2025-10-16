@@ -51,8 +51,12 @@ type MetadataValue = variant {
   Text : text;
   Array : vec MetadataValue;
 };
-type MintingMode = variant { Single; Collection : record { editions : nat32 } };
-type MintedPair = record { meme_id : nat64; token_ids : vec nat; owner : principal };
+type MintedPair = record {
+  meme_id : nat64;
+  owner : principal;
+  token_ids : vec nat;
+};
+type MintingMode = variant { Collection : record { editions : nat32 }; Single };
 type NftImage = record { mime_type : text; image : blob };
 type PublicStoredMeme = record {
   id : nat64;
@@ -110,6 +114,10 @@ type TopEntry = record {
   score : float64;
   downvotes : nat32;
 };
+type TopLikedLeaderboard = record {
+  total_ranked : nat32;
+  top_memes : vec LeaderboardEntry;
+};
 type TransformArgs = record { context : blob; response : HttpResponse };
 type UserProfile = record {
   updated_at : nat64;
@@ -162,6 +170,7 @@ service : (opt InitArgs) -> {
   get_all_feedback : () -> (vec Feedback) query;
   // List all memes for marketplace (newest first)
   get_all_memes : () -> (vec PublicStoredMeme) query;
+  get_all_minted_tokens : () -> (vec TokenRecord) query;
   // Get all approved feedback for public display
   get_approved_feedback : (opt nat32) -> (vec Feedback) query;
   // Completed weeks
@@ -177,6 +186,7 @@ service : (opt InitArgs) -> {
   get_meme : (nat64) -> (opt PublicStoredMeme) query;
   // Get per-meme votes
   get_meme_votes : (nat64) -> (opt MemeVotes) query;
+  get_my_minted_tokens : () -> (vec TokenRecord) query;
   get_nft_image : (nat) -> (opt NftImage) query;
   get_sale_metadata : (nat) -> (opt TokenSaleMetadata) query;
   get_sale_metadata_for_meme : (nat64) -> (opt TokenSaleMetadata) query;
@@ -186,6 +196,8 @@ service : (opt InitArgs) -> {
   // Return **Top 3** for a given week (for NFT mint step).
   // Fails if the week is not completed yet.
   get_top3_for_week : (nat64) -> (Result_3) query;
+  // Global leaderboard based on most upvotes across all weeks.
+  get_top_liked_memes : (opt nat32) -> (TopLikedLeaderboard) query;
   get_total_memes : () -> (nat64) query;
   get_total_users : () -> (nat64) query;
   get_user_meme_count : () -> (nat32) query;
@@ -230,6 +242,4 @@ service : (opt InitArgs) -> {
   // Rejects if meme is not from current week or if the week is completed/expired.
   vote_meme : (nat64, VoteType) -> (Result_7);
   whoami : () -> (principal) query;
-  get_all_minted_tokens : () -> (vec TokenRecord) query;
-  get_my_minted_tokens : () -> (vec TokenRecord) query;
 }

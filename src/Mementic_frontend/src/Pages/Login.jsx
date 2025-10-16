@@ -57,6 +57,7 @@ const Login = () => {
   } = useAuth();
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [authProvider, setAuthProvider] = useState(null); // "nfid" or "internet-identity"
 
   const trimmedUsername = typeof username === "string" ? username.trim() : "";
   const hasUsername = trimmedUsername.length > 0;
@@ -76,7 +77,8 @@ const Login = () => {
     : "";
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    // Only redirect if not loading and authenticated
+    if (isLoading || !isAuthenticated) {
       redirectHandledRef.current = false;
       return;
     }
@@ -95,7 +97,7 @@ const Login = () => {
       redirectHandledRef.current = true;
       navigate(fromPath, { replace: true, state: undefined });
     }
-  }, [fromPath, hasUsername, isAuthenticated, navigate]);
+  }, [fromPath, hasUsername, isAuthenticated, navigate, isLoading]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -110,6 +112,7 @@ const Login = () => {
 
     try {
       setIsLoggingIn(true);
+      setAuthProvider("nfid");
       const success = await loginWithNFID();
 
       if (!success) {
@@ -121,6 +124,7 @@ const Login = () => {
       alert(`An error occurred while connecting to NFID.${detail}`);
     } finally {
       setIsLoggingIn(false);
+      setAuthProvider(null);
     }
   };
 
@@ -131,6 +135,7 @@ const Login = () => {
 
     try {
       setIsLoggingIn(true);
+      setAuthProvider("internet-identity");
       const success = await loginWithInternetIdentity();
 
       if (!success) {
@@ -142,6 +147,7 @@ const Login = () => {
       alert(`An error occurred while connecting to Internet Identity.${detail}`);
     } finally {
       setIsLoggingIn(false);
+      setAuthProvider(null);
     }
   };
 
@@ -167,6 +173,29 @@ const Login = () => {
 
   const principalPreview = principal ? `${principal.slice(0, 6)}...${principal.slice(-4)}` : null;
   const isAnyLoading = isLoading || isLoggingIn;
+
+  // Show authentication checking state during login process
+  if (isLoggingIn && authProvider) {
+    const providerName = authProvider === "internet-identity" ? "Internet Identity" : "NFID";
+    return (
+      <div className="relative min-h-screen overflow-hidden bg-gradient-background text-foreground">
+        <div className="pointer-events-none absolute inset-0 opacity-80">
+          <div className="hero-aurora" />
+          <div className="hero-grid" />
+          <div className="hero-sparkles" />
+        </div>
+        <Navigation />
+        <main className="relative z-10 flex min-h-[60vh] items-center justify-center px-6 py-24 sm:px-8">
+          <div className="text-center">
+            <div className="text-lg font-medium text-muted-foreground">
+              Checking authentication with {providerName}…
+            </div>
+            <div className="mx-auto mt-6 h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (isLoading && !isAuthenticated) {
     return (

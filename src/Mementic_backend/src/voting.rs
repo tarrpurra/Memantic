@@ -755,10 +755,35 @@ pub fn finalize_week(week_id: u64) -> Result<(), String> {
         let mut periods = wp.borrow_mut();
         if let Some(mut p) = periods.get(&week_id) {
             p.is_completed = true;
-            periods.insert(week_id, p);
+            periods.insert(week_id, p.clone());
+
+            // Automatically mint NFTs for top 3 memes of completed week
+            mint_top3_for_completed_week(week_id);
+
             Ok(())
         } else {
-            Err("Week not found".into())
+            // Try to create the week if it doesn't exist
+            let now = time();
+            let current_week_id = get_week_id(now);
+            if week_id <= current_week_id {
+                let week_start = week_id * WEEK_S * 1_000_000_000;
+                let week_end = week_start + (WEEK_S * 1_000_000_000);
+                let new_period = WeeklyPeriod {
+                    week_id,
+                    start_time: week_start,
+                    end_time: week_end,
+                    is_completed: true,
+                    meme_count: 0,
+                };
+                periods.insert(week_id, new_period);
+
+                // Automatically mint NFTs for top 3 memes of completed week
+                mint_top3_for_completed_week(week_id);
+
+                Ok(())
+            } else {
+                Err("Cannot finalize future week".into())
+            }
         }
     })
 }

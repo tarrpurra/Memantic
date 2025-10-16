@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { AuthClient } from "@dfinity/auth-client";
 import { getIdentityProvider } from "../config/environment";
+import { useNavigate } from "react";
+
 
 export function useAuth() {
+  const Navigate = useNavigate();
   const [principal, setPrincipal] = useState(null);
   const [client, setClient] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -127,6 +130,7 @@ export function useAuth() {
       
       await client.logout();
       setPrincipal(null);
+      Navigate("/");
       console.log("Logout successful");
       return true;
     } catch (error) {

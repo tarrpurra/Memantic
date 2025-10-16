@@ -866,65 +866,91 @@ const Portfolio = () => {
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {generatedMemes.map((nft) => (
-                <Card key={nft.id} className="border border-primary/20 bg-card shadow-lg shadow-primary/10">
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-4">
+                <div
+                  key={nft.id}
+                  className="group relative cursor-pointer overflow-hidden rounded-xl bg-white dark:bg-gray-900 shadow-lg hover:shadow-2xl transition-all duration-300 w-full max-w-sm mx-auto transform hover:-translate-y-1"
+                >
+                  {/* Aspect ratio container - Made larger */}
+                  <div className="aspect-[4/5] w-full relative">
+                    {/* Main Image Container */}
+                    <div className="relative w-full h-full overflow-hidden">
                       {nft.imageUrl ? (
                         <img
                           src={nft.imageUrl}
                           alt={nft.title}
-                          className="h-16 w-16 rounded-xl object-cover"
+                          className="w-full h-full transition-transform duration-500 group-hover:scale-105"
+                          loading="lazy"
                         />
                       ) : (
-                        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary/20 text-3xl">
-                          {nft.emoji}
+                        <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center">
+                          <span className="text-6xl filter drop-shadow-lg">
+                            {nft.emoji || "🖼️"}
+                          </span>
                         </div>
                       )}
-                      <div className="flex-1 space-y-1">
-                        <h3 className="text-lg font-semibold text-card-foreground line-clamp-2">{nft.title}</h3>
-                        <p className="text-xs uppercase tracking-wide text-primary/70">#{nft.id}</p>
+
+                      {/* Enhanced Gradient Overlay */}
+                      <div
+                        className={`absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity duration-300 ${
+                          true ? "opacity-100" : "opacity-60"
+                        }`}
+                      />
+
+                      {/* Interactive Overlay Content */}
+                      <div className="absolute inset-0 flex flex-col justify-between p-4">
+                        {/* Top Section - Badges */}
+                        <div className="flex justify-between items-start">
+                          <div className="flex flex-wrap gap-2">
+                          </div>
+
+                          {/* Action indicators */}
+                          <div
+                            className={`transition-opacity duration-300 ${
+                              true ? "opacity-100" : "opacity-0"
+                            }`}
+                          >
+                            <div className="bg-black/40 backdrop-blur-sm rounded-full p-2">
+                              <span className="text-white text-xs">View</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Bottom Section - Info and Stats */}
+                        <div className="space-y-3">
+                          {/* Stats Row - Always Visible */}
+                          <div className="flex items-center justify-between text-white">
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-1">
+                                <span className="font-semibold text-sm">{nft.votes}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="font-semibold text-sm">{nft.views} views</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Title and Creator */}
+                          <div className="text-white">
+                            <h3 className="font-bold text-lg leading-tight mb-1 line-clamp-2">
+                              {nft.title}
+                            </h3>
+                            <p className="text-white/80 text-sm">by @{displayName || "Anonymous"}</p>
+                            <p className="text-white/60 text-xs">
+                              {new Date(nft.created_at || Date.now()).toLocaleString("en-IN", {
+                                timeZone: "Asia/Kolkata",
+                                dateStyle: "short",
+                                timeStyle: "short",
+                              })}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4 text-sm text-foreground/80">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-xl bg-white/5 p-3">
-                        <p className="text-xs uppercase tracking-wide text-indigo-200/70">Votes</p>
-                        <p className="mt-2 text-xl font-semibold text-amber-100">{nft.votes.toLocaleString()}</p>
-                      </div>
-                      <div className="rounded-xl bg-white/5 p-3">
-                        <p className="text-xs uppercase tracking-wide text-indigo-200/70">Views</p>
-                        <p className="mt-2 text-xl font-semibold text-sky-100">{nft.views.toLocaleString()}</p>
-                      </div>
-                      <div className="rounded-xl bg-white/5 p-3">
-                        <p className="text-xs uppercase tracking-wide text-indigo-200/70">Earned</p>
-                        <p className="mt-2 text-xl font-semibold text-emerald-100">{nft.earnedIcp.toFixed(4)} ICP</p>
-                      </div>
-                      <div className="rounded-xl bg-white/5 p-3">
-                        <p className="text-xs uppercase tracking-wide text-indigo-200/70">Status</p>
-                        <p className="mt-2 text-sm font-semibold text-emerald-100">{nft.status === 'selling' ? 'Listed' : 'Earning'}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-3">
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handleSell(nft.id)}
-                        className="bg-gradient-to-r from-primary to-secondary"
-                      >
-                        List for sale
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleKeep(nft.id)}
-                        className="border-primary/40 text-foreground hover:bg-primary/10"
-                      >
-                        Keep earning
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                  </div>
+
+                  {/* Subtle border glow effect */}
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                </div>
               ))}
             </div>
           )}

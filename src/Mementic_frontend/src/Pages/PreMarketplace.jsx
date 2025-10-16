@@ -276,6 +276,7 @@ const PreMarketplace = () => {
         onLike={(id, votes, owner) => handleVote(id, votes, owner, principal)}
         isAuthenticated={isAuthenticated}
         isOwn={selectedMeme ? checkMemeOwnership(selectedMeme, principal) : false}
+        hasProfileName={hasProfileName}
       />
     </div>
   );

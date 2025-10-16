@@ -9,6 +9,7 @@ function PreviewModal({
   onLike,
   isAuthenticated,
   isOwn,
+  hasProfileName,
 }) {
   const [hasVoted, setHasVoted] = useState(false);
   const [loadingVoteStatus, setLoadingVoteStatus] = useState(false);

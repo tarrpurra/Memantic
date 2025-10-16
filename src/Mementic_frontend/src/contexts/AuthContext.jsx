@@ -412,7 +412,7 @@ export const AuthProvider = ({ children }) => {
         }
       });
 
-      if (isBrowser) {
+      if (ISBROWSER) {
         window.localStorage.removeItem(AUTH_STORAGE_KEY);
         window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
       }
