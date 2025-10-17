@@ -1,28 +1,27 @@
 import { HeroSection } from "../components/HeroSection";
 import { MemeGenerator } from "../components/MemeGenerator";
 import { MemeGallery } from "../components/MemeGallery";
-import Navigation from "../components/Navigation";
+import PageShell from "../components/layout/PageShell";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Navigation />
-      <HeroSection />
+    <PageShell withBackground={false} mainClassName="gap-12 pb-12">
+      <section className="page-section space-y-12 py-10">
+        <HeroSection />
 
-      <section className="py-20 px-6">
-        <div className="max-w-4xl mx-auto text-center mb-12">
-          <h2 className="text-4xl md:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-6">
+        <div className="mx-auto max-w-4xl space-y-6 text-center">
+          <h2 className="text-4xl font-bold text-foreground md:text-5xl">
             Create Viral Memes with AI
           </h2>
-          <p className="text-xl text-muted-foreground mb-8">
+          <p className="text-lg text-muted-foreground md:text-xl">
             Turn your ideas into viral content and earn from the crypto community
           </p>
         </div>
-        <MemeGenerator />
-      </section>
 
-      <MemeGallery />
-    </div>
+        <MemeGenerator />
+        <MemeGallery />
+      </section>
+    </PageShell>
   );
 };
 
