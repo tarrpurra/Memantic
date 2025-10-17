@@ -691,7 +691,6 @@ class BackendService {
     if (!this.isAuthenticated) {
       throw new Error("Authentication required: Please login to list memes");
     }
-    const mode = (options.mode || options.type || "fixed_price").toLowerCase();
 
     const ensurePositive = (value, label) => {
       const num = Number(value);
@@ -701,22 +700,45 @@ class BackendService {
       return num;
     };
 
-    let strategy;
-    if (mode === "auction" || mode === "timed_auction") {
-      const start = ensurePositive(
-        options.startingBid ?? options.startPrice ?? options.price,
-        "Starting bid"
+    const explicitMode = (options.mode || options.type || options.listingType || "").toLowerCase();
+    if (explicitMode.includes("auction")) {
+      throw new Error(
+        "Marketplace listings only support fixed prices. Launch auctions from the auction arena."
       );
-      const startE8s = BigInt(Math.round(start * 100000000));
-      strategy = { Auction: { start_price_e8s: startE8s } };
-    } else {
-      const price = ensurePositive(options.price, "Listing price");
-      const priceE8s = BigInt(Math.round(price * 100000000));
-      strategy = { FixedPrice: { price_e8s: priceE8s } };
     }
+
+    const priceCandidate =
+      options.price ?? options.listingPrice ?? options.amount ?? options.startingBid;
+    const price = ensurePositive(priceCandidate, "Listing price");
+    const priceE8s = BigInt(Math.round(price * 100000000));
+    const strategy = { FixedPrice: { price_e8s: priceE8s } };
 
     const result = await this._safeCall('list_meme_for_sale', memeId, strategy);
     return this._unwrapResult(result, "list_meme_for_sale failed");
+  }
+
+  async startMemeAuction(memeId, options = {}) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to launch auctions");
+    }
+
+    const ensurePositive = (value, label) => {
+      const num = Number(value);
+      if (!Number.isFinite(num) || num <= 0) {
+        throw new Error(`${label} must be greater than zero`);
+      }
+      return num;
+    };
+
+    const startingBid = ensurePositive(
+      options.startingBid ?? options.startPrice ?? options.price,
+      "Starting bid"
+    );
+    const startE8s = BigInt(Math.round(startingBid * 100000000));
+    const strategy = { Auction: { start_price_e8s: startE8s } };
+
+    const result = await this._safeCall('list_meme_for_sale', memeId, strategy);
+    return this._unwrapResult(result, "start_meme_auction failed");
   }
 
   /**

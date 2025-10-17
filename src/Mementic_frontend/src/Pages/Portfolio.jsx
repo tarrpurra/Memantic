@@ -121,6 +121,8 @@ const Portfolio = () => {
   const [listingModalOpen, setListingModalOpen] = useState(false);
   const [listingTarget, setListingTarget] = useState(null);
   const [listingLoading, setListingLoading] = useState(false);
+  const [listingContext, setListingContext] = useState("marketplace");
+  const [listingError, setListingError] = useState(null);
 
   const [usernameInput, setUsernameInput] = useState(sanitizedUsername);
   const [usernameError, setUsernameError] = useState("");
@@ -563,7 +565,10 @@ const Portfolio = () => {
       );
 
       setEntitlements(normalizedEntitlements);
-      setWinnerNotices(normalizedNotices);
+      const activeNotices = normalizedNotices.filter(
+        (notice) => notice.status === 'Active'
+      );
+      setWinnerNotices(activeNotices);
       setNfts(ui);
     } catch (e) {
       console.error("Error loading portfolio:", e);
@@ -633,50 +638,55 @@ const Portfolio = () => {
     }
   };
 
-  const openListingModal = (nft) => {
+  const openListingModal = (nft, context = "marketplace") => {
     setListingTarget(nft);
+    setListingContext(context);
+    setListingError(null);
     setListingModalOpen(true);
   };
 
   const closeListingModal = () => {
     setListingTarget(null);
     setListingModalOpen(false);
+    setListingError(null);
   };
 
   const handleListingConfirm = async (memeId, options = {}) => {
     try {
       setListingLoading(true);
+      setListingError(null);
       const idAsString = typeof memeId === "string" ? memeId : String(memeId);
       if (!/^\d+$/.test(idAsString)) {
         throw new Error("Invalid meme identifier for listing");
       }
 
-      const mode = (options.mode || options.auctionType) === "timed_auction" ? "auction" : (options.mode || "fixed");
-
-      if (mode === "auction") {
+      const context = listingContext;
+      if (context === "auction") {
         const startBid = Number(options.startingBid ?? options.price);
         if (!Number.isFinite(startBid) || startBid <= 0) {
           throw new Error("Auction listings require a positive starting bid");
         }
+        await backendService.startMemeAuction(BigInt(idAsString), { startingBid: startBid });
+        toast({
+          title: "Auction launched",
+          description: "Your NFT is now queued in the auction arena for live bidding.",
+        });
       } else {
-        const price = Number(options.price);
+        const price = Number(options.price ?? options.listingPrice ?? options.amount);
         if (!Number.isFinite(price) || price <= 0) {
-          throw new Error("Listing requires a positive price");
+          throw new Error("Marketplace listings require a positive price");
         }
+        await backendService.listMemeForSale(BigInt(idAsString), { price });
+        toast({
+          title: "Listing created successfully!",
+          description: "Your NFT is now visible on the marketplace.",
+        });
       }
-
-      await backendService.listMemeForSale(BigInt(idAsString), options);
-      toast({
-        title: "Listing created successfully!",
-        description:
-          mode === "auction"
-            ? "Your NFT is now live in the auction arena."
-            : "Your NFT is now visible on the marketplace.",
-      });
       closeListingModal();
       await fetchData();
     } catch (error) {
       console.error("Listing failed:", error);
+      setListingError(error?.message ?? "Failed to list NFT");
       toast({
         title: "Listing failed",
         description: error.message || "Could not list your NFT. Please try again.",
@@ -698,7 +708,7 @@ const Portfolio = () => {
       await backendService.removeMemeFromMarket(BigInt(idAsString));
       toast({
         title: "Listing removed",
-        description: "Your NFT has been delisted from the marketplace.",
+        description: "Your NFT listing has been removed.",
       });
       await fetchData();
     } catch (error) {
@@ -771,6 +781,10 @@ const Portfolio = () => {
       clearInterval(refreshInterval);
     };
   }, [isAuthenticated, loading, nfts]);
+
+  const listingModalAllowedModes = listingContext === "auction" ? ["auction"] : ["fixed"];
+  const listingModalTitle = listingContext === "auction" ? "Launch auction" : "List on marketplace";
+  const listingModalConfirmLabel = listingContext === "auction" ? "Start auction" : "Publish listing";
 
   if (authLoading) {
     return <LoadingState message="Connecting to your identity…" />;
@@ -1463,17 +1477,28 @@ const Portfolio = () => {
                           className="border-rose-300 text-rose-100 hover:bg-rose-500/20"
                           disabled={listingLoading}
                         >
-                          Delist from marketplace
+                          Remove listing
                         </Button>
                       ) : (
-                        <Button
-                          size="sm"
-                          onClick={() => openListingModal(nft)}
-                          className="bg-gradient-to-r from-amber-400 to-rose-400 text-black hover:opacity-90"
-                          disabled={listingLoading}
-                        >
-                          List on marketplace
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => openListingModal(nft, "marketplace")}
+                            className="bg-gradient-to-r from-amber-400 to-rose-400 text-black hover:opacity-90"
+                            disabled={listingLoading}
+                          >
+                            List on marketplace
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openListingModal(nft, "auction")}
+                            className="border border-secondary/40 bg-transparent text-secondary-foreground hover:bg-secondary/10"
+                            disabled={listingLoading}
+                          >
+                            Launch auction
+                          </Button>
+                        </>
                       )}
                       <Button
                         variant="outline"
@@ -1522,6 +1547,10 @@ const Portfolio = () => {
         nft={listingTarget}
         onConfirm={handleListingConfirm}
         isProcessing={listingLoading}
+        error={listingError}
+        allowedModes={listingModalAllowedModes}
+        title={listingModalTitle}
+        confirmLabel={listingModalConfirmLabel}
       />
     </div>
   );
