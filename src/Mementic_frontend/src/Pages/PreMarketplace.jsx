@@ -57,6 +57,7 @@ const PreMarketplace = () => {
     errorMsg,
     setTopMemes,
     setMemes,
+    currentWeekStatus,
   } = useMarketplaceData(isAuthenticated, hasProfileName, page, sort, searchQuery);
 
   const {
@@ -229,7 +230,8 @@ const PreMarketplace = () => {
     }
   };
 
-  const canLoadMore = memes.length < total;
+  const weekCompleted = Boolean(currentWeekStatus?.isCompleted);
+  const canLoadMore = !weekCompleted && memes.length < total;
 
   if (authLoading) {
     return (
@@ -259,18 +261,24 @@ const PreMarketplace = () => {
 
       <div className="w-screen flex flex-col gap-10 px-4 py-10 lg:px-6">
         <main className="w-full w- max-w-[200rem] space-y-6">
-           <div className="flex justify-end mb-4">
-             <button
-               onClick={handleForceFinalize}
-               className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm"
-             >
-               Force Finalize Week (Testing)
-             </button>
-           </div>
-           <WeeklyLeaderboard
-             timeLeft={timeLeft}
-             onPreview={openPreview}
-           />
+          {weekCompleted && (
+            <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-200">
+              Weekly voting has wrapped up and the pre-marketplace is being cleared for the next drop. New memes will appear as soon as the fresh week begins.
+            </div>
+          )}
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={handleForceFinalize}
+              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm"
+            >
+              Force Finalize Week (Testing)
+            </button>
+          </div>
+          <WeeklyLeaderboard
+            timeLeft={timeLeft}
+            onPreview={openPreview}
+            isWeekCompleted={weekCompleted}
+          />
 
           <MarketplaceFeed
             memes={memes}
@@ -290,6 +298,9 @@ const PreMarketplace = () => {
             isAuthenticated={isAuthenticated}
             currentUserPrincipal={principal}
             onOpenPreview={openPreview}
+            setSelectedCreator={setSelectedCreator}
+            onClearFilters={() => setSearchInput("")}
+            isClearing={weekCompleted}
           />
         </main>
 

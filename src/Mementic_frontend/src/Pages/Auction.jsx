@@ -16,6 +16,8 @@ import {
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import PageShell from "../components/layout/PageShell";
+import BidModal from "../components/marketplace/BidModal";
+import { useToast } from "../hooks/use-toast";
 import backendService from "../services/backendService";
 
 const ensureArray = (value) =>
@@ -339,10 +341,14 @@ const accentPalette = [
 ];
 
 const Auction = () => {
+  const { toast } = useToast();
   const [auctions, setAuctions] = useState([]);
   const [topMemes, setTopMemes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [bidModalOpen, setBidModalOpen] = useState(false);
+  const [bidTarget, setBidTarget] = useState(null);
+  const [isPlacingBid, setIsPlacingBid] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -436,6 +442,79 @@ const Auction = () => {
       clearInterval(interval);
     };
   }, []);
+
+  const openBidModal = (auction) => {
+    setBidTarget(auction);
+    setBidModalOpen(true);
+  };
+
+  const closeBidModal = () => {
+    if (isPlacingBid) {
+      return;
+    }
+    setBidModalOpen(false);
+    setBidTarget(null);
+  };
+
+  const handleBidSubmit = async (amount) => {
+    if (!bidTarget) {
+      return;
+    }
+
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      toast({
+        title: "Invalid bid",
+        description: "Enter a valid bid amount before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsPlacingBid(true);
+      setAuctions((prev) =>
+        prev.map((item) => {
+          if (item.id !== bidTarget.id) {
+            return item;
+          }
+
+          const previousCount = Number(item.bidCount ?? item.sale_metadata?.bidCount ?? 0);
+          const nextBidCount = Number.isFinite(previousCount) ? previousCount + 1 : 1;
+          const saleMetadata = {
+            ...(item.sale_metadata ?? item.market_data ?? {}),
+            currentBidIcp: numericAmount,
+            highestBidIcp: numericAmount,
+            bidCount: nextBidCount,
+          };
+
+          return {
+            ...item,
+            currentBidIcp: numericAmount,
+            highestBidIcp: numericAmount,
+            bidCount: nextBidCount,
+            sale_metadata: saleMetadata,
+            market_data: saleMetadata,
+          };
+        })
+      );
+
+      toast({
+        title: "Bid submitted",
+        description: `Your bid of ${formatIcp(numericAmount)} for “${bidTarget.title}” has been recorded.`,
+      });
+      setBidModalOpen(false);
+      setBidTarget(null);
+    } catch (submitError) {
+      toast({
+        title: "Bid failed",
+        description: submitError?.message || "Could not place your bid. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPlacingBid(false);
+    }
+  };
 
   const liveAuctions = useMemo(
     () =>
@@ -966,13 +1045,14 @@ const Auction = () => {
                                 </div>
 
                                 <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                  <Link
-                                    to={`/marketplace?focus=${encodeURIComponent(auction.id)}`}
-                                    className="inline-flex items-center gap-2 text-sm font-semibold text-primary"
+                                  <button
+                                    type="button"
+                                    onClick={() => openBidModal(auction)}
+                                    className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80"
                                   >
                                     Place bid
                                     <ArrowRight className="h-4 w-4" />
-                                  </Link>
+                                  </button>
                                   <span className="text-xs text-muted-foreground sm:text-right">
                                     {formatNumber(auction.views)} collectors watching · {bidSummary}
                                   </span>
@@ -1120,6 +1200,13 @@ const Auction = () => {
             </div>
           </div>
       </section>
+      <BidModal
+        open={bidModalOpen}
+        onClose={closeBidModal}
+        auction={bidTarget}
+        onSubmit={handleBidSubmit}
+        isSubmitting={isPlacingBid}
+      />
     </PageShell>
   );
 };
