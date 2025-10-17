@@ -218,7 +218,7 @@ pub struct VoteResponse {
 
 // ---------- Helpers ----------
 
-const WEEK_S: u64 = 3600; // 1 hour for testing (change back to 864_000 for production)
+const WEEK_S: u64 = 864_000; // 7 days for testing (864_000 seconds = 7 days, matches frontend expectations)
 
 /// Week index (0-based) from timestamp ns
 fn get_week_id(timestamp_ns: u64) -> u64 {
@@ -306,13 +306,16 @@ fn get_top_memes_for_week_stable(week_id: u64, limit: usize) -> Vec<(u64, MemeVo
 #[update]
 fn close_finished_weeks() {
     let now = ic_cdk::api::time();
+    let current_week_id = get_week_id(now);
+
     let to_finalize: Vec<u64> = WEEKLY_PERIODS.with(|wp| {
         let periods = wp.borrow();
         periods
             .iter()
             .filter_map(|entry| {
                 let period = entry.value();
-                if !period.is_completed && now > period.end_time {
+                // Only finalize weeks that have actually ended and are not the current week
+                if !period.is_completed && period.week_id < current_week_id && now > period.end_time {
                     Some(*entry.key())
                 } else {
                     None
@@ -350,8 +353,9 @@ pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, Stri
         return Err("Invalid meme ID".into());
     }
 
-    // Ensure week periods are up to date (auto-lock past weeks)
-    // close_finished_weeks();
+    // Ensure week periods are up to date and there's always an active week
+    close_finished_weeks();
+    ensure_active_week();
 
     // Validate meme exists
     let meme = get_meme(meme_id).ok_or("Meme not found")?;
@@ -459,7 +463,9 @@ pub fn remove_vote(meme_id: u64) -> Result<VoteResponse, String> {
         return Err("Invalid meme ID".into());
     }
 
+    // Ensure week periods are up to date and there's always an active week
     close_finished_weeks();
+    ensure_active_week();
 
     // Need meme, and must belong to current week and be active
     let meme = get_meme(meme_id).ok_or("Meme not found")?;
@@ -714,6 +720,10 @@ pub fn get_completed_weeks() -> Vec<WeeklyPeriod> {
 #[query]
 pub fn get_current_week_status() -> (u64, u64, u64, bool) {
     let now = time();
+
+    // Ensure there's always an active week
+    ensure_active_week();
+
     let period = get_or_create_current_week();
     let remaining = if now < period.end_time {
         period.end_time - now
@@ -726,6 +736,63 @@ pub fn get_current_week_status() -> (u64, u64, u64, bool) {
         period.end_time,
         period.is_completed,
     )
+}
+
+/// Get the previous week ID for filtering purposes
+#[query]
+pub fn get_previous_week_id() -> Option<u64> {
+    let now = time();
+    let current_week_id = get_week_id(now);
+
+    // If current week is 0, there is no previous week
+    if current_week_id == 0 {
+        return None;
+    }
+
+    Some(current_week_id - 1)
+}
+
+/// Ensure there's always an active (non-completed) week available
+fn ensure_active_week() {
+    let now = time();
+    let current_week_id = get_week_id(now);
+
+    WEEKLY_PERIODS.with(|wp| {
+        let mut periods = wp.borrow_mut();
+
+        // Check if current week exists and is active
+        if let Some(period) = periods.get(&current_week_id) {
+            if !period.is_completed && now <= period.end_time {
+                return; // Current week is active, nothing to do
+            }
+        }
+
+        // Current week is completed or doesn't exist, create/find next active week
+        let next_week_id = current_week_id + 1;
+        if let Some(next_period) = periods.get(&next_week_id) {
+            // Next week exists, ensure it's not marked completed if it should be active
+            if now <= next_period.end_time {
+                // Week should be active but might be incorrectly marked as completed
+                let mut active_period = next_period;
+                active_period.is_completed = false;
+                periods.insert(next_week_id, active_period);
+            }
+        } else {
+            // Create the next week
+            let week_start = next_week_id * WEEK_S * 1_000_000_000;
+            let week_end = week_start + (WEEK_S * 1_000_000_000);
+            let new_period = WeeklyPeriod {
+                week_id: next_week_id,
+                start_time: week_start,
+                end_time: week_end,
+                is_completed: false,
+                meme_count: 0,
+            };
+            periods.insert(next_week_id, new_period);
+
+            ic_cdk::println!("Created new active week: {}", next_week_id);
+        }
+    });
 }
 
 // ---------- Admin / Ops ----------
@@ -864,25 +931,12 @@ pub fn delete_meme_data(meme_id: u64) -> Result<(), String> {
     Ok(())
 }
 
-/// Clean up old memes and voting data from previous weeks
-/// This function removes memes and voting data from weeks that are older than the current week
+/// Clean up old voting data from previous weeks
+/// This function removes ONLY voting data and temporary data from weeks that are older than the current week
+/// MEMES are preserved so users can always access their portfolio
 fn cleanup_old_week_data(current_week_id: u64) -> Result<(), String> {
-    let mut memes_to_remove = Vec::new();
     let mut votes_to_remove = Vec::new();
     let mut user_votes_to_remove = Vec::new();
-
-    // Find all memes from previous weeks
-    use crate::http_outcall::MEMES;
-    MEMES.with(|m| {
-        let map = m.borrow();
-        for entry in map.iter() {
-            let stored_meme = entry.value();
-            let meme_week = get_week_id(stored_meme.created_at);
-            if meme_week < current_week_id {
-                memes_to_remove.push(*entry.key());
-            }
-        }
-    });
 
     // Find all votes for memes from previous weeks
     VOTES.with(|v| {
@@ -907,16 +961,6 @@ fn cleanup_old_week_data(current_week_id: u64) -> Result<(), String> {
         }
     });
 
-    // Remove old memes from main storage
-    let mut removed_memes = 0;
-    for meme_id in &memes_to_remove {
-        use crate::http_outcall::MEMES;
-        MEMES.with(|m| {
-            m.borrow_mut().remove(meme_id);
-        });
-        removed_memes += 1;
-    }
-
     // Remove old votes
     let mut removed_votes = 0;
     for meme_id in &votes_to_remove {
@@ -936,8 +980,7 @@ fn cleanup_old_week_data(current_week_id: u64) -> Result<(), String> {
     }
 
     ic_cdk::println!(
-        "Cleaned up old week data: {} memes, {} votes, {} user votes",
-        removed_memes,
+        "Cleaned up old week data: {} votes, {} user votes (memes preserved for portfolio access)",
         removed_votes,
         removed_user_votes
     );
@@ -960,4 +1003,45 @@ pub fn get_voting_stats() -> (u32, u32) {
 
     let total_memes_with_votes = VOTES.with(|v| v.borrow().len() as u32);
     (total_votes, total_memes_with_votes)
+}
+
+/// Maintenance function to ensure week state is always synchronized
+/// This can be called periodically to handle edge cases and ensure consistency
+#[update]
+pub fn sync_week_state() -> String {
+    let now = time();
+    let current_week_id = get_week_id(now);
+
+    // First, close any finished weeks
+    close_finished_weeks();
+
+    // Then ensure we have an active week
+    ensure_active_week();
+
+    // Verify the current state
+    let period = get_or_create_current_week();
+
+    if period.is_completed {
+        format!("Week {} is completed. Next active week should be available.", period.week_id)
+    } else if now > period.end_time {
+        format!("Week {} has ended but not yet finalized. Next active week should be available.", period.week_id)
+    } else {
+        format!("Week {} is active. {} remaining.", period.week_id, format_remaining_time(period.end_time - now))
+    }
+}
+
+/// Helper function to format remaining time in human readable format
+fn format_remaining_time(ns: u64) -> String {
+    let seconds = ns / 1_000_000_000;
+    let days = seconds / 86400;
+    let hours = (seconds % 86400) / 3600;
+    let minutes = (seconds % 3600) / 60;
+
+    if days > 0 {
+        format!("{}d {}h {}m", days, hours, minutes)
+    } else if hours > 0 {
+        format!("{}h {}m", hours, minutes)
+    } else {
+        format!("{}m", minutes)
+    }
 }

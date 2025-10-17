@@ -6,7 +6,12 @@ import {
   ShieldCheck,
   Wand2,
   Flame,
-  Sparkles
+  Sparkles,
+  MessageSquare,
+  Star,
+  ThumbsUp,
+  ThumbsDown,
+  Lightbulb
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import {
@@ -68,6 +73,8 @@ const Landing = () => {
 
   const [globalStats, setGlobalStats] = useState({ memesCreated: 12 });
   const [globalLoading, setGlobalLoading] = useState(true);
+  const [feedback, setFeedback] = useState([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -96,6 +103,27 @@ const Landing = () => {
     };
 
     fetchGlobalStats();
+
+    const fetchFeedback = async () => {
+      try {
+        setFeedbackLoading(true);
+        await backendService.ensureReady();
+        const feedbackData = await backendService.getApprovedFeedback();
+        if (!isMounted) return;
+        setFeedback(feedbackData || []);
+      } catch (error) {
+        console.warn("Failed to fetch feedback:", error);
+        if (isMounted) {
+          setFeedback([]);
+        }
+      } finally {
+        if (isMounted) {
+          setFeedbackLoading(false);
+        }
+      }
+    };
+
+    fetchFeedback();
 
     return () => {
       isMounted = false;
@@ -235,6 +263,156 @@ const Landing = () => {
                 </motion.button>
               );
             })}
+          </div>
+        </section>
+
+        {/* Feedback Section */}
+        <section className="section-wrapper relative">
+          <div className="mx-auto max-w-6xl">
+            <div className="text-center mb-12">
+              <span className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-background/70 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                Community Voice
+              </span>
+              <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">
+                What Users Are Saying
+              </h2>
+              <p className="mt-4 max-w-2xl mx-auto text-base text-muted-foreground">
+                Real feedback from our community members about their Mementic experience
+              </p>
+            </div>
+
+            {feedbackLoading ? (
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {[...Array(6)].map((_, i) => (
+                  <Card key={i} className="animate-pulse">
+                    <CardContent className="p-6">
+                      <div className="h-4 bg-muted rounded mb-3"></div>
+                      <div className="h-3 bg-muted rounded mb-2"></div>
+                      <div className="h-3 bg-muted rounded mb-2"></div>
+                      <div className="h-3 bg-muted rounded w-2/3"></div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : feedback.length === 0 ? (
+              <Card className="p-12 text-center">
+                <MessageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold mb-2">No Feedback Yet</h3>
+                <p className="text-muted-foreground mb-6">
+                  Be the first to share your thoughts about Mementic!
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/feedback")}
+                  className="mx-auto"
+                >
+                  Share Your Feedback
+                </Button>
+              </Card>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {feedback.map((item) => (
+                  <motion.div
+                    key={item.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, amount: 0.3 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    <Card className="h-full hover:shadow-lg transition-shadow">
+                      <CardContent className="p-6">
+                        {/* Header with name and return indicator */}
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <span className="text-sm font-semibold text-primary">
+                                {item.name.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <span className="font-medium">{item.name}</span>
+                          </div>
+                          {item.will_return ? (
+                            <div className="flex items-center gap-1 text-green-600">
+                              <ThumbsUp className="h-4 w-4" />
+                              <span className="text-xs font-medium">Will return</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-orange-600">
+                              <ThumbsDown className="h-4 w-4" />
+                              <span className="text-xs font-medium">Maybe not</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Feedback content */}
+                        <div className="space-y-3">
+                          {/* What they like */}
+                          {item.likes && (
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <Star className="h-4 w-4 text-green-500" />
+                                <span className="text-sm font-medium text-green-600">Likes</span>
+                              </div>
+                              <p className="text-sm text-muted-foreground pl-6">
+                                {item.likes}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* What they don't like */}
+                          {item.dislikes && (
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <ThumbsDown className="h-4 w-4 text-orange-500" />
+                                <span className="text-sm font-medium text-orange-600">Could improve</span>
+                              </div>
+                              <p className="text-sm text-muted-foreground pl-6">
+                                {item.dislikes}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Suggestions */}
+                          {item.suggestions && (
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <Lightbulb className="h-4 w-4 text-blue-500" />
+                                <span className="text-sm font-medium text-blue-600">Suggestions</span>
+                              </div>
+                              <p className="text-sm text-muted-foreground pl-6">
+                                {item.suggestions}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Timestamp */}
+                        <div className="mt-4 pt-3 border-t border-border/50">
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(Number(item.timestamp) / 1_000_000).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+
+            {/* Show all feedback button */}
+            {feedback.length > 0 && (
+              <div className="text-center mt-8">
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/feedback")}
+                  className="gap-2"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  {feedback.length > 6 ? "View All Feedback" : "Share Your Feedback"}
+                </Button>
+              </div>
+            )}
           </div>
         </section>
 

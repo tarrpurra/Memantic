@@ -21,6 +21,7 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
   );
   const [currentWeekStatus, setCurrentWeekStatus] = useState(defaultWeekStatus);
   const [currentWeekId, setCurrentWeekId] = useState(null);
+  const [previousWeekId, setPreviousWeekId] = useState(null);
   const [clearedWeekId, setClearedWeekId] = useState(null);
   const [clearedCompletionWeekId, setClearedCompletionWeekId] = useState(null);
 
@@ -31,10 +32,14 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
       try {
         await backendService.ensureReady();
         const status = await backendService.getCurrentWeekStatus();
+        const previousWeek = await backendService.getPreviousWeekId();
         if (!cancelled) {
           const weekId = Number(status?.weekId);
           const normalizedWeekId = Number.isFinite(weekId) ? weekId : null;
+          const normalizedPreviousWeekId = previousWeek ? Number(previousWeek) : null;
+
           setCurrentWeekId(normalizedWeekId);
+          setPreviousWeekId(normalizedPreviousWeekId);
           setCurrentWeekStatus({
             weekId: normalizedWeekId,
             remainingNs: Number(status?.remainingNs) || 0,
@@ -44,8 +49,9 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
         }
       } catch (error) {
         if (!cancelled) {
-          console.warn("Failed to fetch current week status:", error);
+          console.warn("Failed to fetch week status:", error);
           setCurrentWeekId(null);
+          setPreviousWeekId(null);
           setCurrentWeekStatus(defaultWeekStatus);
         }
       }
@@ -68,7 +74,7 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
       setTotal(0);
       setClearedWeekId(weekId);
     }
-  }, [clearedWeekId, currentWeekStatus?.weekId]);
+  }, [clearedWeekId, currentWeekStatus?.weekId, previousWeekId]);
 
   useEffect(() => {
     const { isCompleted, weekId } = currentWeekStatus ?? {};
@@ -82,7 +88,7 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
       setTotal(0);
       setClearedCompletionWeekId(weekId);
     }
-  }, [clearedCompletionWeekId, currentWeekStatus]);
+  }, [clearedCompletionWeekId, currentWeekStatus, previousWeekId]);
 
   // Fetch Top 3
   useEffect(() => {
@@ -158,7 +164,11 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
             ? arr
             : arr.filter((meme) => {
                 const week = deriveWeekIdFromMs(meme?.created_at);
-                return week == null || week >= currentWeekId;
+                // Exclude memes from previous week specifically
+                if (week !== null && previousWeekId !== null && week === previousWeekId) {
+                  return false;
+                }
+                return week == null || week === currentWeekId;
               });
 
         if (!cancelled) setTopMemes(filtered);
@@ -360,13 +370,17 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
         });
       }
 
-      // Filter to current week only (cleanup old memes)
+      // Filter to current week only (exclude previous week memes)
       const filteredByWeek =
         currentWeekId == null
           ? arr
           : arr.filter((meme) => {
               const week = deriveWeekIdFromMs(meme?.created_at);
-              return week == null || week >= currentWeekId;
+              // Exclude memes from previous week specifically
+              if (week !== null && previousWeekId !== null && week === previousWeekId) {
+                return false;
+              }
+              return week == null || week === currentWeekId;
             });
 
       const filteredForListing = filteredByWeek.filter((meme) => {
@@ -447,13 +461,13 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
 
   useEffect(() => {
     fetchList({ reset: page === 1 });
-  }, [page, sort, currentWeekId]);
+  }, [page, sort, currentWeekId, previousWeekId]);
 
   useEffect(() => {
     if (isAuthenticated && hasProfileName) {
       fetchList({ reset: true });
     }
-  }, [isAuthenticated, hasProfileName, currentWeekId]);
+  }, [isAuthenticated, hasProfileName, currentWeekId, previousWeekId]);
 
   return {
     topMemes,

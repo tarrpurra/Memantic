@@ -599,6 +599,15 @@ export const MemeCard = ({
                           </span>
                         </div>
                       )}
+                      {/* Show original caption/prompt if available */}
+                      {(meme?.caption || meme?.prompt) && (
+                        <div className="py-2 border-b border-gray-100 dark:border-gray-800">
+                          <span className="font-medium block mb-2">Description:</span>
+                          <p className="text-sm bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+                            {meme.caption || meme.prompt}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

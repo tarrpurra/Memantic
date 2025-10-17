@@ -730,16 +730,22 @@ const Portfolio = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
-  // Periodic refresh of vote counts and stats
+  // Reduced refresh frequency and modal-aware refreshing
   useEffect(() => {
     if (!isAuthenticated || loading) return;
 
     const refreshPortfolio = async () => {
+      // Don't refresh if any modal is open (prevents input field clearing)
+      if (mintModalOpen || listingModalOpen) {
+        console.log("Skipping portfolio refresh - modal is open");
+        return;
+      }
+
       if (refreshing) return; // Prevent multiple simultaneous refreshes
 
       setRefreshing(true);
       try {
-        // Refresh vote counts for existing memes
+        // Only refresh vote counts for existing memes (less intensive)
         if (nfts.length > 0) {
           const updatedNfts = await Promise.all(
             nfts.map(async (nft) => {
@@ -770,17 +776,13 @@ const Portfolio = () => {
       }
     };
 
-    // Initial refresh after loading
-    const initialRefreshTimer = setTimeout(refreshPortfolio, 2000);
-
-    // Set up periodic refresh every 30 seconds
-    const refreshInterval = setInterval(refreshPortfolio, 30000);
+    // Reduced frequency: only refresh every 60 seconds instead of 30
+    const refreshInterval = setInterval(refreshPortfolio, 60000);
 
     return () => {
-      clearTimeout(initialRefreshTimer);
       clearInterval(refreshInterval);
     };
-  }, [isAuthenticated, loading, nfts]);
+  }, [isAuthenticated, loading, nfts, mintModalOpen, listingModalOpen, refreshing]);
 
   const listingModalAllowedModes = listingContext === "auction" ? ["auction"] : ["fixed"];
   const listingModalTitle = listingContext === "auction" ? "Launch auction" : "List on marketplace";
@@ -954,6 +956,16 @@ const Portfolio = () => {
                 <Button
                   variant="outline"
                   onClick={async () => {
+                    // Don't refresh if modals are open
+                    if (mintModalOpen || listingModalOpen) {
+                      toast({
+                        title: "Please close modals first",
+                        description: "Close any open modals before refreshing the portfolio.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
                     setRefreshing(true);
                     try {
                       await fetchData();
@@ -971,7 +983,7 @@ const Portfolio = () => {
                       setRefreshing(false);
                     }
                   }}
-                  disabled={refreshing || loading}
+                  disabled={refreshing || loading || mintModalOpen || listingModalOpen}
                   className="border-primary/40 text-foreground hover:bg-primary/10"
                 >
                   {refreshing ? (

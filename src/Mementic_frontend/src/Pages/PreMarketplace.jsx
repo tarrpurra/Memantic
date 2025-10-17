@@ -268,8 +268,19 @@ const PreMarketplace = () => {
       <div className="w-screen flex flex-col gap-10 px-4 py-10 lg:px-6">
         <main className="w-full w- max-w-[200rem] space-y-6">
           {weekCompleted && (
-            <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-200">
-              Weekly voting has wrapped up and the pre-marketplace is being cleared for the next drop. New memes will appear as soon as the fresh week begins.
+            <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-6 text-center">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="animate-spin h-8 w-8 border-2 border-amber-400 border-t-transparent rounded-full"></div>
+                <h3 className="text-lg font-semibold text-amber-200">Weekly Reset in Progress</h3>
+              </div>
+              <p className="text-sm text-amber-200 mb-4">
+                The pre-marketplace is being cleared for the next drop. New memes will appear as soon as the fresh week begins.
+              </p>
+              <div className="bg-amber-500/20 rounded-lg p-4 border border-amber-400/30">
+                <p className="text-xs text-amber-300">
+                  ⏰ <strong>Next week starts soon!</strong> Be ready to submit your memes and vote on the latest drops.
+                </p>
+              </div>
             </div>
           )}
           <div className="flex justify-end mb-4">

@@ -223,6 +223,8 @@ service : (opt InitArgs) -> {
   get_my_minted_tokens : () -> (vec TokenRecord) query;
   get_my_winner_notices : () -> (vec WinnerNotice) query;
   get_nft_image : (nat) -> (opt NftImage) query;
+  // Get the previous week ID for filtering purposes
+  get_previous_week_id : () -> (opt nat64) query;
   get_sale_metadata : (nat) -> (opt TokenSaleMetadata) query;
   get_sale_metadata_for_meme : (nat64) -> (opt TokenSaleMetadata) query;
   get_token : (nat) -> (opt TokenRecord) query;
@@ -269,6 +271,9 @@ service : (opt InitArgs) -> {
   remove_vote : (nat64) -> (Result_6);
   // Submit feedback from a user
   submit_feedback : (text, text, text, text, bool) -> (Result);
+  // Maintenance function to ensure week state is always synchronized
+  // This can be called periodically to handle edge cases and ensure consistency
+  sync_week_state : () -> (text);
   transform : (TransformArgs) -> (HttpResponse) query;
   update_user_profile : (opt text, opt text) -> (Result_2);
   // Cast or change a vote on a meme in the **current active week**.

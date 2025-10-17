@@ -150,8 +150,20 @@ const MarketplaceFeed = ({
         )}
 
         {isClearing && (
-          <div className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-xs text-primary">
-            Weekly cycle complete — the feed is clearing so new memes can take the stage.
+          <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-6 py-8 text-center">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <div className="animate-pulse h-6 w-6 bg-amber-400 rounded-full"></div>
+              <h3 className="text-lg font-semibold text-amber-200">Marketplace Reset</h3>
+              <div className="animate-pulse h-6 w-6 bg-amber-400 rounded-full"></div>
+            </div>
+            <p className="text-sm text-amber-200 mb-4">
+              The weekly cycle is complete! The marketplace is clearing to make way for fresh memes.
+            </p>
+            <div className="bg-amber-500/20 rounded-lg p-4 border border-amber-400/30 max-w-md mx-auto">
+              <p className="text-xs text-amber-300">
+                🚀 <strong>Get ready for the next round!</strong> New memes will appear soon for voting and trading.
+              </p>
+            </div>
           </div>
         )}
 

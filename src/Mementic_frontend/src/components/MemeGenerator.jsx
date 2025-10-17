@@ -27,7 +27,9 @@ import { useToast } from "../hooks/use-toast";
 const MemeImageDisplay = ({
   generatedMeme,
   memeTitle,
+  memeCaption,
   onTitleChange,
+  onCaptionChange,
   onClear,
   onPublish,
   isPublishing,
@@ -92,23 +94,45 @@ const MemeImageDisplay = ({
   };
 
   const handleShare = async () => {
+    const shareTitle = memeTitle.trim() || "Check out this meme!";
+    const shareText = memeTitle.trim()
+      ? `"${memeTitle}" - ${generatedMeme.prompt}`
+      : generatedMeme.prompt;
+
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "Check out this meme!",
-          text: generatedMeme.prompt,
+          title: shareTitle,
+          text: shareText,
           url: imageUrl,
         });
       } catch (error) {
         console.error("Share failed:", error);
+        // Fallback to clipboard
+        try {
+          const shareContent = `${shareTitle}\n\n${shareText}\n\n${imageUrl}`;
+          await navigator.clipboard.writeText(shareContent);
+          alert("Meme details copied to clipboard!");
+        } catch (clipboardError) {
+          console.error("Copy failed:", clipboardError);
+          alert("Share failed. Please copy the URL manually.");
+        }
       }
     } else {
       // Fallback: copy to clipboard
       try {
-        await navigator.clipboard.writeText(imageUrl);
-        alert("Image URL copied to clipboard!");
+        const shareContent = `${shareTitle}\n\n${shareText}\n\n${imageUrl}`;
+        await navigator.clipboard.writeText(shareContent);
+        alert("Meme details copied to clipboard!");
       } catch (error) {
         console.error("Copy failed:", error);
+        try {
+          await navigator.clipboard.writeText(imageUrl);
+          alert("Image URL copied to clipboard!");
+        } catch (clipboardError) {
+          console.error("Copy failed:", clipboardError);
+          alert("Share failed. Please copy the URL manually.");
+        }
       }
     }
   };
@@ -152,18 +176,34 @@ const MemeImageDisplay = ({
           </p>
         </div>
 
-        {/* Title Input */}
+        {/* Meme Name Input */}
         <div>
-          <span className="text-sm font-medium">Meme Title:</span>
+          <span className="text-sm font-medium">Meme Name:</span>
           <Input
             value={memeTitle}
             onChange={(event) => onTitleChange(event.target.value)}
-            placeholder="Give your meme a name"
+            placeholder="Give your meme a catchy name"
             className="mt-2 bg-background/50 border-border"
           />
           {!memeTitle.trim() && (
             <p className="mt-1 text-xs text-destructive">
-              Enter a title to publish this meme to the marketplace.
+              Enter a name for your meme.
+            </p>
+          )}
+        </div>
+
+        {/* Meme Caption Input */}
+        <div>
+          <span className="text-sm font-medium">Meme Caption:</span>
+          <Textarea
+            value={memeCaption}
+            onChange={(event) => onCaptionChange(event.target.value)}
+            placeholder="Add a caption or description for your meme..."
+            className="mt-2 bg-background/50 border-border min-h-[80px]"
+          />
+          {!memeCaption.trim() && (
+            <p className="mt-1 text-xs text-destructive">
+              Enter a caption for your meme.
             </p>
           )}
         </div>
@@ -363,7 +403,8 @@ export const MemeGenerator = () => {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("");
   const [error, setError] = useState(null);
-  const [memeTitle, setMemeTitle] = useState("");
+  const [memeName, setMemeName] = useState("");
+  const [memeCaption, setMemeCaption] = useState("");
   const [isPublishing, setIsPublishing] = useState(false);
 
   const { toast } = useToast();
@@ -401,7 +442,8 @@ export const MemeGenerator = () => {
 
   useEffect(() => {
     if (!generatedMeme) {
-      setMemeTitle("");
+      setMemeName("");
+      setMemeCaption("");
       return;
     }
 
@@ -416,7 +458,8 @@ export const MemeGenerator = () => {
       .find((value) => value.length > 0);
 
     if (suggestedTitle) {
-      setMemeTitle((prev) => (prev.trim() ? prev : suggestedTitle.slice(0, 80)));
+      setMemeName((prev) => (prev.trim() ? prev : suggestedTitle.slice(0, 80)));
+      setMemeCaption((prev) => (prev.trim() ? prev : suggestedTitle.slice(0, 200)));
     }
   }, [generatedMeme]);
 
@@ -438,7 +481,8 @@ export const MemeGenerator = () => {
 
   const handleClearGeneratedMeme = () => {
     clearGeneratedMeme();
-    setMemeTitle("");
+    setMemeName("");
+    setMemeCaption("");
   };
 
   const handlePublish = async () => {
@@ -446,11 +490,22 @@ export const MemeGenerator = () => {
       return;
     }
 
-    const title = memeTitle.trim();
-    if (!title) {
+    const name = memeName.trim();
+    const caption = memeCaption.trim();
+
+    if (!name) {
       toast({
         title: "Name your meme",
-        description: "Add a catchy title before publishing to the marketplace.",
+        description: "Give your meme a catchy name before publishing to the marketplace.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!caption) {
+      toast({
+        title: "Add a caption",
+        description: "Provide a caption or description for your meme.",
         variant: "destructive",
       });
       return;
@@ -477,7 +532,8 @@ export const MemeGenerator = () => {
 
       const memeData = {
         prompt: generatedMeme.prompt || prompt,
-        caption: title,
+        caption: [caption], // Wrap in array for Candid opt text
+        title: name,
         image_url: generatedMeme.image_url,
         image_filename: generatedMeme.image_filename || "generated_meme.jpg",
         image_format: generatedMeme.image_format || "jpg",
@@ -493,7 +549,7 @@ export const MemeGenerator = () => {
 
       toast({
         title: "Meme Published! 🎉",
-        description: "Your meme is now live in the marketplace and can receive votes!",
+        description: `"${name}" is now live in the marketplace and can receive votes!`,
       });
 
       handleClearGeneratedMeme();
@@ -509,7 +565,7 @@ export const MemeGenerator = () => {
     }
   };
 
-  const canPublishMeme = Boolean(memeTitle.trim()) && Boolean(generatedMeme?.image_url);
+  const canPublishMeme = Boolean(memeName.trim()) && Boolean(memeCaption.trim()) && Boolean(generatedMeme?.image_url);
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
@@ -696,8 +752,10 @@ export const MemeGenerator = () => {
         {generatedMeme && (
           <MemeImageDisplay
             generatedMeme={generatedMeme}
-            memeTitle={memeTitle}
-            onTitleChange={setMemeTitle}
+            memeTitle={memeName}
+            memeCaption={memeCaption}
+            onTitleChange={setMemeName}
+            onCaptionChange={setMemeCaption}
             onClear={handleClearGeneratedMeme}
             onPublish={handlePublish}
             isPublishing={isPublishing}

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, Sparkles, Store, ShoppingBag, Gavel, UserCircle, PenTool, Gem, Wallet, ChevronDown, LogOut, User } from "lucide-react";
+import { Menu, X, Sparkles, Store, Swords, Gavel, UserCircle, PenTool, Gem, ChevronDown, LogOut, User } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import { useAuth } from "../contexts/AuthContext";
 
 // Static navigation - always shows the same 5 items regardless of current page
 const NAV_LINKS = [
-  { label: "Pre Market Place", href: "/pre-marketplace", icon: ShoppingBag, type: "route" },
+  { label: "Meme Battle", href: "/pre-marketplace", icon:Swords, type: "route" },
   { label: "Market Place", href: "/marketplace", icon: Store, type: "route" },
   { label: "Auction", href: "/auction", icon: Gavel, type: "route" },
   { label: "LaunchPad", href: "/meme-nft", icon: Gem, type: "route" },
@@ -153,17 +153,6 @@ const Navigation = () => {
                     >
                       <User className="h-4 w-4" />
                       Portfolio
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigate("/wallet");
-                        setProfileDropdownOpen(false);
-                      }}
-                      className="flex w-full items-center gap-3 px-4 py-2 text-sm text-muted-foreground hover:bg-primary/10 hover:text-foreground"
-                    >
-                      <Wallet className="h-4 w-4" />
-                      Wallet
                     </button>
                     <div className="border-t border-border/50 my-1"></div>
                     <button

@@ -133,10 +133,10 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview, isWeekCompleted = false }) => 
             <div className="flex items-center gap-4">
               <div className="text-center">
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  {isWeekCompleted ? "Next cycle" : "Voting resets in"}
+                  {isWeekCompleted ? "Next cycle begins" : "Voting resets in"}
                 </p>
                 <p className="text-xl font-semibold text-foreground">
-                  {isWeekCompleted ? "Awaiting new week" : timeLeft}
+                  {isWeekCompleted ? "Starting soon!" : timeLeft}
                 </p>
               </div>
             </div>
