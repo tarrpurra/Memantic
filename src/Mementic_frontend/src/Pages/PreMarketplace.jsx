@@ -60,6 +60,9 @@ const PreMarketplace = () => {
     currentWeekStatus,
   } = useMarketplaceData(isAuthenticated, hasProfileName, page, sort, searchQuery);
 
+  const weekCompleted = Boolean(currentWeekStatus?.isCompleted);
+  const activeMemes = weekCompleted ? [] : memes;
+
   const {
     handleVote,
     checkMemeOwnership,
@@ -67,7 +70,11 @@ const PreMarketplace = () => {
 
   // Filter memes based on search query and creator
   const filteredMemes = useMemo(() => {
-    let base = memes;
+    if (weekCompleted) {
+      return [];
+    }
+
+    let base = activeMemes;
     if (selectedCreator !== "all") {
       base = base.filter((meme) => meme.creator === selectedCreator);
     }
@@ -79,39 +86,39 @@ const PreMarketplace = () => {
         (meme.caption?.toLowerCase() ?? "").includes(query) ||
         (meme.prompt?.toLowerCase() ?? "").includes(query)
     );
-  }, [memes, searchQuery, selectedCreator]);
+  }, [activeMemes, searchQuery, selectedCreator, weekCompleted]);
 
   // Computed stats
   const totalVotes = useMemo(
-    () => memes.reduce((acc, meme) => acc + (meme?.votes || 0), 0),
-    [memes]
+    () => activeMemes.reduce((acc, meme) => acc + (meme?.votes || 0), 0),
+    [activeMemes]
   );
 
   const totalViews = useMemo(
-    () => memes.reduce((acc, meme) => acc + (meme?.views || 0), 0),
-    [memes]
+    () => activeMemes.reduce((acc, meme) => acc + (meme?.views || 0), 0),
+    [activeMemes]
   );
 
   const listedCount = useMemo(
     () =>
-      memes.filter((meme) => {
+      activeMemes.filter((meme) => {
         const sale = meme?.sale_metadata ?? meme?.market_data;
         return sale?.is_listed;
       }).length,
-    [memes]
+    [activeMemes]
   );
 
   const uniqueCreators = useMemo(() => {
     const creators = new Set();
-    memes.forEach((meme) => {
+    activeMemes.forEach((meme) => {
       if (meme?.creator) creators.add(meme.creator);
     });
     return creators.size;
-  }, [memes]);
+  }, [activeMemes]);
 
   const creatorStats = useMemo(() => {
     const stats = new Map();
-    memes.forEach((meme) => {
+    activeMemes.forEach((meme) => {
       const creator = meme?.creator || "Anonymous";
       if (!stats.has(creator)) {
         stats.set(creator, { creator, count: 0, votes: 0 });
@@ -125,7 +132,7 @@ const PreMarketplace = () => {
         b.votes !== a.votes ? b.votes - a.votes : b.count - a.count
       )
       .slice(0, 6);
-  }, [memes]);
+  }, [activeMemes]);
 
   const topTrending = useMemo(
     () => topMemes.filter(Boolean).slice(0, 3),
@@ -150,7 +157,7 @@ const PreMarketplace = () => {
         value: "newest",
         label: "Newest",
         icon: "Sparkles",
-        meta: `${memes.length} drops`,
+        meta: `${activeMemes.length} drops`,
       },
       {
         value: "top",
@@ -165,7 +172,7 @@ const PreMarketplace = () => {
         meta: `${listedCount} live`,
       },
     ],
-    [listedCount, memes, totalViews, totalVotes]
+    [activeMemes.length, listedCount, totalViews, totalVotes]
   );
 
   const selectedCreatorLabel =
@@ -230,7 +237,6 @@ const PreMarketplace = () => {
     }
   };
 
-  const weekCompleted = Boolean(currentWeekStatus?.isCompleted);
   const canLoadMore = !weekCompleted && memes.length < total;
 
   if (authLoading) {
@@ -281,7 +287,7 @@ const PreMarketplace = () => {
           />
 
           <MarketplaceFeed
-            memes={memes}
+            memes={activeMemes}
             filteredMemes={filteredMemes}
             loadingList={loadingList}
             errorMsg={errorMsg}

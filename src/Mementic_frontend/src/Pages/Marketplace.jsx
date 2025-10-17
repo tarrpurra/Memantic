@@ -324,17 +324,15 @@ const Marketplace = () => {
         throw new Error("Invalid meme identifier for listing");
       }
 
-      await backendService.listMemeForSale(BigInt(idText), options);
-      const normalizedMode =
-        (options.mode || options.auctionType) === "timed_auction"
-          ? "auction"
-          : (options.mode || "fixed");
+      const price = Number(options.price ?? options.listingPrice ?? options.amount);
+      if (!Number.isFinite(price) || price <= 0) {
+        throw new Error("Marketplace listings require a positive price");
+      }
+
+      await backendService.listMemeForSale(BigInt(idText), { price });
       toast({
         title: "Listing published",
-        description:
-          normalizedMode === "auction"
-            ? "Your meme NFT is now live in the auction arena."
-            : "Your meme NFT is now trading on the marketplace.",
+        description: "Your meme NFT is now trading on the marketplace.",
       });
 
       let refreshedSnapshot = null;
@@ -530,7 +528,7 @@ const Marketplace = () => {
                   Trade meme NFTs like it’s the opening bell
                 </h1>
                 <p className="text-lg text-muted-foreground sm:max-w-2xl">
-                  Monitor live drops, lock in fixed prices, or launch auctions with starting bids that feel like a trading floor.
+                  Monitor live drops, lock in fixed prices, and send bidding wars to the dedicated auction arena.
                   Every weekly winner can mint and list directly without leaving the exchange view.
                 </p>
                 <div className="flex flex-col gap-3 sm:flex-row">
@@ -1133,6 +1131,9 @@ const Marketplace = () => {
           onConfirm={handleListingSubmit}
           isProcessing={listingDialog.isSubmitting}
           error={listingDialog.error}
+          allowedModes={["fixed"]}
+          title="List on marketplace"
+          confirmLabel="Publish listing"
         />
     </PageShell>
   );

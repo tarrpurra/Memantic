@@ -187,6 +187,13 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
       return;
     }
 
+    if (currentWeekStatus?.isCompleted) {
+      setMemes([]);
+      setTotal(0);
+      setLoadingList(false);
+      return;
+    }
+
     setLoadingList(true);
     setErrorMsg("");
     try {
