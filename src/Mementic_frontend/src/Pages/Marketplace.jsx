@@ -7,7 +7,6 @@ import {
   ArrowRight,
   Flame,
   Loader2,
-  Sparkles,
   TrendingUp,
   Trophy,
 } from "lucide-react";
@@ -15,13 +14,12 @@ import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import Navigation from "../components/Navigation";
+import ListingModal from "../components/ListingModal";
 import backendService from "../services/backendService";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../hooks/use-toast";
 
 const trendingMemes = [];
-
-const marketCollections = [];
 
 const marketFeed = [];
 
@@ -50,6 +48,70 @@ const Marketplace = () => {
     isSubmitting: false,
     error: null,
   });
+  const [listingDialog, setListingDialog] = useState({
+    open: false,
+    winner: null,
+    isSubmitting: false,
+    error: null,
+  });
+
+  const unwrapOptional = (value) =>
+    Array.isArray(value) ? (value.length ? value[0] : null) : value ?? null;
+
+  const toIcp = (value) => {
+    const raw = unwrapOptional(value);
+    if (raw == null) return null;
+    if (typeof raw === "bigint") {
+      return Number(raw) / 100000000;
+    }
+    const num = Number(raw);
+    return Number.isFinite(num) ? num / 100000000 : null;
+  };
+
+  const parseSaleMetadata = (raw) => {
+    if (!raw) return null;
+    let listingType = "None";
+    if (raw.listing_type && typeof raw.listing_type === "object") {
+      const keys = Object.keys(raw.listing_type);
+      if (keys.length) {
+        listingType = keys[0];
+      }
+    }
+
+    return {
+      isListed: Boolean(raw.is_listed),
+      listingType,
+      listingPriceIcp: toIcp(raw.listing_price),
+      auctionStartIcp: toIcp(raw.auction_start_price),
+      auctionHighestIcp: toIcp(raw.auction_highest_bid),
+      bidCount: Number(raw.auction_bid_count ?? 0),
+      raw,
+    };
+  };
+
+  const formatIcpValue = (value) => {
+    if (value == null) return "—";
+    const display = Number(value);
+    if (!Number.isFinite(display)) return "—";
+    if (display >= 1) return display.toFixed(2);
+    return display.toFixed(4);
+  };
+
+  const formatListingStatus = (snapshot) => {
+    if (!snapshot || !snapshot.isListed) {
+      return "Not listed";
+    }
+    if (snapshot.listingType === "FixedPrice") {
+      const price = formatIcpValue(snapshot.listingPriceIcp);
+      return `Fixed · ${price} ICP`;
+    }
+    if (snapshot.listingType === "Auction") {
+      const start = formatIcpValue(snapshot.auctionStartIcp);
+      const bids = snapshot.bidCount > 0 ? `${snapshot.bidCount} bids` : "0 bids";
+      return `Auction · ${start} ICP · ${bids}`;
+    }
+    return "Not listed";
+  };
 
   const normalizeMintedTokens = (tokens) =>
     Array.isArray(tokens)
@@ -93,6 +155,16 @@ const Marketplace = () => {
             try {
               const meme = await backendService.getMeme(entry.meme_id);
               const mintedTokens = await backendService.getMintedTokens(entry.meme_id);
+              let saleMetadata = null;
+              try {
+                saleMetadata = await backendService.getSaleMetadataForMeme(entry.meme_id);
+              } catch (saleError) {
+                console.warn(
+                  "Failed to fetch sale metadata for winner",
+                  entry?.meme_id,
+                  saleError
+                );
+              }
               const captionField = meme?.meme_data?.caption;
               const caption = Array.isArray(captionField)
                 ? captionField[0]
@@ -120,6 +192,7 @@ const Marketplace = () => {
                   (prompt && String(prompt).trim()) ||
                   `Meme #${entry.meme_id}`,
                 mintedTokens: normalizeMintedTokens(mintedTokens),
+                saleSnapshot: parseSaleMetadata(saleMetadata),
               };
             } catch (innerError) {
               console.warn("Failed to enrich winner", entry?.meme_id, innerError);
@@ -133,6 +206,7 @@ const Marketplace = () => {
                 prompt: "",
                 title: `Meme #${entry.meme_id}`,
                 mintedTokens: [],
+                saleSnapshot: null,
               };
             }
           })
@@ -188,6 +262,17 @@ const Marketplace = () => {
     return mintedCount === 0 && winner.ownerPrincipal === principal;
   };
 
+  const canListWinner = (winner) => {
+    if (!winner) return false;
+    if (!isAuthenticated || authLoading) return false;
+    if (!principal) return false;
+    const mintedCount = winner.mintedTokens?.length ?? 0;
+    if (mintedCount === 0) return false;
+    if (winner.ownerPrincipal !== principal) return false;
+    if (winner.saleSnapshot?.isListed) return false;
+    return true;
+  };
+
   const openMintDialog = (winner) => {
     if (!winner) return;
     setMintDialog({
@@ -209,6 +294,69 @@ const Marketplace = () => {
       isSubmitting: false,
       error: null,
     });
+  };
+
+  const openListingDialog = (winner) => {
+    if (!winner) return;
+    setListingDialog({
+      open: true,
+      winner,
+      isSubmitting: false,
+      error: null,
+    });
+  };
+
+  const closeListingDialog = () => {
+    setListingDialog({
+      open: false,
+      winner: null,
+      isSubmitting: false,
+      error: null,
+    });
+  };
+
+  const handleListingSubmit = async (memeId, options = {}) => {
+    if (!memeId) return;
+    try {
+      setListingDialog((prev) => ({ ...prev, isSubmitting: true, error: null }));
+      const idText = typeof memeId === "string" ? memeId : String(memeId);
+      if (!/^\d+$/.test(idText)) {
+        throw new Error("Invalid meme identifier for listing");
+      }
+
+      await backendService.listMemeForSale(BigInt(idText), options);
+      toast({
+        title: "Listing published",
+        description: "Your meme NFT is now trading on the marketplace.",
+      });
+
+      let refreshedSnapshot = null;
+      try {
+        const refreshed = await backendService.getSaleMetadataForMeme(BigInt(idText));
+        refreshedSnapshot = parseSaleMetadata(refreshed);
+      } catch (refreshError) {
+        console.warn("Failed to refresh sale metadata:", refreshError);
+      }
+
+      const numericId = Number(idText);
+      setTopWinners((prev) =>
+        prev.map((entry) =>
+          entry.memeId === numericId
+            ? { ...entry, saleSnapshot: refreshedSnapshot ?? entry.saleSnapshot }
+            : entry
+        )
+      );
+
+      closeListingDialog();
+    } catch (error) {
+      console.error("Listing submission failed:", error);
+      setListingDialog((prev) => ({
+        ...prev,
+        error: error?.message ?? "Failed to list NFT",
+      }));
+    } finally {
+      setListingDialog((prev) => ({ ...prev, isSubmitting: false }));
+    }
   };
 
   const handleMintModeChange = (mode) => {
@@ -292,6 +440,13 @@ const Marketplace = () => {
   const modalWinner = mintDialog.winner;
   const modalMintedCount = modalWinner?.mintedTokens?.length ?? 0;
   const allowMintAction = modalWinner ? canMintWinner(modalWinner) && modalMintedCount === 0 : false;
+  const listingTarget = listingDialog.winner
+    ? {
+        id: listingDialog.winner.memeId,
+        title: listingDialog.winner.title,
+        imageUrl: listingDialog.winner.imageUrl,
+      }
+    : null;
 
   useEffect(() => {
     if (totalSlides > 1) {
@@ -316,6 +471,45 @@ const Marketplace = () => {
     });
   };
 
+  const tickerItems = useMemo(
+    () =>
+      topWinners.map((winner) => {
+        const listing = winner.saleSnapshot;
+        const priceDisplay = listing
+          ? listing.listingType === "FixedPrice"
+            ? `${formatIcpValue(listing.listingPriceIcp)} ICP`
+            : listing.listingType === "Auction"
+            ? `${formatIcpValue(listing.auctionStartIcp)} ICP`
+            : "—"
+          : "—";
+
+        return {
+          id: winner.memeId,
+          rank: winner.rank,
+          title: winner.title,
+          votes: winner.upvotes,
+          minted: winner.mintedTokens?.length ?? 0,
+          listingLabel: formatListingStatus(listing),
+          priceDisplay,
+        };
+      }),
+    [topWinners]
+  );
+
+  const exchangeSummary = useMemo(() => {
+    const totalVotes = topWinners.reduce(
+      (sum, winner) => sum + Number(winner.upvotes ?? 0),
+      0
+    );
+    const listed = topWinners.filter((winner) => winner.saleSnapshot?.isListed)
+      .length;
+    const minted = topWinners.reduce(
+      (sum, winner) => sum + (winner.mintedTokens?.length ?? 0),
+      0
+    );
+    return { totalVotes, listed, minted };
+  }, [topWinners]);
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-background text-foreground">
       <div className="pointer-events-none absolute inset-0 opacity-70">
@@ -327,29 +521,81 @@ const Marketplace = () => {
       <Navigation />
 
       <main className="relative z-10">
-        <section className="px-5 pb-4 pt-16 sm:px-8">
-          <div className="mx-auto flex max-w-5xl flex-col items-center text-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-              <Flame className="h-4 w-4 text-primary" />
-              Meme Marketplace
-            </span>
-            <h1 className="mt-6 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
-              Discover and trade the hottest meme NFTs
-            </h1>
-            <p className="mt-6 text-lg text-muted-foreground sm:max-w-2xl">
-              Browse live auctions, vote on trending memes, and collect verified NFT drops from the Mementic ecosystem.
-            </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link to="/myplace">
-                <Button variant="hero" size="xl" className="px-10">
-                  Create Your Meme
-                </Button>
-              </Link>
-              <Link to="/auction">
-                <Button variant="outline" size="lg" className="rounded-full border-border/60 bg-background/70">
-                  View Live Auctions
-                </Button>
-              </Link>
+        <section className="px-5 pb-8 pt-16 sm:px-8">
+          <div className="mx-auto w-full max-w-6xl space-y-8">
+            <div className="grid gap-8 lg:grid-cols-[1.2fr,0.8fr]">
+              <div className="space-y-6 text-left">
+                <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                  <Flame className="h-4 w-4 text-primary" />
+                  Meme Exchange
+                </span>
+                <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
+                  Trade meme NFTs like it’s the opening bell
+                </h1>
+                <p className="text-lg text-muted-foreground sm:max-w-2xl">
+                  Monitor live drops, lock in fixed prices, or launch auctions with starting bids that feel like a trading floor.
+                  Every weekly winner can mint and list directly without leaving the exchange view.
+                </p>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Link to="/myplace">
+                    <Button variant="hero" size="xl" className="px-10">
+                      Mint a Meme NFT
+                    </Button>
+                  </Link>
+                  <Link to="/auction">
+                    <Button variant="outline" size="lg" className="rounded-full border-border/60 bg-background/70">
+                      View Live Auctions
+                    </Button>
+                  </Link>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Total votes this week</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">{exchangeSummary.totalVotes.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">NFT editions minted</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">{exchangeSummary.minted}</p>
+                  </div>
+                  <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Listings live</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">{exchangeSummary.listed}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-border/60 bg-background/70">
+                <div className="flex items-center justify-between border-b border-border/40 px-5 py-4 text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                  <span>Live order tape</span>
+                  <span>{new Date().toLocaleTimeString()}</span>
+                </div>
+                <div className="divide-y divide-border/50">
+                  {tickerItems.length > 0 ? (
+                    tickerItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between px-5 py-4 transition hover:bg-background/60"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            #{item.rank} • {item.listingLabel}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-primary">{item.priceDisplay}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.votes.toLocaleString()} votes • {item.minted} minted
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+                      Mint a meme winner to populate today’s trading tape.
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -465,96 +711,82 @@ const Marketplace = () => {
                       {winnersError}
                     </div>
                   ) : topWinners.length > 0 ? (
-                    topWinners.map((winner) => {
-                      const mintedCount = winner.mintedTokens?.length ?? 0;
-                      const canMint = canMintWinner(winner);
-                      return (
-                        <div
-                          key={winner.memeId}
-                          className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-background/70 p-4 transition hover:border-primary/50 hover:bg-background/80"
-                        >
-                          <div className="flex flex-wrap items-center gap-4">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary">
-                              #{winner.rank}
-                            </span>
-                            {winner.imageUrl ? (
-                              <div className="h-16 w-16 overflow-hidden rounded-xl border border-border/60">
-                                <img
-                                  src={winner.imageUrl}
-                                  alt={winner.title}
-                                  className="h-full w-full object-cover"
-                                  loading="lazy"
-                                />
-                              </div>
-                            ) : null}
-                            <div className="min-w-[12rem] flex-1">
-                              <p className="text-base font-semibold text-foreground">{winner.title}</p>
-                              <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                                Owner · {shortPrincipal(winner.ownerPrincipal)}
-                              </p>
-                            </div>
-                            <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 font-semibold text-primary">
-                                <TrendingUp className="h-3.5 w-3.5" />
-                                {winner.upvotes.toLocaleString()} votes
-                              </span>
-                              {mintedCount > 0 ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-3 py-1 font-semibold text-emerald-300">
-                                  <Sparkles className="h-3.5 w-3.5" />
-                                  Minted · {mintedCount} {mintedCount === 1 ? "edition" : "editions"}
-                                </span>
-                              ) : null}
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-                            <span>
-                              Meme ID #{winner.memeId}
-                              {latestWeek?.week_id !== undefined && (
-                                <>
-                                  {" "}• Week {Number(latestWeek.week_id)}
-                                </>
-                              )}
-                            </span>
-                            {latestWeek?.end_time ? (
-                              <span className="text-muted-foreground/80">
-                                Finalized {formatTimestamp(latestWeek.end_time)}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="flex flex-wrap gap-3">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              className="border border-border/60 bg-background/70"
-                              onClick={() => openMintDialog(winner)}
-                              disabled={!canMint}
-                            >
-                              {canMint ? "Convert to NFT" : mintedCount > 0 ? "Already minted" : "Minting locked"}
-                            </Button>
-                            {mintedCount > 0 ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="border-border/60 text-xs"
-                                onClick={() => openMintDialog(winner)}
-                              >
-                                View mint details
-                              </Button>
-                            ) : null}
-                          </div>
-                          {!isAuthenticated && (
-                            <p className="text-xs text-muted-foreground">
-                              Login to mint your winning meme as an NFT.
-                            </p>
-                          )}
-                          {canMint && !mintedCount && (
-                            <p className="text-xs text-foreground/80">
-                              You earned the top spot—choose between a single masterpiece or a limited collection when you mint.
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })
+                    <div className="overflow-hidden rounded-2xl border border-border/60 bg-background/70">
+                      <table className="min-w-full divide-y divide-border/50 text-left text-sm">
+                        <thead className="bg-background/60 text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                          <tr>
+                            <th className="px-4 py-3 font-medium">Asset</th>
+                            <th className="px-4 py-3 font-medium">Rank</th>
+                            <th className="px-4 py-3 font-medium">Votes</th>
+                            <th className="px-4 py-3 font-medium">Minted</th>
+                            <th className="px-4 py-3 font-medium">Listing</th>
+                            <th className="px-4 py-3 font-medium text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/40">
+                          {topWinners.map((winner) => {
+                            const mintedCount = winner.mintedTokens?.length ?? 0;
+                            const canMint = canMintWinner(winner);
+                            const canList = canListWinner(winner);
+                            const listingLabel = formatListingStatus(winner.saleSnapshot);
+                            return (
+                              <tr key={winner.memeId} className="transition hover:bg-background/60">
+                                <td className="px-4 py-4">
+                                  <div className="flex items-center gap-3">
+                                    {winner.imageUrl ? (
+                                      <div className="h-12 w-12 overflow-hidden rounded-xl border border-border/60">
+                                        <img
+                                          src={winner.imageUrl}
+                                          alt={winner.title}
+                                          className="h-full w-full object-cover"
+                                          loading="lazy"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border/60 bg-background/80 text-lg">
+                                        🖼️
+                                      </div>
+                                    )}
+                                    <div>
+                                      <p className="text-sm font-semibold text-foreground">{winner.title}</p>
+                                      <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                                        Owner · {shortPrincipal(winner.ownerPrincipal)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4 text-sm font-semibold text-primary">#{winner.rank}</td>
+                                <td className="px-4 py-4 text-sm text-foreground">{winner.upvotes.toLocaleString()}</td>
+                                <td className="px-4 py-4 text-sm text-foreground">{mintedCount > 0 ? mintedCount : "—"}</td>
+                                <td className="px-4 py-4 text-xs text-muted-foreground">{listingLabel}</td>
+                                <td className="px-4 py-4">
+                                  <div className="flex flex-wrap items-center justify-end gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      className="border border-border/60 bg-background/70"
+                                      onClick={() => openMintDialog(winner)}
+                                      disabled={!canMint}
+                                    >
+                                      {canMint ? "Mint NFT" : mintedCount > 0 ? "Minted" : "Mint locked"}
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="border-border/60"
+                                      onClick={() => openListingDialog(winner)}
+                                      disabled={!canList}
+                                    >
+                                      {winner.saleSnapshot?.isListed ? "Listed" : "List to market"}
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       Top winners will appear once a weekly voting round completes.
@@ -596,45 +828,44 @@ const Marketplace = () => {
                 </div>
               </CardHeader>
               <CardContent className="overflow-x-auto">
-                {marketCollections.length > 0 ? (
+                {tickerItems.length > 0 ? (
                   <table className="min-w-full divide-y divide-border text-left text-sm">
                     <thead className="uppercase tracking-[0.3em] text-muted-foreground">
                       <tr>
-                        <th className="py-3 pr-4 font-medium">Ranking</th>
-                        <th className="py-3 pr-4 font-medium">Collection Name</th>
-                        <th className="py-3 pr-4 font-medium">Top Offer</th>
-                        <th className="py-3 pr-4 font-medium">Volume</th>
-                        <th className="py-3 pr-4 font-medium">Floor</th>
-                        <th className="py-3 pr-4 font-medium">Price</th>
+                        <th className="py-3 pr-4 font-medium">Meme</th>
+                        <th className="py-3 pr-4 font-medium">Last Price</th>
+                        <th className="py-3 pr-4 font-medium">Votes</th>
+                        <th className="py-3 pr-4 font-medium">Minted</th>
+                        <th className="py-3 pr-4 font-medium">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/60">
-                      {marketCollections.map((collection) => (
-                        <tr key={collection.rank} className="transition hover:bg-background/50">
-                          <td className="whitespace-nowrap py-4 pr-4 font-semibold text-muted-foreground">
-                            #{collection.rank}
+                      {tickerItems.map((item) => (
+                        <tr key={`order-${item.id}`} className="transition hover:bg-background/50">
+                          <td className="whitespace-nowrap py-4 pr-4 text-foreground">
+                            #{item.rank} · {item.title}
+                          </td>
+                          <td className="whitespace-nowrap py-4 pr-4 font-semibold text-primary">
+                            {item.priceDisplay}
                           </td>
                           <td className="whitespace-nowrap py-4 pr-4 text-foreground">
-                            {collection.name}
+                            {item.votes.toLocaleString()}
                           </td>
-                          <td className="whitespace-nowrap py-4 pr-4 text-foreground">
-                            {collection.topOffer}
-                          </td>
-                          <td className="whitespace-nowrap py-4 pr-4 text-foreground">
-                            {collection.volume}
-                          </td>
-                          <td className="whitespace-nowrap py-4 pr-4 text-primary">
-                            {collection.floor}
-                          </td>
-                          <td className="whitespace-nowrap py-4 pr-4 text-foreground">
-                            {collection.price}
-                          </td>
+                          <td className="whitespace-nowrap py-4 pr-4 text-foreground">{item.minted}</td>
+                          <td className="whitespace-nowrap py-4 pr-4 text-muted-foreground">{item.listingLabel}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 ) : (
-                  <p className="text-sm text-muted-foreground py-8 text-center">No market data available yet.</p>
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    Waiting for fresh listings. Mint a champion to open the order book.
+                  </p>
+                )}
+                {!isAuthenticated && (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Connect your wallet to mint and stream your winners directly to the exchange board.
+                  </p>
                 )}
               </CardContent>
             </Card>
@@ -788,6 +1019,14 @@ const Marketplace = () => {
             </Card>
           </div>
         ) : null}
+        <ListingModal
+          isOpen={listingDialog.open}
+          onClose={closeListingDialog}
+          nft={listingTarget}
+          onConfirm={handleListingSubmit}
+          isProcessing={listingDialog.isSubmitting}
+          error={listingDialog.error}
+        />
       </main>
     </div>
   );

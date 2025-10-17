@@ -68,6 +68,14 @@ export const formatIcp = (value) => {
   return n.toFixed(4);
 };
 
+export const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
+
+export const deriveWeekIdFromMs = (ms) => {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return Math.floor(value / WEEK_IN_MS);
+};
+
 export const normalizeMeme = (m, extra = {}, userProfiles = new Map()) => {
   // Supports PublicStoredMeme { id, owner, meme_data{...}, created_at, ... }
   const md = m?.meme_data || m;

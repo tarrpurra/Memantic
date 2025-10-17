@@ -104,6 +104,11 @@ type TokenRecord = record {
   has_image : bool;
   minted_at : nat64;
 };
+type ListingStrategy = variant {
+  FixedPrice : record { price_e8s : nat64 };
+  Auction : record { start_price_e8s : nat64 };
+};
+type ListingType = variant { None; FixedPrice; Auction };
 type TokenSaleMetadata = record {
   listing_price : opt nat64;
   total_sales : nat64;
@@ -114,6 +119,11 @@ type TokenSaleMetadata = record {
   last_sale_at : opt nat64;
   total_earned : nat64;
   listed_at : opt nat64;
+  listing_type : ListingType;
+  auction_start_price : opt nat64;
+  auction_highest_bid : opt nat64;
+  auction_highest_bidder : opt principal;
+  auction_bid_count : nat32;
 };
 type TopEntry = record {
   upvotes : nat32;
@@ -245,7 +255,7 @@ service : (opt InitArgs) -> {
   // Check if a meme has been minted as an NFT
   is_meme_minted : (nat64) -> (bool) query;
   // List a meme for sale on the marketplace
-  list_meme_for_sale : (nat64, nat64) -> (Result_2);
+  list_meme_for_sale : (nat64, ListingStrategy) -> (Result_2);
   mint_to : (nat64, MintingMode) -> (Result_4);
   // Store a generated meme into marketplace (associated to caller)
   publish_meme : (MemeData) -> (Result_5);
