@@ -165,10 +165,10 @@ export const normalizeMeme = (m, extra = {}, userProfiles = new Map()) => {
     // Try to get username from profiles
     if (ownerPrincipal && userProfiles.has(ownerPrincipal)) {
       const profile = userProfiles.get(ownerPrincipal);
-      if (profile?.display_name) {
-        creator = profile.display_name;
-      } else if (profile?.username) {
+      if (profile?.username) {
         creator = profile.username;
+      } else if (profile?.display_name) {
+        creator = profile.display_name;
       }
     } else {
       // Truncate long principal IDs for display if no username found

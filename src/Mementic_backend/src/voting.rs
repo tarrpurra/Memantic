@@ -184,7 +184,7 @@ pub struct VoteResponse {
 
 // ---------- Helpers ----------
 
-const WEEK_S: u64 = 864_000; // 10 * 24 * 60 * 60 (10 days in seconds)
+const WEEK_S: u64 = 3600; // 1 hour for testing (change back to 864_000 for production)
 
 /// Week index (0-based) from timestamp ns
 fn get_week_id(timestamp_ns: u64) -> u64 {
@@ -704,6 +704,50 @@ pub fn finalize_finished_weeks() -> String {
     "Finished weeks finalized".into()
 }
 
+/// Force finalize current week for testing (admin function)
+#[update]
+pub fn force_finalize_current_week() -> Result<String, String> {
+    let now = time();
+    let period = get_or_create_current_week();
+
+    if period.is_completed {
+        return Err("Current week is already completed".into());
+    }
+
+    // Force complete the current week
+    WEEKLY_PERIODS.with(|wp| {
+        let mut periods = wp.borrow_mut();
+        if let Some(mut p) = periods.get(&period.week_id) {
+            p.is_completed = true;
+            periods.insert(period.week_id, p);
+            Ok::<(), String>(())
+        } else {
+            Err("Current week not found".into())
+        }
+    })?;
+
+    // Create entitlements for winners
+    let winners = match get_top3_for_week(period.week_id) {
+        Ok(top) => top,
+        Err(e) => {
+            ic_cdk::println!("Week {} finalized without leaderboard data: {}", period.week_id, e);
+            Vec::new()
+        }
+    };
+
+    if let Err(err) = crate::entitlements::create_entitlements_for_week(period.week_id, &winners) {
+        return Err(format!(
+            "Failed to issue mint entitlements for week {}: {}",
+            period.week_id, err
+        ));
+    }
+
+    // Clean up old memes and voting data from previous weeks
+    cleanup_old_week_data(period.week_id)?;
+
+    Ok(format!("Week {} force-finalized with {} winners", period.week_id, winners.len()))
+}
+
 /// Force-complete a specific week_id (admin/ops hook).
 #[update]
 pub fn finalize_week(week_id: u64) -> Result<(), String> {
@@ -712,7 +756,7 @@ pub fn finalize_week(week_id: u64) -> Result<(), String> {
         if let Some(mut p) = periods.get(&week_id) {
             p.is_completed = true;
             periods.insert(week_id, p);
-            Ok(())
+            Ok::<(), String>(())
         } else {
             // Try to create the week if it doesn't exist
             let now = time();
@@ -728,7 +772,7 @@ pub fn finalize_week(week_id: u64) -> Result<(), String> {
                     meme_count: 0,
                 };
                 periods.insert(week_id, new_period);
-                Ok(())
+                Ok::<(), String>(())
             } else {
                 Err("Cannot finalize future week".into())
             }
@@ -749,6 +793,9 @@ pub fn finalize_week(week_id: u64) -> Result<(), String> {
             week_id, err
         ));
     }
+
+    // Clean up old memes and voting data from previous weeks
+    cleanup_old_week_data(week_id)?;
 
     Ok(())
 }
@@ -779,6 +826,87 @@ pub fn delete_meme_data(meme_id: u64) -> Result<(), String> {
             map.remove(&key);
         }
     });
+
+    Ok(())
+}
+
+/// Clean up old memes and voting data from previous weeks
+/// This function removes memes and voting data from weeks that are older than the current week
+fn cleanup_old_week_data(current_week_id: u64) -> Result<(), String> {
+    let mut memes_to_remove = Vec::new();
+    let mut votes_to_remove = Vec::new();
+    let mut user_votes_to_remove = Vec::new();
+
+    // Find all memes from previous weeks
+    use crate::http_outcall::MEMES;
+    MEMES.with(|m| {
+        let map = m.borrow();
+        for entry in map.iter() {
+            let stored_meme = entry.value();
+            let meme_week = get_week_id(stored_meme.created_at);
+            if meme_week < current_week_id {
+                memes_to_remove.push(*entry.key());
+            }
+        }
+    });
+
+    // Find all votes for memes from previous weeks
+    VOTES.with(|v| {
+        let map = v.borrow();
+        for entry in map.iter() {
+            let mv = entry.value();
+            if mv.created_week < current_week_id {
+                votes_to_remove.push(*entry.key());
+            }
+        }
+    });
+
+    // Find all user votes for memes from previous weeks
+    USER_VOTES.with(|uv| {
+        let map = uv.borrow();
+        for entry in map.iter() {
+            let key = entry.key();
+            // Check if this meme is from a previous week
+            if votes_to_remove.contains(&key.1) {
+                user_votes_to_remove.push(key.clone());
+            }
+        }
+    });
+
+    // Remove old memes from main storage
+    let mut removed_memes = 0;
+    for meme_id in &memes_to_remove {
+        use crate::http_outcall::MEMES;
+        MEMES.with(|m| {
+            m.borrow_mut().remove(meme_id);
+        });
+        removed_memes += 1;
+    }
+
+    // Remove old votes
+    let mut removed_votes = 0;
+    for meme_id in &votes_to_remove {
+        VOTES.with(|v| {
+            v.borrow_mut().remove(meme_id);
+        });
+        removed_votes += 1;
+    }
+
+    // Remove old user votes
+    let mut removed_user_votes = 0;
+    for key in &user_votes_to_remove {
+        USER_VOTES.with(|uv| {
+            uv.borrow_mut().remove(key);
+        });
+        removed_user_votes += 1;
+    }
+
+    ic_cdk::println!(
+        "Cleaned up old week data: {} memes, {} votes, {} user votes",
+        removed_memes,
+        removed_votes,
+        removed_user_votes
+    );
 
     Ok(())
 }

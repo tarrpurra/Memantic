@@ -254,7 +254,7 @@ thread_local! {
 
     // NEW: store actual image bytes (ImageBlob wraps Vec<u8>)
     static STORED_IMAGES: RefCell<StableBTreeMap<u64, ImageBlob, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(4)))));
+        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(6)))));
 
     static TOKEN_SALES: RefCell<StableBTreeMap<SNat, TokenSaleMetadata, Mem>> =
         RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(5)))));

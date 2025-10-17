@@ -9,6 +9,7 @@ import PreviewModal from "../components/marketplace/PreviewModal";
 import { useMarketplaceData } from "../hooks/useMarketplaceData";
 import { useMarketplaceVoting } from "../hooks/useMarketplaceVoting";
 import { getWeekEndIST, formatRemaining } from "../utils/marketplaceUtils";
+import backendService from "../services/backendService";
 
 
 
@@ -209,6 +210,25 @@ const PreMarketplace = () => {
     setPreviewOpen(true);
   };
 
+  // Force finalize week for testing
+  const handleForceFinalize = async () => {
+    try {
+      await backendService.forceFinalizeCurrentWeek();
+      toast({
+        title: "Week Finalized!",
+        description: "Current week has been force-completed. Check winner notifications.",
+      });
+      // Refresh data
+      window.location.reload();
+    } catch (error) {
+      toast({
+        title: "Failed to finalize week",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const canLoadMore = memes.length < total;
 
   if (authLoading) {
@@ -239,10 +259,18 @@ const PreMarketplace = () => {
 
       <div className="w-screen flex flex-col gap-10 px-4 py-10 lg:px-6">
         <main className="w-full w- max-w-[200rem] space-y-6">
-          <WeeklyLeaderboard
-            timeLeft={timeLeft}
-            onPreview={openPreview}
-          />
+           <div className="flex justify-end mb-4">
+             <button
+               onClick={handleForceFinalize}
+               className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm"
+             >
+               Force Finalize Week (Testing)
+             </button>
+           </div>
+           <WeeklyLeaderboard
+             timeLeft={timeLeft}
+             onPreview={openPreview}
+           />
 
           <MarketplaceFeed
             memes={memes}

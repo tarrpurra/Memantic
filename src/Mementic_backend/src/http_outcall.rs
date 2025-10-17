@@ -132,7 +132,7 @@ thread_local! {
     static RATE: RefCell<StableBTreeMap<StorablePrincipal, DayUsage, Memory>> =
         RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(20)))));
 
-    static MEMES: RefCell<StableBTreeMap<u64, StoredMeme, Memory>> =
+    pub static MEMES: RefCell<StableBTreeMap<u64, StoredMeme, Memory>> =
         RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(21)))));
 
     static USER_MEMES: RefCell<StableBTreeMap<StorablePrincipal, StorableVecU64, Memory>> =

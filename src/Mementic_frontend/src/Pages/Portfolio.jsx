@@ -16,6 +16,7 @@ import {
   User,
   Sparkles,
   MessageSquare,
+  Gem,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -154,7 +155,7 @@ const Portfolio = () => {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/');
+    // Navigation is handled in AuthContext logout function
   };
 
   // Redirect if not authenticated
@@ -609,9 +610,9 @@ const Portfolio = () => {
               if (!Number.isInteger(total) || total < 2 || total > 50) {
                 throw new Error("Collection supply must be between 2 and 50 editions");
               }
-              return { type: "collection", editions: total };
+              return { Collection: { editions: total } };
             })()
-          : { type: "single" };
+          : { Single: null };
 
       await backendService.mintMeme(BigInt(idAsString), mintMode);
       toast({

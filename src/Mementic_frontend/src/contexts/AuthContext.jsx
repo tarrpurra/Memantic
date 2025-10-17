@@ -341,6 +341,11 @@ export const AuthProvider = ({ children }) => {
       setRemainingCalls(0);
       persistAuthState(null);
       setIsLoading(false);
+
+      // Navigate to landing page after logout
+      if (typeof window !== "undefined" && window.location) {
+        window.location.href = "/";
+      }
     }
     return true;
   };

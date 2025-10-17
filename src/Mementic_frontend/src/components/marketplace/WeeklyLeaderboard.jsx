@@ -152,7 +152,7 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
                   </span>
                   <span className="flex items-center gap-2">
                     <User className="h-5 w-5 text-emerald-300" />
-                    <span className="font-semibold">{topTrending[0]?.creator || "—"}</span>
+                    <span className="font-semibold">{topTrending[0]?.creator || "Anonymous"}</span>
                   </span>
                 </div>
                 <Button

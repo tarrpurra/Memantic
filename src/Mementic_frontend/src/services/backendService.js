@@ -1,5 +1,6 @@
-import { Actor, HttpAgent } from "@dfinity/agent";
+import { Actor, HttpAgent} from "@dfinity/agent";
 import { AuthClient } from "@dfinity/auth-client";
+import { Principal } from "@dfinity/principal";
 import { idlFactory } from "../../../declarations/mementic_backend";
 import { getAgentHost, getIdentityProvider, isDevMode, Id } from "../config/environment";
 
@@ -60,8 +61,8 @@ class BackendService {
           console.log("Found stored authentication, setting up authenticated agent");
           await this._setupAuthenticatedAgent();
         } else {
-          console.log("No stored authentication found, setting up anonymous agent");
-          await this._setupAnonymousAgent();
+          console.log("No stored authentication found, skipping agent setup");
+          this.isAuthenticated = false;
         }
       } else {
         console.log("Storage not available, setting up anonymous agent");
@@ -85,12 +86,16 @@ class BackendService {
   }
 
   /**
-   * Ensure service is ready before making calls
-   */
-  async ensureReady() {
-    if (this.initialized && this.actor) return true;
-    return this.initialize();
-  }
+    * Ensure service is ready before making calls
+    */
+   async ensureReady() {
+     if (this.initialized && this.actor) return true;
+     if (this.initialized && !this.actor) {
+       // If initialized but no actor, set up anonymous agent for queries
+       await this._setupAnonymousAgent();
+     }
+     return this.initialize();
+   }
 
   /**
    * Check if localStorage and sessionStorage are available
@@ -244,7 +249,7 @@ class BackendService {
     this.initialized = false;
     this.authClient = null;
     this._initPromise = null;
-    return this.initialize();
+    // Don't initialize immediately, let ensureReady handle it when needed
   }
 
   /* ============ AUTHENTICATION METHODS ============ */
@@ -635,6 +640,14 @@ class BackendService {
   }
 
   /**
+   * Force finalize current week for testing
+   */
+  async forceFinalizeCurrentWeek() {
+    const result = await this._safeCall('force_finalize_current_week');
+    return this._unwrapResult(result, "force_finalize_current_week failed");
+  }
+
+  /**
      * List a meme for sale
      */
   async listMemeForSale(memeId, priceE8s) {
@@ -750,9 +763,15 @@ class BackendService {
   /**
     * Get user profile by principal
     */
-  async getUserProfileByPrincipal(principal) {
-    const result = await this._safeCall('get_user_profile_by_principal', principal);
-    return this._fromOpt(result);
+  async getUserProfileByPrincipal(principalString) {
+    try {
+      const principal = Principal.fromText(principalString);
+      const result = await this._safeCall('get_user_profile_by_principal', principal);
+      return this._fromOpt(result);
+    } catch (error) {
+      console.warn(`Invalid principal string: ${principalString}`, error);
+      return null;
+    }
   }
 
   /* ============ UTILITY METHODS ============ */
