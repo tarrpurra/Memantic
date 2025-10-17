@@ -24,6 +24,9 @@ const MarketplaceFeed = ({
   isAuthenticated,
   currentUserPrincipal,
   onOpenPreview,
+  setSelectedCreator,
+  onClearFilters,
+  isClearing = false,
 }) => {
   // Live metrics - recalculate when memes change
   const totalVotes = useMemo(
@@ -91,9 +94,6 @@ const MarketplaceFeed = ({
     [listedCount, memes, totalViews, totalVotes]
   );
 
-  const selectedCreatorLabel =
-    selectedCreator === "all" ? "all creators" : selectedCreator;
-
   return (
     <Card className="border-border bg-card/80">
       <CardHeader className="pb-4">
@@ -127,7 +127,7 @@ const MarketplaceFeed = ({
             <select
               value={selectedCreator}
               onChange={(e) => {
-                setSelectedCreator(e.target.value);
+                setSelectedCreator?.(e.target.value);
                 setPage(1);
               }}
               className="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-slate-100 focus:outline-none focus:border-primary/60"
@@ -149,6 +149,12 @@ const MarketplaceFeed = ({
           </div>
         )}
 
+        {isClearing && (
+          <div className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-xs text-primary">
+            Weekly cycle complete — the feed is clearing so new memes can take the stage.
+          </div>
+        )}
+
         {loadingList && ensureArray(memes).length === 0 ? (
           <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2">
             {[...Array(6).keys()].map((index) => (
@@ -162,12 +168,14 @@ const MarketplaceFeed = ({
             <p className="mt-2 text-sm text-slate-400">
               {searchQuery
                 ? "Try adjusting your filters."
-                : "Be the first to publish a meme this week."}
+                : isClearing
+                  ? "Voting just ended. New drops will appear once the next week opens."
+                  : "Be the first to publish a meme this week."}
             </p>
             {searchQuery && (
               <Button
                 variant="outline"
-                onClick={() => setSearchQuery("")}
+                onClick={() => onClearFilters?.()}
                 className="mt-4 rounded-xl border-white/20 text-white hover:bg-white/10"
               >
                 Clear filters

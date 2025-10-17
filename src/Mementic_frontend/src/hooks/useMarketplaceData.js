@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import backendService from "../services/backendService";
 import {
   ensureArray,
@@ -15,7 +15,14 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
   const [loadingTop, setLoadingTop] = useState(true);
   const [loadingList, setLoadingList] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const defaultWeekStatus = useMemo(
+    () => ({ weekId: null, remainingNs: 0, endTimeNs: 0, isCompleted: false }),
+    []
+  );
+  const [currentWeekStatus, setCurrentWeekStatus] = useState(defaultWeekStatus);
   const [currentWeekId, setCurrentWeekId] = useState(null);
+  const [clearedWeekId, setClearedWeekId] = useState(null);
+  const [clearedCompletionWeekId, setClearedCompletionWeekId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,12 +33,20 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
         const status = await backendService.getCurrentWeekStatus();
         if (!cancelled) {
           const weekId = Number(status?.weekId);
-          setCurrentWeekId(Number.isFinite(weekId) ? weekId : null);
+          const normalizedWeekId = Number.isFinite(weekId) ? weekId : null;
+          setCurrentWeekId(normalizedWeekId);
+          setCurrentWeekStatus({
+            weekId: normalizedWeekId,
+            remainingNs: Number(status?.remainingNs) || 0,
+            endTimeNs: Number(status?.endTimeNs) || 0,
+            isCompleted: Boolean(status?.isCompleted),
+          });
         }
       } catch (error) {
         if (!cancelled) {
           console.warn("Failed to fetch current week status:", error);
           setCurrentWeekId(null);
+          setCurrentWeekStatus(defaultWeekStatus);
         }
       }
     })();
@@ -39,7 +54,35 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [defaultWeekStatus]);
+
+  useEffect(() => {
+    const weekId = currentWeekStatus?.weekId;
+    if (weekId == null) {
+      return;
+    }
+
+    if (clearedWeekId == null || clearedWeekId !== weekId) {
+      setTopMemes([]);
+      setMemes([]);
+      setTotal(0);
+      setClearedWeekId(weekId);
+    }
+  }, [clearedWeekId, currentWeekStatus?.weekId]);
+
+  useEffect(() => {
+    const { isCompleted, weekId } = currentWeekStatus ?? {};
+    if (!isCompleted || weekId == null) {
+      return;
+    }
+
+    if (clearedCompletionWeekId !== weekId) {
+      setTopMemes([]);
+      setMemes([]);
+      setTotal(0);
+      setClearedCompletionWeekId(weekId);
+    }
+  }, [clearedCompletionWeekId, currentWeekStatus]);
 
   // Fetch Top 3
   useEffect(() => {
@@ -319,11 +362,17 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
               return week == null || week >= currentWeekId;
             });
 
+      const filteredForListing = filteredByWeek.filter((meme) => {
+        const sale = meme?.sale_metadata ?? meme?.market_data ?? {};
+        const isListed = Boolean(sale?.is_listed ?? sale?.isListed);
+        return !isListed;
+      });
+
       // Client-side paging
       const start = (page - 1) * 12; // PAGE_SIZE = 12
-      const slice = filteredByWeek.slice(start, start + 12);
+      const slice = filteredForListing.slice(start, start + 12);
 
-      setTotal(filteredByWeek.length);
+      setTotal(filteredForListing.length);
       setMemes((prev) =>
         page === 1 || reset ? slice : [...ensureArray(prev), ...slice]
       );
@@ -357,14 +406,25 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
                 }
               })
             );
-            setMemes((prev) =>
-              page === 1 || reset
-                ? updatedMemes
-                : [
-                    ...ensureArray(prev).slice(0, -slice.length),
-                    ...updatedMemes,
-                  ]
-            );
+            const sanitizedUpdates = updatedMemes.filter((meme) => {
+              const sale = meme?.sale_metadata ?? meme?.market_data ?? {};
+              return !(sale?.is_listed ?? sale?.isListed);
+            });
+
+            setMemes((prev) => {
+              if (page === 1 || reset) {
+                return sanitizedUpdates;
+              }
+
+              const preserved = ensureArray(prev)
+                .slice(0, -slice.length)
+                .filter((meme) => {
+                  const sale = meme?.sale_metadata ?? meme?.market_data ?? {};
+                  return !(sale?.is_listed ?? sale?.isListed);
+                });
+
+              return [...preserved, ...sanitizedUpdates];
+            });
           } catch (error) {
             console.warn("Failed to refresh initial vote counts:", error);
           }
@@ -398,5 +458,6 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
     fetchList,
     setTopMemes,
     setMemes,
+    currentWeekStatus,
   };
 };

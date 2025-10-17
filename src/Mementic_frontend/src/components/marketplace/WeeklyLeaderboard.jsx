@@ -5,7 +5,7 @@ import { Crown, User, Eye, Heart } from "lucide-react";
 import { formatNumber, ensureArray, normalizeMeme, safeBigIntToNumber } from "../../utils/marketplaceUtils";
 import backendService from "../../services/backendService";
 
-const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
+const WeeklyLeaderboard = ({ timeLeft, onPreview, isWeekCompleted = false }) => {
   const [topMemes, setTopMemes] = useState([]);
   const [loadingTop, setLoadingTop] = useState(true);
 
@@ -33,6 +33,15 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
   useEffect(() => {
     let cancelled = false;
     let intervalId;
+
+    if (isWeekCompleted) {
+      setTopMemes([]);
+      setLoadingTop(false);
+      return () => {
+        cancelled = true;
+        if (intervalId) clearInterval(intervalId);
+      };
+    }
 
     const fetchTopMemes = async () => {
       try {
@@ -100,7 +109,7 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
       }
     };
 
-    // Initial fetch
+    setLoadingTop(true);
     fetchTopMemes();
 
     // Set up live updates every 30 seconds
@@ -110,7 +119,7 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
-  }, []);
+  }, [isWeekCompleted]);
 
   return (
     <Card className="overflow-hidden border-border bg-gradient-to-br from-primary/20 via-card/80 to-transparent w-full">
@@ -123,8 +132,12 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview }) => {
             </div>
             <div className="flex items-center gap-4">
               <div className="text-center">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Voting resets in</p>
-                <p className="text-xl font-semibold text-foreground">{timeLeft}</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  {isWeekCompleted ? "Next cycle" : "Voting resets in"}
+                </p>
+                <p className="text-xl font-semibold text-foreground">
+                  {isWeekCompleted ? "Awaiting new week" : timeLeft}
+                </p>
               </div>
             </div>
           </div>
