@@ -651,13 +651,21 @@ const Portfolio = () => {
         throw new Error("Invalid meme identifier for listing");
       }
 
-      const price = Number(options.price);
-      if (!Number.isFinite(price) || price <= 0) {
-        throw new Error("Listing requires a positive price");
+      const mode = (options.mode || options.auctionType) === "timed_auction" ? "auction" : (options.mode || "fixed");
+
+      if (mode === "auction") {
+        const startBid = Number(options.startingBid ?? options.price);
+        if (!Number.isFinite(startBid) || startBid <= 0) {
+          throw new Error("Auction listings require a positive starting bid");
+        }
+      } else {
+        const price = Number(options.price);
+        if (!Number.isFinite(price) || price <= 0) {
+          throw new Error("Listing requires a positive price");
+        }
       }
 
-      const priceE8s = BigInt(Math.round(price * 100000000));
-      await backendService.listMemeForSale(BigInt(idAsString), priceE8s);
+      await backendService.listMemeForSale(BigInt(idAsString), options);
       toast({
         title: "Listing created successfully!",
         description: "Your NFT is now visible on the marketplace.",

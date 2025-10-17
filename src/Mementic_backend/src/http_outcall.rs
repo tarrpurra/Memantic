@@ -17,7 +17,7 @@ use ic_stable_structures::{
 use ic_cdk::api::call::call;
 use ic_cdk::api::call::call_with_payment;
 
-use crate::nft_module::TokenSaleMetadata;
+use crate::nft_module::{ListingType, TokenSaleMetadata};
 use ic_stable_structures::storable::Bound;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -147,6 +147,12 @@ thread_local! {
 }
 
 // ---------- Data structures ----------
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub enum ListingStrategy {
+    FixedPrice { price_e8s: u64 },
+    Auction { start_price_e8s: u64 },
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, CandidType)]
 struct DayUsage {
     day: u64,
@@ -580,7 +586,7 @@ pub fn is_meme_minted(meme_id: u64) -> bool {
 
 /// List a meme for sale on the marketplace
 #[update]
-pub fn list_meme_for_sale(meme_id: u64, price_e8s: u64) -> Result<(), String> {
+pub fn list_meme_for_sale(meme_id: u64, strategy: ListingStrategy) -> Result<(), String> {
     let user = caller();
     if user == Principal::anonymous() {
         return Err("Authentication required".to_string());
@@ -596,9 +602,34 @@ pub fn list_meme_for_sale(meme_id: u64, price_e8s: u64) -> Result<(), String> {
     let token_id = crate::nft_module::get_token_by_meme_id(meme_id)
         .ok_or_else(|| "Meme has not been minted as an NFT yet".to_string())?;
 
+    let config = match strategy {
+        ListingStrategy::FixedPrice { price_e8s } => {
+            if price_e8s == 0 {
+                return Err("Listing price must be greater than zero".to_string());
+            }
+            (Some(price_e8s), ListingType::FixedPrice, None)
+        }
+        ListingStrategy::Auction { start_price_e8s } => {
+            if start_price_e8s == 0 {
+                return Err("Starting bid must be greater than zero".to_string());
+            }
+            (
+                Some(start_price_e8s),
+                ListingType::Auction,
+                Some(start_price_e8s),
+            )
+        }
+    };
+
+    let (price, listing_type, auction_start) = config;
     crate::nft_module::mutate_sale_metadata(&token_id, meme_id, |sale| {
         sale.is_listed = true;
-        sale.listing_price = Some(price_e8s);
+        sale.listing_price = price;
+        sale.listing_type = listing_type.clone();
+        sale.auction_start_price = auction_start;
+        sale.auction_highest_bid = None;
+        sale.auction_highest_bidder = None;
+        sale.auction_bid_count = 0;
         sale.listed_at = Some(time());
     });
 
@@ -625,6 +656,11 @@ pub fn remove_meme_from_market(meme_id: u64) -> Result<(), String> {
             sale.is_listed = false;
             sale.listing_price = None;
             sale.listed_at = None;
+            sale.listing_type = ListingType::None;
+            sale.auction_start_price = None;
+            sale.auction_highest_bid = None;
+            sale.auction_highest_bidder = None;
+            sale.auction_bid_count = 0;
         });
         Ok(())
     } else {
@@ -814,6 +850,11 @@ pub fn record_meme_sale(meme_id: u64, sale_price_e8s: u64) -> Result<(), String>
             sale.is_listed = false;
             sale.listing_price = None;
             sale.listed_at = None;
+            sale.listing_type = ListingType::None;
+            sale.auction_start_price = None;
+            sale.auction_highest_bid = None;
+            sale.auction_highest_bidder = None;
+            sale.auction_bid_count = 0;
         });
         Ok(())
     } else {
@@ -938,9 +979,7 @@ pub fn get_marketplace_memes() -> Vec<PublicStoredMeme> {
 // ---------- Queries ----------
 #[query]
 pub fn get_meme(meme_id: u64) -> Option<PublicStoredMeme> {
-    MEMES.with(|m| {
-        m.borrow().get(&meme_id).map(|stored| stored.into())
-    })
+    MEMES.with(|m| m.borrow().get(&meme_id).map(|stored| stored.into()))
 }
 
 #[query]

@@ -2,28 +2,47 @@ import { useEffect, useState } from "react";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 
-const ListingModal = ({ isOpen, onClose, nft, onConfirm, isProcessing = false }) => {
+const ListingModal = ({ isOpen, onClose, nft, onConfirm, isProcessing = false, error = null }) => {
+  const [mode, setMode] = useState("fixed");
   const [price, setPrice] = useState("");
-  const [auctionType, setAuctionType] = useState("fixed_price");
+  const [startingBid, setStartingBid] = useState("");
   const [duration, setDuration] = useState("7"); // days
   const [royalties, setRoyalties] = useState("5");
+  const [formError, setFormError] = useState(null);
 
   useEffect(() => {
     if (isOpen) {
+      setMode("fixed");
       setPrice("");
-      setAuctionType("fixed_price");
+      setStartingBid("");
       setDuration("7");
       setRoyalties("5");
+      setFormError(null);
     }
   }, [isOpen]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setFormError(null);
+
+    const rawValue = mode === "auction" ? startingBid : price;
+    const numeric = Number.parseFloat(rawValue);
+
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      setFormError(
+        mode === "auction"
+          ? "Starting bid must be greater than zero."
+          : "Listing price must be greater than zero."
+      );
+      return;
+    }
 
     const listingOptions = {
-      price: parseFloat(price),
-      auctionType: auctionType === "fixed_price" ? null : auctionType,
-      duration: auctionType === "timed_auction" ? parseInt(duration) : null,
+      mode,
+      price: numeric,
+      startingBid: mode === "auction" ? numeric : null,
+      auctionType: mode === "auction" ? "timed_auction" : null,
+      duration: mode === "auction" ? parseInt(duration) : null,
       royalties: parseInt(royalties) || null,
     };
 
@@ -33,13 +52,13 @@ const ListingModal = ({ isOpen, onClose, nft, onConfirm, isProcessing = false })
   if (!isOpen || !nft) return null;
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center ${isOpen ? '' : 'hidden'}`}>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center ${isOpen ? "" : "hidden"}`}>
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-background rounded-lg shadow-lg max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="p-6">
-          <h2 className="text-lg font-semibold mb-4">List NFT on Marketplace</h2>
+          <h2 className="text-lg font-semibold mb-4">Launch NFT Listing</h2>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <h3 className="font-semibold text-sm">NFT Preview</h3>
             <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
@@ -63,13 +82,55 @@ const ListingModal = ({ isOpen, onClose, nft, onConfirm, isProcessing = false })
 
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium">Price (ICP)</label>
+              <label className="text-sm font-medium">Listing Mode</label>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                <button
+                  type="button"
+                  onClick={() => setMode("fixed")}
+                  disabled={isProcessing}
+                  className={`rounded-md border px-3 py-2 text-left ${
+                    mode === "fixed"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-input hover:border-primary/40"
+                  }`}
+                >
+                  <span className="block font-semibold">Fixed price</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Set a buy-now price for collectors.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("auction")}
+                  disabled={isProcessing}
+                  className={`rounded-md border px-3 py-2 text-left ${
+                    mode === "auction"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-input hover:border-primary/40"
+                  }`}
+                >
+                  <span className="block font-semibold">Auction</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Kick off live bidding with a floor price.
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">
+                {mode === "auction" ? "Starting bid (ICP)" : "Listing price (ICP)"}
+              </label>
               <Input
                 type="number"
                 step="0.01"
                 min="0.01"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
+                value={mode === "auction" ? startingBid : price}
+                onChange={(e) =>
+                  mode === "auction"
+                    ? setStartingBid(e.target.value)
+                    : setPrice(e.target.value)
+                }
                 placeholder="0.00"
                 required
                 className="mt-1"
@@ -77,20 +138,7 @@ const ListingModal = ({ isOpen, onClose, nft, onConfirm, isProcessing = false })
               />
             </div>
 
-            <div>
-              <label className="text-sm font-medium">Auction Type</label>
-              <select
-                value={auctionType}
-                onChange={(e) => setAuctionType(e.target.value)}
-                className="w-full mt-1 px-3 py-2 border border-input bg-background rounded-md text-sm"
-                disabled={isProcessing}
-              >
-                <option value="fixed_price">Fixed Price</option>
-                <option value="timed_auction">Timed Auction</option>
-              </select>
-            </div>
-
-            {auctionType === "timed_auction" && (
+            {mode === "auction" && (
               <div>
                 <label className="text-sm font-medium">Duration (days)</label>
                 <Input
@@ -123,6 +171,12 @@ const ListingModal = ({ isOpen, onClose, nft, onConfirm, isProcessing = false })
             </div>
           </div>
 
+          {formError || error ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+              {formError || error}
+            </div>
+          ) : null}
+
           <div className="flex gap-3 pt-4">
             <Button type="button" variant="outline" onClick={onClose} className="flex-1">
               Cancel
@@ -135,7 +189,7 @@ const ListingModal = ({ isOpen, onClose, nft, onConfirm, isProcessing = false })
               {isProcessing ? "Listing…" : "List NFT"}
             </Button>
           </div>
-        </form>
+          </form>
         </div>
       </div>
     </div>

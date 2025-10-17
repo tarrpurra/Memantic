@@ -31,6 +31,7 @@ pub use http_outcall::{
     publish_meme,
     record_meme_sale,
     remove_meme_from_market,
+    ListingStrategy,
     MemeData,
     PublicStoredMeme,
     PythonMetadata,
@@ -65,6 +66,7 @@ pub use nft_module::{
     icrc7_total_supply,
     // minting
     mint_to,
+    ListingType,
     MetadataValue,
     MintingMode,
     NftImage,

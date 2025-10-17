@@ -621,6 +621,43 @@ class BackendService {
   }
 
   /**
+   * Get the status for the active voting week
+   */
+  async getCurrentWeekStatus() {
+    const result = await this._safeCall('get_current_week_status');
+    if (!Array.isArray(result) || result.length < 4) {
+      return {
+        weekId: 0,
+        remainingNs: 0,
+        endTimeNs: 0,
+        isCompleted: false,
+      };
+    }
+
+    const [rawWeekId, rawRemaining, rawEndTime, completed] = result;
+    const toNumber = (value) => {
+      if (typeof value === 'bigint') {
+        const max = BigInt(Number.MAX_SAFE_INTEGER);
+        if (value > max) return Number.MAX_SAFE_INTEGER;
+        if (value < BigInt(0)) return 0;
+        return Number(value);
+      }
+      if (Array.isArray(value) && value.length) {
+        return toNumber(value[0]);
+      }
+      const n = Number(value);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    return {
+      weekId: toNumber(rawWeekId),
+      remainingNs: toNumber(rawRemaining),
+      endTimeNs: toNumber(rawEndTime),
+      isCompleted: Boolean(completed),
+    };
+  }
+
+  /**
     * Get user's vote on a specific meme
     */
   async getUserVote(memeId) {
@@ -650,11 +687,35 @@ class BackendService {
   /**
      * List a meme for sale
      */
-  async listMemeForSale(memeId, priceE8s) {
+  async listMemeForSale(memeId, options = {}) {
     if (!this.isAuthenticated) {
       throw new Error("Authentication required: Please login to list memes");
     }
-    const result = await this._safeCall('list_meme_for_sale', memeId, priceE8s);
+    const mode = (options.mode || options.type || "fixed_price").toLowerCase();
+
+    const ensurePositive = (value, label) => {
+      const num = Number(value);
+      if (!Number.isFinite(num) || num <= 0) {
+        throw new Error(`${label} must be greater than zero`);
+      }
+      return num;
+    };
+
+    let strategy;
+    if (mode === "auction" || mode === "timed_auction") {
+      const start = ensurePositive(
+        options.startingBid ?? options.startPrice ?? options.price,
+        "Starting bid"
+      );
+      const startE8s = BigInt(Math.round(start * 100000000));
+      strategy = { Auction: { start_price_e8s: startE8s } };
+    } else {
+      const price = ensurePositive(options.price, "Listing price");
+      const priceE8s = BigInt(Math.round(price * 100000000));
+      strategy = { FixedPrice: { price_e8s: priceE8s } };
+    }
+
+    const result = await this._safeCall('list_meme_for_sale', memeId, strategy);
     return this._unwrapResult(result, "list_meme_for_sale failed");
   }
 
@@ -675,6 +736,14 @@ class BackendService {
   async recordMemeSale(memeId, salePriceE8s) {
     const result = await this._safeCall('record_meme_sale', memeId, salePriceE8s);
     return this._unwrapResult(result, "record_meme_sale failed");
+  }
+
+  /**
+   * Get sale metadata for a meme (if minted)
+   */
+  async getSaleMetadataForMeme(memeId) {
+    const result = await this._safeCall('get_sale_metadata_for_meme', memeId);
+    return this._fromOpt(result);
   }
 
   /**

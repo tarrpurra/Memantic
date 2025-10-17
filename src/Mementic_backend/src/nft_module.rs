@@ -179,6 +179,19 @@ pub struct TokenRecord {
     pub has_image: bool,           // indicates presence in STORED_IMAGES
 }
 
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub enum ListingType {
+    None,
+    FixedPrice,
+    Auction,
+}
+
+impl Default for ListingType {
+    fn default() -> Self {
+        ListingType::None
+    }
+}
+
 #[derive(Clone, Debug, Default, CandidType, Serialize, Deserialize)]
 pub struct TokenSaleMetadata {
     pub token_id: Nat,
@@ -190,6 +203,11 @@ pub struct TokenSaleMetadata {
     pub total_earned: u64,
     pub last_sale_price: Option<u64>,
     pub last_sale_at: Option<u64>,
+    pub listing_type: ListingType,
+    pub auction_start_price: Option<u64>,
+    pub auction_highest_bid: Option<u64>,
+    pub auction_highest_bidder: Option<SPrincipal>,
+    pub auction_bid_count: u32,
 }
 
 #[derive(Clone, CandidType, Deserialize)]
