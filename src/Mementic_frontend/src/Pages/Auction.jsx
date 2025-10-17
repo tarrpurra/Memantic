@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
-import Navigation from "../components/Navigation";
+import PageShell from "../components/layout/PageShell";
 import backendService from "../services/backendService";
 
 const ensureArray = (value) =>
@@ -200,13 +200,47 @@ const normalizeMeme = (m, extra = {}) => {
   const createdAt =
     createdAtCandidates.find((value) => value && value > 0) ?? Date.now();
 
-  const saleMetadata =
+  const rawSaleMetadata =
     md?.sale_metadata ?? m?.sale_metadata ?? md?.market_data ?? m?.market_data ?? {};
+  const saleMetadata =
+    typeof rawSaleMetadata === "object" && rawSaleMetadata !== null
+      ? { ...rawSaleMetadata }
+      : {};
+
+  const listingVariant = saleMetadata?.listing_type;
+  let listingType = "None";
+  if (typeof listingVariant === "string" && listingVariant.trim()) {
+    listingType = listingVariant.trim();
+  } else if (listingVariant && typeof listingVariant === "object") {
+    const keys = Object.keys(listingVariant);
+    if (keys.length) {
+      listingType = keys[0];
+    }
+  }
+
   const listingPriceIcp = convertE8sToIcp(
     unwrapOptional(saleMetadata?.listing_price)
   );
+  const reserveIcp =
+    convertE8sToIcp(unwrapOptional(saleMetadata?.auction_start_price)) ??
+    listingPriceIcp;
+  const highestBidIcp = convertE8sToIcp(
+    unwrapOptional(saleMetadata?.auction_highest_bid)
+  );
+  const currentBidIcp =
+    Number.isFinite(highestBidIcp) && highestBidIcp > 0 ? highestBidIcp : null;
+  const bidCount = safeBigIntToNumber(saleMetadata?.auction_bid_count ?? 0);
   const listedAt = normalizeTimestampToMs(unwrapOptional(saleMetadata?.listed_at));
   const views = safeBigIntToNumber(m?.views ?? md?.views ?? 0);
+  const isListed = Boolean(saleMetadata?.is_listed);
+
+  saleMetadata.listingType = listingType;
+  saleMetadata.isListed = isListed;
+  saleMetadata.listingPriceIcp = listingPriceIcp;
+  saleMetadata.reserveIcp = reserveIcp;
+  saleMetadata.currentBidIcp = currentBidIcp;
+  saleMetadata.highestBidIcp = highestBidIcp;
+  saleMetadata.bidCount = bidCount;
 
   return {
     id: toSafeIdString(m?.id ?? m?.meme_id ?? m?._id ?? m?.uuid ?? Date.now()),
@@ -225,6 +259,12 @@ const normalizeMeme = (m, extra = {}) => {
     created_at: createdAt,
     listed_at: listedAt || null,
     listingPriceIcp,
+    reserveIcp,
+    currentBidIcp,
+    highestBidIcp,
+    bidCount,
+    listingType,
+    isListed,
     sale_metadata: saleMetadata,
     market_data: saleMetadata,
     metadata_service: metadata?.service ? String(metadata.service) : null,
@@ -244,7 +284,7 @@ const formatNumber = (value) => {
 
 const formatIcp = (value) => {
   const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return "Not listed";
+  if (!Number.isFinite(n) || n <= 0) return "—";
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K ICP`;
   if (n >= 1) return `${n.toFixed(2)} ICP`;
   return `${n.toFixed(4)} ICP`;
@@ -400,33 +440,69 @@ const Auction = () => {
   const liveAuctions = useMemo(
     () =>
       auctions.filter((meme) => {
-        const sale = meme?.sale_metadata ?? meme?.market_data;
-        return sale?.is_listed ?? true;
+        const sale = meme?.sale_metadata ?? meme?.market_data ?? {};
+        const isListed = meme?.isListed ?? sale?.is_listed ?? false;
+        const rawType =
+          meme?.listingType ?? sale?.listingType ?? sale?.listing_type ?? null;
+        let resolvedType =
+          typeof rawType === "string" && rawType.trim() ? rawType.trim() : "";
+        if (!resolvedType && rawType && typeof rawType === "object") {
+          const keys = Object.keys(rawType);
+          if (keys.length) {
+            resolvedType = keys[0];
+          }
+        }
+        return isListed && resolvedType === "Auction";
       }),
     [auctions]
   );
 
   const aggregateStats = useMemo(() => {
-    const totalVolume = liveAuctions.reduce(
-      (sum, item) => sum + (Number(item.listingPriceIcp) || 0),
-      0
+    if (liveAuctions.length === 0) {
+      return {
+        totalCurrentBid: 0,
+        totalReserves: 0,
+        totalViews: 0,
+        totalVotes: 0,
+        totalBids: 0,
+        averageReserve: 0,
+        averageCurrentBid: 0,
+        highestBid: 0,
+        newestCreated: 0,
+      };
+    }
+
+    const stats = liveAuctions.reduce(
+      (acc, item) => {
+        const currentBid = Number(item.currentBidIcp) || 0;
+        const reserve = Number(item.reserveIcp ?? item.listingPriceIcp) || 0;
+        acc.totalCurrentBid += currentBid;
+        acc.totalReserves += reserve;
+        acc.totalViews += item.views || 0;
+        acc.totalVotes += item.votes || 0;
+        acc.totalBids += Number(item.bidCount) || 0;
+        acc.highestBid = Math.max(acc.highestBid, currentBid);
+        acc.newestCreated = Math.max(acc.newestCreated, item.created_at || 0);
+        return acc;
+      },
+      {
+        totalCurrentBid: 0,
+        totalReserves: 0,
+        totalViews: 0,
+        totalVotes: 0,
+        totalBids: 0,
+        highestBid: 0,
+        newestCreated: 0,
+      }
     );
-    const totalViews = liveAuctions.reduce(
-      (sum, item) => sum + (item.views || 0),
-      0
-    );
-    const totalVotes = liveAuctions.reduce(
-      (sum, item) => sum + (item.votes || 0),
-      0
-    );
-    const averageBid = liveAuctions.length
-      ? totalVolume / liveAuctions.length
-      : 0;
-    const newestCreated = liveAuctions.reduce(
-      (latest, item) => Math.max(latest, item.created_at || 0),
-      0
-    );
-    return { totalVolume, totalViews, totalVotes, averageBid, newestCreated };
+
+    const divisor = liveAuctions.length || 1;
+
+    return {
+      ...stats,
+      averageReserve: stats.totalReserves / divisor,
+      averageCurrentBid: stats.totalCurrentBid / divisor,
+    };
   }, [liveAuctions]);
 
   const themeTags = useMemo(() => {
@@ -470,7 +546,11 @@ const Auction = () => {
 
   const priceBands = useMemo(() => {
     const prices = liveAuctions
-      .map((auction) => Number(auction.listingPriceIcp))
+      .map((auction) =>
+        Number(
+          auction.reserveIcp ?? auction.listingPriceIcp ?? auction.currentBidIcp
+        )
+      )
       .filter((value) => Number.isFinite(value) && value > 0)
       .sort((a, b) => a - b);
     if (prices.length === 0) return [];
@@ -512,54 +592,85 @@ const Auction = () => {
         id: auction.id,
         title: auction.title,
         created_at: auction.created_at,
-        listingPriceIcp: auction.listingPriceIcp,
+        currentBidIcp: auction.currentBidIcp,
+        reserveIcp: auction.reserveIcp ?? auction.listingPriceIcp,
+        bidCount: auction.bidCount,
         creator: auction.creator,
         views: auction.views,
       }));
   }, [liveAuctions]);
 
+  const heroMetrics = useMemo(
+    () => [
+      {
+        icon: Activity,
+        label: "Active auctions",
+        value: formatNumber(liveAuctions.length),
+      },
+      {
+        icon: Gavel,
+        label: "Bids placed",
+        value: formatNumber(aggregateStats.totalBids),
+      },
+      {
+        icon: TrendingUp,
+        label: "Avg reserve",
+        value: formatIcp(aggregateStats.averageReserve),
+      },
+      {
+        icon: Users,
+        label: "Collectors watching",
+        value: formatNumber(aggregateStats.totalViews),
+      },
+    ],
+    [aggregateStats, liveAuctions.length]
+  );
+
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-background text-foreground">
-      <div className="pointer-events-none absolute inset-0 opacity-70">
-        <div className="hero-aurora" />
-        <div className="hero-grid" />
-        <div className="hero-sparkles" />
-      </div>
-
-      <Navigation />
-
-      <main className="relative z-10">
-        <section className="px-5 py-16 sm:px-8">
-          <div className="mx-auto max-w-7xl space-y-8">
-            <div className="overflow-hidden rounded-3xl border border-border/50 bg-background/75 p-8 shadow-card backdrop-blur-xl sm:p-12">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+    <PageShell mainClassName="gap-16">
+      <section className="page-section space-y-8 pt-2">
+        <div className="mx-auto max-w-7xl space-y-8">
+            <div className="overflow-hidden rounded-3xl border border-border/50 bg-background/75 p-6 shadow-card backdrop-blur-xl sm:p-12">
+              <div className="flex flex-col gap-6 text-center lg:flex-row lg:items-center lg:justify-between lg:text-left">
                 <div className="space-y-4">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                  <span className="mx-auto inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground sm:mx-0">
                     <Gavel className="h-4 w-4 text-primary" />
                     Auction Arena
                   </span>
-                  <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
+                  <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
                     Live auctions curated from the latest meme drops
                   </h1>
-                  <p className="max-w-2xl text-base text-muted-foreground">
+                  <p className="mx-auto max-w-2xl text-sm text-muted-foreground sm:mx-0 sm:text-base">
                     Track creator momentum, monitor bidding interest, and surface culture-shaping memes as they move from pre-market hype to the main arena.
                   </p>
-                  <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-2 rounded-full border border-border/60 px-3 py-1">
-                      <Activity className="h-3.5 w-3.5 text-primary" />
-                      0 active auctions
-                    </span>
-                    <span className="inline-flex items-center gap-2 rounded-full border border-border/60 px-3 py-1">
-                      <Users className="h-3.5 w-3.5 text-primary" />
-                      0 votes in play
-                    </span>
-                    <span className="inline-flex items-center gap-2 rounded-full border border-border/60 px-3 py-1">
-                      <Clock className="h-3.5 w-3.5 text-primary" />
-                      Updated {formatRelativeTime(aggregateStats.newestCreated)}
-                    </span>
+                  <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 text-xs sm:grid sm:snap-none sm:overflow-visible sm:grid-cols-2 lg:grid-cols-4">
+                    {heroMetrics.map((metric) => {
+                      const Icon = metric.icon;
+                      return (
+                        <div
+                          key={metric.label}
+                          className="flex min-w-[200px] items-center justify-between rounded-2xl border border-border/60 bg-background/70 px-4 py-3 sm:min-w-0"
+                        >
+                          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                            <Icon className="h-3.5 w-3.5 text-primary" />
+                            {metric.label}
+                          </div>
+                          <span className="text-sm font-semibold text-foreground">
+                            {metric.value}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="inline-flex items-center justify-center gap-2 text-xs text-muted-foreground sm:justify-start">
+                    <Clock className="h-3.5 w-3.5 text-primary" />
+                    Updated {" "}
+                    {aggregateStats.newestCreated
+                      ? formatRelativeTime(aggregateStats.newestCreated)
+                      : "just now"}
                   </div>
                 </div>
-                <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+                <div className="flex w-full flex-col gap-3 sm:flex-row sm:justify-center lg:w-auto lg:flex-col lg:items-stretch">
                   <Link to="/myplace" className="flex-1">
                     <Button variant="hero" size="xl" className="w-full rounded-full px-8">
                       Create Auction
@@ -589,24 +700,50 @@ const Auction = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6 text-sm text-muted-foreground">
-                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
-                      <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em]">
-                        <span>Total volume</span>
-                        <span className="text-primary">Not listed</span>
+                    <div className="grid gap-3 text-xs min-[420px]:grid-cols-2">
+                      <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                          Reserve volume
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-foreground">
+                          {formatIcp(aggregateStats.totalReserves)}
+                        </p>
+                        <span className="text-xs text-muted-foreground">
+                          Avg reserve {formatIcp(aggregateStats.averageReserve)}
+                        </span>
                       </div>
-                      <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                        <div className="rounded-xl border border-border/60 bg-background/60 p-3">
-                          <p className="uppercase tracking-[0.3em]">Avg bid</p>
-                          <p className="mt-1 text-lg font-semibold text-foreground">
-                            —
-                          </p>
-                        </div>
-                        <div className="rounded-xl border border-border/60 bg-background/60 p-3">
-                          <p className="uppercase tracking-[0.3em]">Views</p>
-                          <p className="mt-1 text-lg font-semibold text-foreground">
-                            0
-                          </p>
-                        </div>
+                      <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                          Active bids
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-foreground">
+                          {formatNumber(aggregateStats.totalBids)}
+                        </p>
+                        <span className="text-xs text-muted-foreground">
+                          High bid {formatIcp(aggregateStats.highestBid)}
+                        </span>
+                      </div>
+                      <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                          Audience reach
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-foreground">
+                          {formatNumber(aggregateStats.totalViews)}
+                        </p>
+                        <span className="text-xs text-muted-foreground">
+                          {formatNumber(aggregateStats.totalVotes)} votes tracked
+                        </span>
+                      </div>
+                      <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                          Bid momentum
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-foreground">
+                          {formatIcp(aggregateStats.averageCurrentBid)}
+                        </p>
+                        <span className="text-xs text-muted-foreground">
+                          Across {formatNumber(liveAuctions.length)} auctions
+                        </span>
                       </div>
                     </div>
 
@@ -615,11 +752,11 @@ const Auction = () => {
                         Trending themes
                       </h3>
                       {themeTags.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
                           {themeTags.map((tag) => (
                             <span
                               key={tag.label}
-                              className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs text-foreground"
+                              className="inline-flex min-w-fit items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs text-foreground"
                             >
                               #{tag.label}
                               <span className="text-muted-foreground">×{tag.count}</span>
@@ -642,7 +779,7 @@ const Auction = () => {
                           {topCreators.map((creator) => (
                             <div
                               key={creator.creator}
-                              className="flex items-center justify-between rounded-xl border border-border/60 bg-background/70 px-3 py-2"
+                              className="flex flex-col gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
                             >
                               <div className="flex flex-col">
                                 <span className="text-foreground">@{creator.creator}</span>
@@ -650,7 +787,7 @@ const Auction = () => {
                                   {formatNumber(creator.views)} views · {formatNumber(creator.votes)} votes
                                 </span>
                               </div>
-                              <span className="text-xs text-primary">{creator.drops} drops</span>
+                              <span className="text-xs text-primary sm:text-right">{creator.drops} drops</span>
                             </div>
                           ))}
                         </div>
@@ -668,10 +805,10 @@ const Auction = () => {
                           {priceBands.map((band) => (
                             <div
                               key={band.label}
-                              className="flex items-center justify-between rounded-xl border border-border/60 bg-background/70 px-3 py-2"
+                              className="flex flex-col gap-1 rounded-xl border border-border/60 bg-background/70 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
                             >
                               <span className="text-foreground">{band.label}</span>
-                              <span className="text-xs text-muted-foreground">{band.count} drops</span>
+                              <span className="text-xs text-muted-foreground sm:text-right">{band.count} drops</span>
                             </div>
                           ))}
                         </div>
@@ -714,8 +851,24 @@ const Auction = () => {
                       const createdAtDisplay = new Date(
                         auction.created_at || Date.now()
                       ).toLocaleString();
-                      const hasReserve =
-                        Number.isFinite(auction.listingPriceIcp) && auction.listingPriceIcp > 0;
+                      const reserveValue = Number(
+                        auction.reserveIcp ?? auction.listingPriceIcp ?? 0
+                      );
+                      const currentBidValue = Number(auction.currentBidIcp ?? 0);
+                      const displayCurrentBid =
+                        currentBidValue > 0
+                          ? formatIcp(currentBidValue)
+                          : "—";
+                      const displayReserve =
+                        reserveValue > 0 ? formatIcp(reserveValue) : "—";
+                      const bidCountValue = Number(auction.bidCount ?? 0);
+                      const bidSummary =
+                        bidCountValue > 0
+                          ? `${formatNumber(bidCountValue)} ${
+                              bidCountValue === 1 ? "bid" : "bids"
+                            } placed`
+                          : "Awaiting first bid";
+                      const serviceLabel = String(auction.metadata_service || "on-chain");
 
                       return (
                         <motion.div
@@ -751,7 +904,7 @@ const Auction = () => {
                                 </div>
                               </div>
                               <div className="flex flex-1 flex-col gap-4 p-6">
-                                <div className="flex items-start justify-between gap-4">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                   <div className="space-y-1">
                                     <h3 className="text-lg font-semibold text-foreground">
                                       {auction.title}
@@ -768,26 +921,37 @@ const Auction = () => {
                                 <div className="grid gap-4 sm:grid-cols-2">
                                   <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
                                     <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                                      Top bid
+                                      Current bid
                                     </p>
                                     <p className="mt-2 text-2xl font-semibold text-foreground">
-                                      {formatIcp(auction.listingPriceIcp)}
+                                      {displayCurrentBid}
                                     </p>
                                     <span className="text-xs text-muted-foreground">
-                                      {hasReserve ? "Reserve set" : "Reserve open"}
+                                      {bidSummary}
                                     </span>
                                   </div>
                                   <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
                                     <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                                      Votes
+                                      Reserve
                                     </p>
                                     <p className="mt-2 text-2xl font-semibold text-foreground">
-                                      {formatNumber(auction.votes)}
+                                      {displayReserve}
                                     </p>
                                     <span className="text-xs text-muted-foreground">
-                                      {auction.metadata_service || "on-chain"}
+                                      {serviceLabel}
                                     </span>
                                   </div>
+                                </div>
+
+                                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/70 px-3 py-1">
+                                    <Flame className="h-3 w-3 text-primary" />
+                                    {formatNumber(auction.votes)} votes
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/70 px-3 py-1">
+                                    <Sparkles className="h-3 w-3 text-primary" />
+                                    {serviceLabel}
+                                  </span>
                                 </div>
 
                                 <div className="flex flex-col gap-3 text-xs text-muted-foreground">
@@ -801,7 +965,7 @@ const Auction = () => {
                                   ) : null}
                                 </div>
 
-                                <div className="flex items-center justify-between gap-3">
+                                <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
                                   <Link
                                     to={`/marketplace?focus=${encodeURIComponent(auction.id)}`}
                                     className="inline-flex items-center gap-2 text-sm font-semibold text-primary"
@@ -809,8 +973,8 @@ const Auction = () => {
                                     Place bid
                                     <ArrowRight className="h-4 w-4" />
                                   </Link>
-                                  <span className="text-xs text-muted-foreground">
-                                    {formatNumber(auction.views)} collectors watching
+                                  <span className="text-xs text-muted-foreground sm:text-right">
+                                    {formatNumber(auction.views)} collectors watching · {bidSummary}
                                   </span>
                                 </div>
                               </div>
@@ -876,13 +1040,13 @@ const Auction = () => {
                         {topMemes.map((entry) => (
                           <div
                             key={entry.id}
-                            className="flex items-center justify-between rounded-xl border border-border/60 bg-background/70 px-3 py-2"
+                            className="flex flex-col gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
                           >
                             <div className="flex flex-col">
                               <span className="text-foreground">#{entry.rank} · {entry.title}</span>
                               <span className="text-xs text-muted-foreground">@{entry.creator}</span>
                             </div>
-                            <span className="text-xs text-primary">{formatNumber(entry.votes)} votes</span>
+                            <span className="text-xs text-primary sm:text-right">{formatNumber(entry.votes)} votes</span>
                           </div>
                         ))}
                       </div>
@@ -905,19 +1069,30 @@ const Auction = () => {
                         {recentActivity.map((activity) => (
                           <div
                             key={activity.id}
-                            className="flex items-start justify-between rounded-xl border border-border/60 bg-background/70 px-3 py-2"
+                            className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/70 px-3 py-2 sm:flex-row sm:items-start sm:justify-between"
                           >
-                            <div className="max-w-[70%]">
+                            <div className="w-full sm:max-w-[70%]">
                               <p className="text-foreground">{activity.title}</p>
                               <p className="text-xs text-muted-foreground">
                                 @{activity.creator} · {formatRelativeTime(activity.created_at)}
                               </p>
                             </div>
-                            <div className="text-right text-xs">
-                              <p className="font-semibold text-primary">
-                                {formatIcp(activity.listingPriceIcp)}
-                              </p>
-                              <p className="text-muted-foreground">{formatNumber(activity.views)} views</p>
+                            <div className="text-left text-xs sm:text-right">
+                              <div className="space-y-1">
+                                <div>
+                                  <p className="leading-tight font-semibold text-primary">
+                                    {formatIcp(activity.currentBidIcp ?? activity.reserveIcp)}
+                                  </p>
+                                  <p className="text-muted-foreground leading-tight">Current bid</p>
+                                </div>
+                                <p className="text-muted-foreground leading-tight">
+                                  Reserve {formatIcp(activity.reserveIcp)}
+                                </p>
+                                <p className="text-muted-foreground leading-tight">
+                                  {formatNumber(activity.bidCount)}{' '}
+                                  {activity.bidCount === 1 ? 'bid' : 'bids'} · {formatNumber(activity.views)} views
+                                </p>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -944,9 +1119,8 @@ const Auction = () => {
               </div>
             </div>
           </div>
-        </section>
-      </main>
-    </div>
+      </section>
+    </PageShell>
   );
 };
 

@@ -13,7 +13,7 @@ import {
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
-import Navigation from "../components/Navigation";
+import PageShell from "../components/layout/PageShell";
 import ListingModal from "../components/ListingModal";
 import backendService from "../services/backendService";
 import { useAuth } from "../contexts/AuthContext";
@@ -325,9 +325,16 @@ const Marketplace = () => {
       }
 
       await backendService.listMemeForSale(BigInt(idText), options);
+      const normalizedMode =
+        (options.mode || options.auctionType) === "timed_auction"
+          ? "auction"
+          : (options.mode || "fixed");
       toast({
         title: "Listing published",
-        description: "Your meme NFT is now trading on the marketplace.",
+        description:
+          normalizedMode === "auction"
+            ? "Your meme NFT is now live in the auction arena."
+            : "Your meme NFT is now trading on the marketplace.",
       });
 
       let refreshedSnapshot = null;
@@ -511,19 +518,9 @@ const Marketplace = () => {
   }, [topWinners]);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-background text-foreground">
-      <div className="pointer-events-none absolute inset-0 opacity-70">
-        <div className="hero-aurora" />
-        <div className="hero-grid" />
-        <div className="hero-sparkles" />
-      </div>
-
-      <Navigation />
-
-      <main className="relative z-10">
-        <section className="px-5 pb-8 pt-16 sm:px-8">
-          <div className="mx-auto w-full max-w-6xl space-y-8">
-            <div className="grid gap-8 lg:grid-cols-[1.2fr,0.8fr]">
+    <PageShell>
+        <section className="page-section space-y-8">
+          <div className="grid gap-8 lg:grid-cols-[1.2fr,0.8fr]">
               <div className="space-y-6 text-left">
                 <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
                   <Flame className="h-4 w-4 text-primary" />
@@ -711,60 +708,137 @@ const Marketplace = () => {
                       {winnersError}
                     </div>
                   ) : topWinners.length > 0 ? (
-                    <div className="overflow-hidden rounded-2xl border border-border/60 bg-background/70">
-                      <table className="min-w-full divide-y divide-border/50 text-left text-sm">
-                        <thead className="bg-background/60 text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                          <tr>
-                            <th className="px-4 py-3 font-medium">Asset</th>
-                            <th className="px-4 py-3 font-medium">Rank</th>
-                            <th className="px-4 py-3 font-medium">Votes</th>
-                            <th className="px-4 py-3 font-medium">Minted</th>
-                            <th className="px-4 py-3 font-medium">Listing</th>
-                            <th className="px-4 py-3 font-medium text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border/40">
-                          {topWinners.map((winner) => {
-                            const mintedCount = winner.mintedTokens?.length ?? 0;
-                            const canMint = canMintWinner(winner);
-                            const canList = canListWinner(winner);
-                            const listingLabel = formatListingStatus(winner.saleSnapshot);
-                            return (
-                              <tr key={winner.memeId} className="transition hover:bg-background/60">
-                                <td className="px-4 py-4">
-                                  <div className="flex items-center gap-3">
-                                    {winner.imageUrl ? (
-                                      <div className="h-12 w-12 overflow-hidden rounded-xl border border-border/60">
-                                        <img
-                                          src={winner.imageUrl}
-                                          alt={winner.title}
-                                          className="h-full w-full object-cover"
-                                          loading="lazy"
-                                        />
+                    <>
+                      <div className="hidden overflow-hidden rounded-2xl border border-border/60 bg-background/70 md:block">
+                        <table className="min-w-full divide-y divide-border/50 text-left text-sm">
+                          <thead className="bg-background/60 text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                            <tr>
+                              <th className="px-4 py-3 font-medium">Asset</th>
+                              <th className="px-4 py-3 font-medium">Rank</th>
+                              <th className="px-4 py-3 font-medium">Votes</th>
+                              <th className="px-4 py-3 font-medium">Minted</th>
+                              <th className="px-4 py-3 font-medium">Listing</th>
+                              <th className="px-4 py-3 font-medium text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/40">
+                            {topWinners.map((winner) => {
+                              const mintedCount = winner.mintedTokens?.length ?? 0;
+                              const canMint = canMintWinner(winner);
+                              const canList = canListWinner(winner);
+                              const listingLabel = formatListingStatus(winner.saleSnapshot);
+                              return (
+                                <tr key={winner.memeId} className="transition hover:bg-background/60">
+                                  <td className="px-4 py-4">
+                                    <div className="flex items-center gap-3">
+                                      {winner.imageUrl ? (
+                                        <div className="h-12 w-12 overflow-hidden rounded-xl border border-border/60">
+                                          <img
+                                            src={winner.imageUrl}
+                                            alt={winner.title}
+                                            className="h-full w-full object-cover"
+                                            loading="lazy"
+                                          />
+                                        </div>
+                                      ) : (
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border/60 bg-background/80 text-lg">
+                                          🖼️
+                                        </div>
+                                      )}
+                                      <div>
+                                        <p className="text-sm font-semibold text-foreground">{winner.title}</p>
+                                        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                                          Owner · {shortPrincipal(winner.ownerPrincipal)}
+                                        </p>
                                       </div>
-                                    ) : (
-                                      <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border/60 bg-background/80 text-lg">
-                                        🖼️
-                                      </div>
-                                    )}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-4 text-sm font-semibold text-primary">#{winner.rank}</td>
+                                  <td className="px-4 py-4 text-sm text-foreground">{winner.upvotes.toLocaleString()}</td>
+                                  <td className="px-4 py-4 text-sm text-foreground">{mintedCount > 0 ? mintedCount : "—"}</td>
+                                  <td className="px-4 py-4 text-xs text-muted-foreground">{listingLabel}</td>
+                                  <td className="px-4 py-4">
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="border border-border/60 bg-background/70"
+                                        onClick={() => openMintDialog(winner)}
+                                        disabled={!canMint}
+                                      >
+                                        {canMint ? "Mint NFT" : mintedCount > 0 ? "Minted" : "Mint locked"}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="border-border/60"
+                                        onClick={() => openListingDialog(winner)}
+                                        disabled={!canList}
+                                      >
+                                        {winner.saleSnapshot?.isListed ? "Listed" : "List to market"}
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="grid gap-4 md:hidden">
+                        {topWinners.map((winner) => {
+                          const mintedCount = winner.mintedTokens?.length ?? 0;
+                          const canMint = canMintWinner(winner);
+                          const canList = canListWinner(winner);
+                          const listingLabel = formatListingStatus(winner.saleSnapshot);
+
+                          return (
+                            <div
+                              key={`card-${winner.memeId}`}
+                              className="rounded-2xl border border-border/60 bg-background/70 p-4 shadow-card"
+                            >
+                              <div className="flex items-start gap-3">
+                                {winner.imageUrl ? (
+                                  <div className="h-16 w-16 overflow-hidden rounded-xl border border-border/60">
+                                    <img
+                                      src={winner.imageUrl}
+                                      alt={winner.title}
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-border/60 bg-background/80 text-xl">
+                                    🖼️
+                                  </div>
+                                )}
+                                <div className="flex flex-1 flex-col gap-2">
+                                  <div>
+                                    <p className="text-sm font-semibold text-foreground">{winner.title}</p>
+                                    <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                                      #{winner.rank} • {shortPrincipal(winner.ownerPrincipal)}
+                                    </p>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
                                     <div>
-                                      <p className="text-sm font-semibold text-foreground">{winner.title}</p>
-                                      <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                                        Owner · {shortPrincipal(winner.ownerPrincipal)}
-                                      </p>
+                                      <p className="font-semibold text-foreground">{winner.upvotes.toLocaleString()}</p>
+                                      <p>Votes</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-semibold text-foreground">{mintedCount > 0 ? mintedCount : "—"}</p>
+                                      <p>Minted</p>
+                                    </div>
+                                    <div className="col-span-2 text-[11px]">
+                                      <span className="inline-flex items-center rounded-full border border-border/60 bg-background/70 px-3 py-1 text-[11px]">
+                                        {listingLabel}
+                                      </span>
                                     </div>
                                   </div>
-                                </td>
-                                <td className="px-4 py-4 text-sm font-semibold text-primary">#{winner.rank}</td>
-                                <td className="px-4 py-4 text-sm text-foreground">{winner.upvotes.toLocaleString()}</td>
-                                <td className="px-4 py-4 text-sm text-foreground">{mintedCount > 0 ? mintedCount : "—"}</td>
-                                <td className="px-4 py-4 text-xs text-muted-foreground">{listingLabel}</td>
-                                <td className="px-4 py-4">
-                                  <div className="flex flex-wrap items-center justify-end gap-2">
+                                  <div className="mt-2 grid gap-2">
                                     <Button
                                       type="button"
                                       variant="ghost"
-                                      className="border border-border/60 bg-background/70"
+                                      className="w-full border border-border/60 bg-background/70"
                                       onClick={() => openMintDialog(winner)}
                                       disabled={!canMint}
                                     >
@@ -773,20 +847,20 @@ const Marketplace = () => {
                                     <Button
                                       type="button"
                                       variant="outline"
-                                      className="border-border/60"
+                                      className="w-full border-border/60"
                                       onClick={() => openListingDialog(winner)}
                                       disabled={!canList}
                                     >
                                       {winner.saleSnapshot?.isListed ? "Listed" : "List to market"}
                                     </Button>
                                   </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       Top winners will appear once a weekly voting round completes.
@@ -813,9 +887,8 @@ const Marketplace = () => {
           </div>
         </section>
 
-        <section className="px-5 pb-12 sm:px-8">
-          <div className="mx-auto max-w-6xl space-y-6">
-            <Card className="border-border/50 bg-background/80 shadow-card backdrop-blur-xl">
+        <section className="page-section space-y-6">
+          <Card className="border-border/50 bg-background/80 shadow-card backdrop-blur-xl">
               <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-3 text-xl font-semibold text-muted-foreground">
@@ -827,36 +900,74 @@ const Marketplace = () => {
                   </p>
                 </div>
               </CardHeader>
-              <CardContent className="overflow-x-auto">
+              <CardContent className="space-y-4">
                 {tickerItems.length > 0 ? (
-                  <table className="min-w-full divide-y divide-border text-left text-sm">
-                    <thead className="uppercase tracking-[0.3em] text-muted-foreground">
-                      <tr>
-                        <th className="py-3 pr-4 font-medium">Meme</th>
-                        <th className="py-3 pr-4 font-medium">Last Price</th>
-                        <th className="py-3 pr-4 font-medium">Votes</th>
-                        <th className="py-3 pr-4 font-medium">Minted</th>
-                        <th className="py-3 pr-4 font-medium">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
+                  <>
+                    <div className="hidden overflow-x-auto md:block">
+                      <table className="min-w-full divide-y divide-border text-left text-sm">
+                        <thead className="uppercase tracking-[0.3em] text-muted-foreground">
+                          <tr>
+                            <th className="py-3 pr-4 font-medium">Meme</th>
+                            <th className="py-3 pr-4 font-medium">Last Price</th>
+                            <th className="py-3 pr-4 font-medium">Votes</th>
+                            <th className="py-3 pr-4 font-medium">Minted</th>
+                            <th className="py-3 pr-4 font-medium">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60">
+                          {tickerItems.map((item) => (
+                            <tr key={`order-${item.id}`} className="transition hover:bg-background/50">
+                              <td className="whitespace-nowrap py-4 pr-4 text-foreground">
+                                #{item.rank} · {item.title}
+                              </td>
+                              <td className="whitespace-nowrap py-4 pr-4 font-semibold text-primary">
+                                {item.priceDisplay}
+                              </td>
+                              <td className="whitespace-nowrap py-4 pr-4 text-foreground">
+                                {item.votes.toLocaleString()}
+                              </td>
+                              <td className="whitespace-nowrap py-4 pr-4 text-foreground">{item.minted}</td>
+                              <td className="whitespace-nowrap py-4 pr-4 text-muted-foreground">{item.listingLabel}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="grid gap-3 md:hidden">
                       {tickerItems.map((item) => (
-                        <tr key={`order-${item.id}`} className="transition hover:bg-background/50">
-                          <td className="whitespace-nowrap py-4 pr-4 text-foreground">
-                            #{item.rank} · {item.title}
-                          </td>
-                          <td className="whitespace-nowrap py-4 pr-4 font-semibold text-primary">
-                            {item.priceDisplay}
-                          </td>
-                          <td className="whitespace-nowrap py-4 pr-4 text-foreground">
-                            {item.votes.toLocaleString()}
-                          </td>
-                          <td className="whitespace-nowrap py-4 pr-4 text-foreground">{item.minted}</td>
-                          <td className="whitespace-nowrap py-4 pr-4 text-muted-foreground">{item.listingLabel}</td>
-                        </tr>
+                        <div
+                          key={`order-card-${item.id}`}
+                          className="rounded-2xl border border-border/60 bg-background/70 p-4 shadow-card"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">
+                                #{item.rank} · {item.title}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {item.listingLabel}
+                              </p>
+                            </div>
+                            <span className="rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs font-semibold text-primary">
+                              {item.priceDisplay}
+                            </span>
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                            <div>
+                              <p className="text-base font-semibold text-foreground">
+                                {item.votes.toLocaleString()}
+                              </p>
+                              <p>Votes</p>
+                            </div>
+                            <div>
+                              <p className="text-base font-semibold text-foreground">{item.minted}</p>
+                              <p>Editions</p>
+                            </div>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  </>
                 ) : (
                   <p className="py-8 text-center text-sm text-muted-foreground">
                     Waiting for fresh listings. Mint a champion to open the order book.
@@ -872,9 +983,8 @@ const Marketplace = () => {
           </div>
         </section>
 
-        <section className="px-5 pb-20 sm:px-8">
-          <div className="mx-auto max-w-6xl space-y-6">
-            <div className="flex flex-col gap-3">
+        <section className="page-section space-y-6 pb-6">
+          <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
                 <Activity className="h-4 w-4 text-primary" />
                 Market Feed
@@ -1027,8 +1137,7 @@ const Marketplace = () => {
           isProcessing={listingDialog.isSubmitting}
           error={listingDialog.error}
         />
-      </main>
-    </div>
+    </PageShell>
   );
 };
 

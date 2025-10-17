@@ -668,7 +668,10 @@ const Portfolio = () => {
       await backendService.listMemeForSale(BigInt(idAsString), options);
       toast({
         title: "Listing created successfully!",
-        description: "Your NFT is now visible on the marketplace.",
+        description:
+          mode === "auction"
+            ? "Your NFT is now live in the auction arena."
+            : "Your NFT is now visible on the marketplace.",
       });
       closeListingModal();
       await fetchData();

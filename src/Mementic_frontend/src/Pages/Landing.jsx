@@ -15,7 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/Card";
-import Navigation from "../components/Navigation";
+import PageShell from "../components/layout/PageShell";
 import { useAuth } from "../contexts/AuthContext";
 import backendService from "../services/backendService";
 
@@ -106,16 +106,7 @@ const Landing = () => {
   const heroName = formatDisplayName(username, principal);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-background text-foreground">
-      <div className="pointer-events-none fixed inset-0 z-0 opacity-70">
-        <div className="hero-aurora" />
-        <div className="hero-grid" />
-        <div className="hero-sparkles" />
-      </div>
-
-      <Navigation />
-
-      <main className="relative z-10">
+    <PageShell mainClassName="gap-0 px-0 pb-0 pt-0">
         <section
           id="hero"
           className="relative flex min-h-[78vh] items-center justify-center px-5 py-24 sm:px-8"
@@ -275,7 +266,7 @@ const Landing = () => {
           </div>
         </div>
       </footer>
-    </div>
+    </PageShell>
   );
 };
 
