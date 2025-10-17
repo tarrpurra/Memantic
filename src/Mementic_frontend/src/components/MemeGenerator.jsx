@@ -546,6 +546,7 @@ export const MemeGenerator = () => {
           />
         </div>
 
+
         {/* Authentication Status */}
         {!isAuthenticated ? (
           <Card className="p-4 border-destructive/20 bg-destructive/5">
@@ -637,6 +638,38 @@ export const MemeGenerator = () => {
             </Button>
           </Card>
         )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="p-4 border-primary/20">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-secondary" />
+              <span className="text-sm font-medium">AI Powered</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Advanced meme generation using latest AI models
+            </p>
+          </Card>
+
+          <Card className="p-4 border-primary/20">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-accent" />
+              <span className="text-sm font-medium">Viral Ready</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Optimized for maximum memetic potential
+            </p>
+          </Card>
+
+          <Card className="p-4 border-primary/20">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">NFT Mintable</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Top memes become valuable NFTs
+            </p>
+          </Card>
+        </div>
 
         <Button
           type="button"

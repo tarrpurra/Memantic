@@ -237,37 +237,37 @@ const Landing = () => {
             })}
           </div>
         </section>
-      </main>
 
-      <footer className="relative z-10 border-t border-border/40 bg-gradient-to-br from-background to-background/80">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-black text-white">
-              <span className="text-xs font-semibold">ICP</span>
+        <footer className="relative z-10 border-t border-border/40 bg-gradient-to-br from-background to-background/80">
+          <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-8">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-black text-white">
+                <span className="text-xs font-semibold">ICP</span>
+              </div>
+              <span>Built on Internet Computer</span>
             </div>
-            <span>Built on Internet Computer</span>
+            <div className="flex flex-wrap items-center gap-4">
+              <a className="hover:text-foreground" href="/about">
+                About
+              </a>
+              <span className="text-border">|</span>
+              <a className="hover:text-foreground" href="/terms">
+                Terms
+              </a>
+              <span className="text-border">|</span>
+              <a className="hover:text-foreground" href="/privacy">
+                Privacy
+              </a>
+              <span className="text-border">|</span>
+              <a className="hover:text-foreground" href="/contact">
+                Contact
+              </a>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-4">
-            <a className="hover:text-foreground" href="/about">
-              About
-            </a>
-            <span className="text-border">|</span>
-            <a className="hover:text-foreground" href="/terms">
-              Terms
-            </a>
-            <span className="text-border">|</span>
-            <a className="hover:text-foreground" href="/privacy">
-              Privacy
-            </a>
-            <span className="text-border">|</span>
-            <a className="hover:text-foreground" href="/contact">
-              Contact
-            </a>
-          </div>
-        </div>
-      </footer>
-    </PageShell>
+        </footer>
+      </PageShell>
   );
 };
 
 export default Landing;
+

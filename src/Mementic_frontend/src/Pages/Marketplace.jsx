@@ -594,7 +594,6 @@ const Marketplace = () => {
                 </div>
               </div>
             </div>
-          </div>
         </section>
 
         <section className="px-5 pb-12 sm:px-8">
@@ -980,7 +979,6 @@ const Marketplace = () => {
                 )}
               </CardContent>
             </Card>
-          </div>
         </section>
 
         <section className="page-section space-y-6 pb-6">
@@ -1023,7 +1021,6 @@ const Marketplace = () => {
             ) : (
               <p className="text-sm text-muted-foreground py-8 text-center">No market feed available yet.</p>
             )}
-          </div>
         </section>
         {mintDialog.open && modalWinner ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">

@@ -29,6 +29,11 @@ type LeaderboardEntry = record {
   rank : nat32;
   meme_data : opt PublicStoredMeme;
 };
+type ListingStrategy = variant {
+  Auction : record { start_price_e8s : nat64 };
+  FixedPrice : record { price_e8s : nat64 };
+};
+type ListingType = variant { None; Auction; FixedPrice };
 type MemeData = record {
   image_url : text;
   metadata : PythonMetadata;
@@ -104,26 +109,21 @@ type TokenRecord = record {
   has_image : bool;
   minted_at : nat64;
 };
-type ListingStrategy = variant {
-  FixedPrice : record { price_e8s : nat64 };
-  Auction : record { start_price_e8s : nat64 };
-};
-type ListingType = variant { None; FixedPrice; Auction };
 type TokenSaleMetadata = record {
   listing_price : opt nat64;
   total_sales : nat64;
+  auction_highest_bidder : opt principal;
+  auction_bid_count : nat32;
+  listing_type : ListingType;
   meme_id : nat64;
+  auction_start_price : opt nat64;
   token_id : nat;
   last_sale_price : opt nat64;
   is_listed : bool;
   last_sale_at : opt nat64;
   total_earned : nat64;
-  listed_at : opt nat64;
-  listing_type : ListingType;
-  auction_start_price : opt nat64;
   auction_highest_bid : opt nat64;
-  auction_highest_bidder : opt principal;
-  auction_bid_count : nat32;
+  listed_at : opt nat64;
 };
 type TopEntry = record {
   upvotes : nat32;

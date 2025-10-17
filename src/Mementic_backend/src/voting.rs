@@ -119,11 +119,11 @@ pub enum VoteType {
 
 #[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
 pub struct WeeklyPeriod {
+    pub meme_count: u32,    // optional; not used for logic here
     pub week_id: u64,
-    pub start_time: u64,    // ns
     pub end_time: u64,      // ns
     pub is_completed: bool, // true once voting is locked for this week
-    pub meme_count: u32,    // optional; not used for logic here
+    pub start_time: u64,    // ns
 }
 
 impl Storable for WeeklyPeriod {
