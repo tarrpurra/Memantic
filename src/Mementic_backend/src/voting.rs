@@ -38,7 +38,10 @@ impl Storable for UserMemeKey {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::Decode!(&bytes, UserMemeKey).expect("decode UserMemeKey")
+        candid::Decode!(&bytes, UserMemeKey).unwrap_or_else(|_| {
+            // Return a default key if decoding fails
+            UserMemeKey(Principal::anonymous(), 0)
+        })
     }
 }
 
@@ -84,7 +87,18 @@ impl Storable for MemeVotes {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::Decode!(&bytes, MemeVotes).expect("decode MemeVotes")
+        candid::Decode!(&bytes, MemeVotes).unwrap_or_else(|_| {
+            // Return a default MemeVotes if decoding fails
+            MemeVotes {
+                meme_id: 0,
+                upvotes: 0,
+                downvotes: 0,
+                total_voters: 0,
+                score: 0.0,
+                created_week: get_week_id(ic_cdk::api::time()),
+                last_vote_time: ic_cdk::api::time(),
+            }
+        })
     }
 }
 
@@ -107,7 +121,13 @@ impl Storable for VoteRecord {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::Decode!(&bytes, VoteRecord).expect("decode VoteRecord")
+        candid::Decode!(&bytes, VoteRecord).unwrap_or_else(|_| {
+            // Return a default VoteRecord if decoding fails
+            VoteRecord {
+                vote_type: VoteType::Upvote,
+                timestamp: ic_cdk::api::time(),
+            }
+        })
     }
 }
 
@@ -138,7 +158,21 @@ impl Storable for WeeklyPeriod {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::Decode!(&bytes, WeeklyPeriod).expect("decode WeeklyPeriod")
+        candid::Decode!(&bytes, WeeklyPeriod).unwrap_or_else(|_| {
+            // If decoding fails, return a default WeeklyPeriod with current time
+            // This prevents the canister from trapping on corrupted data
+            let now = ic_cdk::api::time();
+            let week_id = get_week_id(now);
+            let week_start = week_id * WEEK_S * 1_000_000_000;
+            let week_end = week_start + (WEEK_S * 1_000_000_000);
+            WeeklyPeriod {
+                week_id,
+                start_time: week_start,
+                end_time: week_end,
+                is_completed: true, // Mark as completed to avoid issues
+                meme_count: 0,
+            }
+        })
     }
 }
 
