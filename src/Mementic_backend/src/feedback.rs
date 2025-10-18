@@ -1,7 +1,7 @@
 // src/feedback.rs
-use candid::{CandidType, Principal, Decode, Encode};
-use ic_cdk::{caller, api::time};
-use ic_cdk_macros::{query, update, init, post_upgrade};
+use candid::{CandidType, Decode, Encode, Principal};
+use ic_cdk::{api::time, caller};
+use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     storable::{Bound, Storable},
@@ -63,7 +63,6 @@ pub fn init_feedback_data() {
     // Initialize without sample data - only real user feedback will be shown
 }
 
-
 // ---------- Main feedback functions ----------
 
 /// Submit feedback from a user
@@ -112,7 +111,10 @@ pub fn submit_feedback(
         f.borrow_mut().insert(feedback_id, feedback);
     });
 
-    Ok(format!("Feedback submitted successfully with ID: {}", feedback_id))
+    Ok(format!(
+        "Feedback submitted successfully with ID: {}",
+        feedback_id
+    ))
 }
 
 /// Get all approved feedback for public display
@@ -157,10 +159,8 @@ pub fn get_all_feedback() -> Vec<Feedback> {
 
     FEEDBACK.with(|f| {
         let feedback_map = f.borrow();
-        let mut all_feedback: Vec<Feedback> = feedback_map
-            .iter()
-            .map(|entry| entry.value())
-            .collect();
+        let mut all_feedback: Vec<Feedback> =
+            feedback_map.iter().map(|entry| entry.value()).collect();
 
         // Sort by timestamp descending
         all_feedback.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));

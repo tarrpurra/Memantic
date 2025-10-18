@@ -494,11 +494,43 @@ class BackendService {
   }
 
   /**
-   * Get current leaderboard
+   * List pre-market memes for the current active week with pagination
    */
-  async getCurrentLeaderboard(limit = 50) {
-    const limitOpt = typeof limit === "number" ? [limit] : [];
-    return await this._safeCall('get_current_leaderboard', limitOpt);
+  async listPremarketMemes(offset = 0, limit = 12) {
+    const result = await this._safeCall('list_premarket_memes', offset, limit);
+    return Array.isArray(result) ? result : [];
+  }
+
+  /**
+   * Get current weekly leaderboard snapshot with pagination
+   */
+  async getCurrentLeaderboard(offsetOrLimit = 0, maybeLimit = 50) {
+    let offset = 0;
+    let limit = 50;
+    if (typeof offsetOrLimit === "number" && typeof maybeLimit === "number") {
+      offset = offsetOrLimit;
+      limit = maybeLimit;
+    } else if (typeof offsetOrLimit === "number") {
+      limit = offsetOrLimit;
+    }
+    const result = await this._safeCall('get_current_leaderboard', offset, limit);
+    return Array.isArray(result) ? result : [];
+  }
+
+  /**
+   * Retrieve a finalized leaderboard snapshot for a specific week
+   */
+  async getLeaderboardByWeek(weekId) {
+    const result = await this._safeCall('get_leaderboard_by_week', weekId);
+    return this._fromOpt(result);
+  }
+
+  /**
+   * List archived weeks with finalized leaderboards
+   */
+  async listFinalizedWeeks(offset = 0, limit = 10) {
+    const result = await this._safeCall('list_finalized_weeks', offset, limit);
+    return Array.isArray(result) ? result : [];
   }
 
   /**

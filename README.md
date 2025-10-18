@@ -143,6 +143,27 @@ If you are hosting frontend code somewhere without using DFX, you may need to ma
 - Write your own `createActor` constructor
 ![Tech Stack](./images/9.jpg)
 
+## Weekly Rollover Operations
+
+### Week boundary logic
+Mementic groups memes into calendar weeks using UTC boundaries. The backend exposes helper functions that compute a `week_id = floor(timestamp_secs / 604800)` and stores the value with every meme. An optional signed offset (default `0`) can be applied to support alternative boundaries such as IST; the offset is persisted in stable memory and can be updated with the `admin_set_week_offset` canister method.
+
+### Automatic timers
+During `init` and `post_upgrade` the backend arms an hourly `ic_cdk_timers::set_timer_interval` callback. The timer runs an immediate catch-up check and then continues to invoke the rollover logic every hour which:
+
+1. Detects when the calendar week has changed.
+2. Finalizes the previous week’s memes (marks them `Finalized`, stamps `finalized_at`, and sets `week_ended = true`).
+3. Snapshots the top votes into a stable `FINALIZED_LEADERBOARDS` map and resets live vote tallies.
+4. Advances the active week id so that the pre-marketplace only exposes fresh memes.
+
+Because the operation is idempotent it is safe to leave the timer running even if no new memes were posted.
+
+### Manual rollover
+For operational recovery or demo purposes you can force a rollover with `dfx canister call Mementic_backend admin_rollover_now`. The call performs the same steps as the timer based workflow and is guarded only by the canister allowlist.
+
+### Legacy meme migration
+Existing meme records created before this change remain in stable memory. When a new meme is published through `publish_meme` it is automatically registered with the weekly index so the new queries return the same objects. For older deployments you may run a one-off migration that reads previous entries, computes the week from `created_at`, and inserts them via the same registration routine—this keeps `NEXT_MEME_ID` in sync and ensures portfolios can reference historical weeks.
+
 ## Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.

@@ -33,7 +33,8 @@ pub struct UserProfile {
 }
 
 impl Storable for UserProfile {
-    const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Unbounded;
+    const BOUND: ic_stable_structures::storable::Bound =
+        ic_stable_structures::storable::Bound::Unbounded;
 
     fn to_bytes(&self) -> Cow<[u8]> {
         use candid::Encode;
@@ -51,7 +52,10 @@ impl Storable for UserProfile {
 }
 
 #[ic_cdk::update]
-pub fn update_user_profile(username: Option<String>, display_name: Option<String>) -> Result<(), String> {
+pub fn update_user_profile(
+    username: Option<String>,
+    display_name: Option<String>,
+) -> Result<(), String> {
     let caller = ic_cdk::caller();
 
     if caller == Principal::anonymous() {
@@ -71,7 +75,10 @@ pub fn update_user_profile(username: Option<String>, display_name: Option<String
             principal: caller,
             username: username.clone(),
             display_name,
-            created_at: existing_profile.as_ref().map(|p| p.created_at).unwrap_or(now),
+            created_at: existing_profile
+                .as_ref()
+                .map(|p| p.created_at)
+                .unwrap_or(now),
             updated_at: now,
         };
 
@@ -90,16 +97,12 @@ pub fn get_user_profile() -> Option<UserProfile> {
 
     let storable_principal = StorablePrincipal::from(caller);
 
-    USER_PROFILES.with(|profiles| {
-        profiles.borrow().get(&storable_principal)
-    })
+    USER_PROFILES.with(|profiles| profiles.borrow().get(&storable_principal))
 }
 
 #[ic_cdk::query]
 pub fn get_user_profile_by_principal(principal: Principal) -> Option<UserProfile> {
     let storable_principal = StorablePrincipal::from(principal);
 
-    USER_PROFILES.with(|profiles| {
-        profiles.borrow().get(&storable_principal)
-    })
+    USER_PROFILES.with(|profiles| profiles.borrow().get(&storable_principal))
 }

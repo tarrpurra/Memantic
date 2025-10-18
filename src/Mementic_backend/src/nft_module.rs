@@ -310,6 +310,9 @@ fn init(args: Option<InitArgs>) {
 
     // Initialize sample feedback data (project-specific)
     crate::init_feedback_data();
+
+    crate::rollover::ensure_active_week_initialized();
+    crate::rollover::start_rollover_timer();
 }
 
 fn assert_admin() {
