@@ -17,6 +17,7 @@ use ic_stable_structures::{
 use ic_cdk::api::call::call;
 use ic_cdk::api::call::call_with_payment;
 
+use crate::api_create::register_meme_with_id;
 use crate::nft_module::{ListingType, TokenSaleMetadata};
 use ic_stable_structures::storable::Bound;
 use serde::{Deserialize, Serialize};
@@ -576,6 +577,10 @@ fn next_meme_id() -> u64 {
     })
 }
 
+pub fn reserve_meme_id() -> u64 {
+    next_meme_id()
+}
+
 /// Check if a meme has been minted as an NFT
 #[query]
 pub fn is_meme_minted(meme_id: u64) -> bool {
@@ -889,10 +894,11 @@ pub fn publish_meme(meme: MemeData) -> Result<PublicStoredMeme, String> {
     }
 
     ic_cdk::println!("Publish meme - Authenticated user: {}", user.to_text());
+    crate::rollover::maybe_perform_rollover(crate::leaderboard::DEFAULT_TOP_N);
     let now = time();
 
     // Allocate id
-    let id = next_meme_id();
+    let id = reserve_meme_id();
 
     // Create stored record
     let stored = StoredMeme {
@@ -922,6 +928,11 @@ pub fn publish_meme(meme: MemeData) -> Result<PublicStoredMeme, String> {
     UNIQUE_USERS.with(|uu| {
         uu.borrow_mut().insert(StorablePrincipal::from(user), true);
     });
+
+    let caption = stored.meme_data.caption.clone().unwrap_or_else(String::new);
+    let image_cid = stored.meme_data.image_url.clone();
+    let created_secs = now / 1_000_000_000;
+    register_meme_with_id(id, user, caption, image_cid, created_secs);
 
     Ok(stored.into())
 }

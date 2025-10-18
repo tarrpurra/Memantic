@@ -139,7 +139,7 @@ pub enum VoteType {
 
 #[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
 pub struct WeeklyPeriod {
-    pub meme_count: u32,    // optional; not used for logic here
+    pub meme_count: u32, // optional; not used for logic here
     pub week_id: u64,
     pub end_time: u64,      // ns
     pub is_completed: bool, // true once voting is locked for this week
@@ -177,7 +177,7 @@ impl Storable for WeeklyPeriod {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
-pub struct WeeklyLeaderboard {
+pub struct LegacyWeeklyLeaderboard {
     pub week_id: u64,
     pub period: WeeklyPeriod,
     pub top_memes: Vec<LeaderboardEntry>,
@@ -200,7 +200,7 @@ pub struct TopLikedLeaderboard {
 
 /// Minimal data your NFT canister will need
 #[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
-pub struct TopEntry {
+pub struct LegacyTopEntry {
     pub meme_id: u64,
     pub score: f64,
     pub upvotes: u32,
@@ -315,7 +315,8 @@ fn close_finished_weeks() {
             .filter_map(|entry| {
                 let period = entry.value();
                 // Only finalize weeks that have actually ended and are not the current week
-                if !period.is_completed && period.week_id < current_week_id && now > period.end_time {
+                if !period.is_completed && period.week_id < current_week_id && now > period.end_time
+                {
                     Some(*entry.key())
                 } else {
                     None
@@ -524,9 +525,9 @@ pub fn remove_vote(meme_id: u64) -> Result<VoteResponse, String> {
 
 // ---------- Queries ----------
 
-/// Current weekly leaderboard (active week). Limit max 50.
-#[query]
-pub fn get_current_leaderboard(limit: Option<u32>) -> WeeklyLeaderboard {
+/// Legacy leaderboard query kept for backwards compatibility.
+#[query(name = "get_current_leaderboard_legacy")]
+pub fn get_current_leaderboard_legacy(limit: Option<u32>) -> LegacyWeeklyLeaderboard {
     let now = time();
     let period = get_or_create_current_week();
     let week_id = period.week_id;
@@ -544,7 +545,7 @@ pub fn get_current_leaderboard(limit: Option<u32>) -> WeeklyLeaderboard {
         })
         .collect();
 
-    WeeklyLeaderboard {
+    LegacyWeeklyLeaderboard {
         week_id,
         period: period.clone(),
         top_memes: entries,
@@ -599,7 +600,7 @@ pub fn get_top_liked_memes(limit: Option<u32>) -> TopLikedLeaderboard {
 
 /// Leaderboard for any week id. Returns None if week not found.
 #[query]
-pub fn get_week_leaderboard(week_id: u64, limit: Option<u32>) -> Option<WeeklyLeaderboard> {
+pub fn get_week_leaderboard(week_id: u64, limit: Option<u32>) -> Option<LegacyWeeklyLeaderboard> {
     WEEKLY_PERIODS.with(|wp| {
         let periods = wp.borrow();
         let p = periods.get(&week_id)?;
@@ -617,7 +618,7 @@ pub fn get_week_leaderboard(week_id: u64, limit: Option<u32>) -> Option<WeeklyLe
             })
             .collect();
 
-        Some(WeeklyLeaderboard {
+        Some(LegacyWeeklyLeaderboard {
             week_id,
             period: p,
             top_memes: entries,
@@ -629,7 +630,7 @@ pub fn get_week_leaderboard(week_id: u64, limit: Option<u32>) -> Option<WeeklyLe
 /// Return **Top 3** for a given week (for NFT mint step).
 /// Fails if the week is not completed yet.
 #[query]
-pub fn get_top3_for_week(week_id: u64) -> Result<Vec<TopEntry>, String> {
+pub fn get_top3_for_week(week_id: u64) -> Result<Vec<LegacyTopEntry>, String> {
     // Ensure no active voting and week exists
     let p = WEEKLY_PERIODS.with(|wp| wp.borrow().get(&week_id));
     let period = p.ok_or_else(|| "Week not found".to_string())?;
@@ -671,7 +672,7 @@ pub fn get_top3_for_week(week_id: u64) -> Result<Vec<TopEntry>, String> {
 
     let out = items
         .into_iter()
-        .map(|(meme_id, mv)| TopEntry {
+        .map(|(meme_id, mv)| LegacyTopEntry {
             meme_id,
             score: mv.score, // kept for reference/telemetry, not used for ranking here
             upvotes: mv.upvotes,
@@ -831,7 +832,11 @@ pub fn force_finalize_current_week() -> Result<String, String> {
     let winners = match get_top3_for_week(period.week_id) {
         Ok(top) => top,
         Err(e) => {
-            ic_cdk::println!("Week {} finalized without leaderboard data: {}", period.week_id, e);
+            ic_cdk::println!(
+                "Week {} finalized without leaderboard data: {}",
+                period.week_id,
+                e
+            );
             Vec::new()
         }
     };
@@ -846,7 +851,11 @@ pub fn force_finalize_current_week() -> Result<String, String> {
     // Clean up old memes and voting data from previous weeks
     cleanup_old_week_data(period.week_id)?;
 
-    Ok(format!("Week {} force-finalized with {} winners", period.week_id, winners.len()))
+    Ok(format!(
+        "Week {} force-finalized with {} winners",
+        period.week_id,
+        winners.len()
+    ))
 }
 
 /// Force-complete a specific week_id (admin/ops hook).
@@ -1022,11 +1031,21 @@ pub fn sync_week_state() -> String {
     let period = get_or_create_current_week();
 
     if period.is_completed {
-        format!("Week {} is completed. Next active week should be available.", period.week_id)
+        format!(
+            "Week {} is completed. Next active week should be available.",
+            period.week_id
+        )
     } else if now > period.end_time {
-        format!("Week {} has ended but not yet finalized. Next active week should be available.", period.week_id)
+        format!(
+            "Week {} has ended but not yet finalized. Next active week should be available.",
+            period.week_id
+        )
     } else {
-        format!("Week {} is active. {} remaining.", period.week_id, format_remaining_time(period.end_time - now))
+        format!(
+            "Week {} is active. {} remaining.",
+            period.week_id,
+            format_remaining_time(period.end_time - now)
+        )
     }
 }
 

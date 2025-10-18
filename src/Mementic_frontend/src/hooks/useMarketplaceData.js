@@ -6,6 +6,7 @@ import {
   toOptionalBigInt,
   normalizeMeme,
   deriveWeekIdFromMs,
+  PAGE_SIZE,
 } from "../utils/marketplaceUtils";
 
 export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, searchQuery) => {
@@ -103,21 +104,55 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
       setLoadingTop(true);
       setErrorMsg("");
       try {
-        const res = await backendService.getTopLikedMemes(3);
-        const entries = ensureArray(res?.top_memes ?? res);
+        const leaderboard = await backendService.getCurrentLeaderboard(0, 50);
+        const entries = ensureArray(leaderboard);
 
-        // Get unique owners for profile fetching
-        const uniqueOwners = [...new Set(entries.map(e => {
-          const owner = e?.owner;
-          if (owner) {
-            if (typeof owner === "string") return owner;
-            if (typeof owner === "object" && owner.toText) return owner.toText();
-            return String(owner);
-          }
-          return null;
-        }).filter(Boolean))];
+        if (entries.length === 0) {
+          if (!cancelled) setTopMemes([]);
+          return;
+        }
 
-        // Fetch user profiles for leaderboard owners
+        const resolved = await Promise.all(
+          entries.map(async (entry) => {
+            const rawId = Array.isArray(entry?.meme_id)
+              ? entry.meme_id[0]
+              : entry?.meme_id;
+            const memeId = safeBigIntToNumber(rawId);
+            if (!Number.isFinite(memeId) || memeId <= 0) {
+              return null;
+            }
+            try {
+              const meme = await backendService.getMeme(memeId);
+              return meme ? { entry, meme } : null;
+            } catch (error) {
+              console.warn(`Failed to fetch meme ${memeId} for leaderboard:`, error);
+              return null;
+            }
+          })
+        );
+
+        const valid = resolved.filter(Boolean);
+        if (valid.length === 0) {
+          if (!cancelled) setTopMemes([]);
+          return;
+        }
+
+        const uniqueOwners = [
+          ...new Set(
+            valid
+              .map(({ meme }) => {
+                const owner = meme?.owner ?? meme?.meme_data?.owner ?? meme?.creator;
+                if (owner) {
+                  if (typeof owner === "string") return owner;
+                  if (typeof owner === "object" && owner.toText) return owner.toText();
+                  return String(owner);
+                }
+                return null;
+              })
+              .filter(Boolean)
+          ),
+        ];
+
         const userProfiles = new Map();
         for (const principal of uniqueOwners) {
           try {
@@ -130,41 +165,29 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
           }
         }
 
-        const arr = entries.map((e) => {
-          const pm = Array.isArray(e?.meme_data)
-            ? e.meme_data[0]
-            : e?.meme_data;
-          const normalized = pm
-            ? normalizeMeme(pm, { rank: e?.rank, votes: e?.votes }, userProfiles)
-            : normalizeMeme(
-                {
-                  id: e?.meme_id,
-                  title: `Meme #${e?.meme_id ?? "?"}`,
-                  owner: e?.owner,
-                  meme_data: e?.meme_data,
-                },
-                { rank: e?.rank, votes: e?.votes },
-                userProfiles
-              );
-
-          const likeCount = safeBigIntToNumber(e?.votes?.upvotes ?? normalized.votes ?? 0);
-          const downvoteCount = safeBigIntToNumber(e?.votes?.downvotes ?? 0);
+        const arr = valid.map(({ entry, meme }) => {
+          const upvotes = safeBigIntToNumber(entry?.votes ?? entry?.votes?.upvotes ?? 0);
+          const normalized = normalizeMeme(
+            meme,
+            { rank: entry?.rank, votes: { upvotes } },
+            userProfiles
+          );
 
           return {
             ...normalized,
-            votes: likeCount,
-            likeCount,
-            downvoteCount,
-            voteScore: normalized.votes,
-            voteDetails: e?.votes ?? null,
+            votes: upvotes,
+            likeCount: upvotes,
+            downvoteCount: 0,
+            voteScore: upvotes,
+            voteDetails: { upvotes, downvotes: 0 },
           };
         });
+
         const filtered =
           currentWeekId == null
             ? arr
             : arr.filter((meme) => {
                 const week = deriveWeekIdFromMs(meme?.created_at);
-                // Exclude memes from previous week specifically
                 if (week !== null && previousWeekId !== null && week === previousWeekId) {
                   return false;
                 }
@@ -207,133 +230,76 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
     setLoadingList(true);
     setErrorMsg("");
     try {
-      let arr = [];
-      let userProfiles = new Map();
+      const pageSize = PAGE_SIZE;
+      const offset = (page - 1) * pageSize;
+      const cards = await backendService.listPremarketMemes(offset, pageSize);
+      const entries = ensureArray(cards);
 
-      try {
-        // Try to get all memes first
-        const rawAll = await backendService.getAllMemes();
-        const rawMemes = ensureArray(rawAll);
-
-        // Get unique owners for profile fetching
-        const uniqueOwners = [...new Set(rawMemes.map(m => {
-          const owner = m?.owner ?? m?.meme_data?.owner ?? m?.creator;
-          if (owner) {
-            if (typeof owner === "string") return owner;
-            if (typeof owner === "object" && owner.toText) return owner.toText();
-            return String(owner);
-          }
-          return null;
-        }).filter(Boolean))];
-
-        // Fetch user profiles for all owners
-        for (const principal of uniqueOwners) {
-          try {
-            const profile = await backendService.getUserProfileByPrincipal(principal);
-            if (profile) {
-              userProfiles.set(principal, profile);
-            }
-          } catch (error) {
-            console.warn(`Failed to fetch profile for ${principal}:`, error);
-          }
+      if (entries.length === 0) {
+        if (reset || page === 1) {
+          setMemes([]);
         }
+        setTotal(offset);
+        setLoadingList(false);
+        return;
+      }
 
-        arr = rawMemes.map((m) => normalizeMeme(m, {}, userProfiles));
-      } catch (err) {
-        console.warn("getAllMemes failed, trying getMarketplaceMemes:", err);
-        try {
-          const rawMarketplace = await backendService.getMarketplaceMemes();
-          const rawMemes = ensureArray(rawMarketplace);
-
-          // Get unique owners for profile fetching
-          const uniqueOwners = [...new Set(rawMemes.map(m => {
-            const owner = m?.owner ?? m?.meme_data?.owner ?? m?.creator;
-            if (owner) {
-              if (typeof owner === "string") return owner;
-              if (typeof owner === "object" && owner.toText) return owner.toText();
-              return String(owner);
-            }
+      const resolved = await Promise.all(
+        entries.map(async (card) => {
+          const rawId = Array.isArray(card?.id) ? card.id[0] : card?.id;
+          const memeId = safeBigIntToNumber(rawId);
+          if (!Number.isFinite(memeId) || memeId <= 0) {
             return null;
-          }).filter(Boolean))];
-
-          // Fetch user profiles for all owners
-          for (const principal of uniqueOwners) {
-            try {
-              const profile = await backendService.getUserProfileByPrincipal(principal);
-              if (profile) {
-                userProfiles.set(principal, profile);
-              }
-            } catch (error) {
-              console.warn(`Failed to fetch profile for ${principal}:`, error);
-            }
           }
-
-          arr = rawMemes.map((m) => normalizeMeme(m, {}, userProfiles));
-        } catch (err2) {
-          console.warn(
-            "getMarketplaceMemes failed, trying getUserMemes:",
-            err2
-          );
           try {
-            const rawUser = await backendService.getUserMemes();
-            const rawMemes = ensureArray(rawUser);
+            const detail = await backendService.getMeme(memeId);
+            return detail ? { detail } : null;
+          } catch (error) {
+            console.warn(`Failed to fetch meme ${memeId}:`, error);
+            return null;
+          }
+        })
+      );
 
-            // Get unique owners for profile fetching
-            const uniqueOwners = [...new Set(rawMemes.map(m => {
-              const owner = m?.owner ?? m?.meme_data?.owner ?? m?.creator;
+      const valid = resolved.filter(Boolean);
+      if (valid.length === 0) {
+        if (reset || page === 1) {
+          setMemes([]);
+        }
+        setTotal(offset);
+        setLoadingList(false);
+        return;
+      }
+
+      const uniqueOwners = [
+        ...new Set(
+          valid
+            .map(({ detail }) => {
+              const owner = detail?.owner ?? detail?.meme_data?.owner ?? detail?.creator;
               if (owner) {
                 if (typeof owner === "string") return owner;
                 if (typeof owner === "object" && owner.toText) return owner.toText();
                 return String(owner);
               }
               return null;
-            }).filter(Boolean))];
+            })
+            .filter(Boolean)
+        ),
+      ];
 
-            // Fetch user profiles for all owners
-            for (const principal of uniqueOwners) {
-              try {
-                const profile = await backendService.getUserProfileByPrincipal(principal);
-                if (profile) {
-                  userProfiles.set(principal, profile);
-                }
-              } catch (error) {
-                console.warn(`Failed to fetch profile for ${principal}:`, error);
-              }
-            }
-
-            arr = rawMemes.map((m) => normalizeMeme(m, {}, userProfiles));
-          } catch (err3) {
-            console.warn("All meme fetching methods failed:", err3);
-            // Sample data fallback
-            arr = [
-              normalizeMeme({
-                id: "sample-1",
-                title: "Sample Meme 1",
-                prompt: "A funny sample meme",
-                caption: "Sample Meme 1",
-                owner: "SampleUser",
-                image_url: "",
-                votes: 5,
-                views: 10,
-                created_at: Date.now(),
-                emoji: "😂",
-              }, {}, userProfiles),
-              normalizeMeme({
-                id: "sample-2",
-                title: "Sample Meme 2",
-                prompt: "Another sample meme",
-                caption: "Sample Meme 2",
-                owner: "SampleUser2",
-                image_url: "",
-                votes: 3,
-                views: 8,
-                created_at: Date.now() - 86400000,
-                emoji: "🤣",
-              }, {}, userProfiles),
-            ];
+      const userProfiles = new Map();
+      for (const principal of uniqueOwners) {
+        try {
+          const profile = await backendService.getUserProfileByPrincipal(principal);
+          if (profile) {
+            userProfiles.set(principal, profile);
           }
+        } catch (error) {
+          console.warn(`Failed to fetch profile for ${principal}:`, error);
         }
       }
+
+      const arr = valid.map(({ detail }) => normalizeMeme(detail, {}, userProfiles));
 
       const getCreatedAt = (meme) => safeBigIntToNumber(meme?.created_at || 0);
       const getVotes = (meme) => safeBigIntToNumber(meme?.votes || 0);
@@ -370,33 +336,29 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
         });
       }
 
-      // Filter to current week only (exclude previous week memes)
       const filteredByWeek =
         currentWeekId == null
           ? arr
           : arr.filter((meme) => {
               const week = deriveWeekIdFromMs(meme?.created_at);
-              // Exclude memes from previous week specifically
               if (week !== null && previousWeekId !== null && week === previousWeekId) {
                 return false;
               }
               return week == null || week === currentWeekId;
             });
 
-      const filteredForListing = filteredByWeek.filter((meme) => {
-        const sale = meme?.sale_metadata ?? meme?.market_data ?? {};
-        const isListed = Boolean(sale?.is_listed ?? sale?.isListed);
-        return !isListed;
-      });
+        const filteredForListing = filteredByWeek.filter((meme) => {
+          const sale = meme?.sale_metadata ?? meme?.market_data ?? {};
+          const isListed = Boolean(sale?.is_listed ?? sale?.isListed);
+          return !isListed;
+        });
 
-      // Client-side paging
-      const start = (page - 1) * 12; // PAGE_SIZE = 12
-      const slice = filteredForListing.slice(start, start + 12);
+        const slice = filteredForListing;
 
-      setTotal(filteredForListing.length);
-      setMemes((prev) =>
-        page === 1 || reset ? slice : [...ensureArray(prev), ...slice]
-      );
+        setTotal(offset + filteredForListing.length);
+        setMemes((prev) =>
+          page === 1 || reset ? filteredForListing : [...ensureArray(prev), ...filteredForListing]
+        );
 
       // Refresh vote counts for newly loaded memes
       if (slice.length > 0) {
