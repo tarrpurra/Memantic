@@ -65,8 +65,8 @@ class BackendService {
           this.isAuthenticated = false;
         }
       } else {
-        console.log("Storage not available, setting up anonymous agent");
-        await this._setupAnonymousAgent();
+        console.log("Storage not available, skipping agent setup");
+        this.isAuthenticated = false;
       }
 
       this.initialized = true;
@@ -91,8 +91,9 @@ class BackendService {
    async ensureReady() {
      if (this.initialized && this.actor) return true;
      if (this.initialized && !this.actor) {
-       // If initialized but no actor, set up anonymous agent for queries
-       await this._setupAnonymousAgent();
+       // If initialized but no actor, user needs to login first
+       console.log("No actor available. User must login to perform actions.");
+       return false;
      }
      return this.initialize();
    }
@@ -182,8 +183,8 @@ class BackendService {
 
     // Verify this is not an anonymous identity
     if (principalText === "2vxsx-fae") {
-      console.log("Anonymous identity detected, not setting up authenticated agent");
-      await this._setupAnonymousAgent();
+      console.log("Anonymous identity detected, not setting up agent");
+      this.isAuthenticated = false;
       return;
     }
 
@@ -339,8 +340,11 @@ class BackendService {
       }
     }
 
-    await this._setupAnonymousAgent();
+    // Clear agent and actor - user must login again
+    this.agent = null;
+    this.actor = null;
     this.isAuthenticated = false;
+    console.log("Logout complete - user must login to perform actions");
     return true;
   }
 

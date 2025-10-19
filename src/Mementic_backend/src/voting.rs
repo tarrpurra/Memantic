@@ -46,20 +46,24 @@ impl Storable for UserMemeKey {
 }
 
 thread_local! {
-    static MEM_MGR: RefCell<MemoryManager<DefaultMemoryImpl>> =
-        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-
+    // CRITICAL: Use shared MEMORY_MANAGER from state module to prevent memory corruption
     // key = meme_id, val = MemeVotes
     static VOTES: RefCell<StableBTreeMap<u64, MemeVotes, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(30)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(40)))
+        ));
 
     // key = UserMemeKey(user, meme_id), val = VoteRecord
     static USER_VOTES: RefCell<StableBTreeMap<UserMemeKey, VoteRecord, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(31)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(41)))
+        ));
 
     // key = week_id, val = WeeklyPeriod
     static WEEKLY_PERIODS: RefCell<StableBTreeMap<u64, WeeklyPeriod, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(32)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(42)))
+        ));
 }
 
 // ---------- Data structures ----------
@@ -841,7 +845,19 @@ pub fn force_finalize_current_week() -> Result<String, String> {
         }
     };
 
-    if let Err(err) = crate::entitlements::create_entitlements_for_week(period.week_id, &winners) {
+    // Convert LegacyTopEntry to TopEntry for the entitlements system
+    let winners_len = winners.len();
+    let top_entries: Vec<crate::TopEntry> = winners
+        .iter()
+        .enumerate()
+        .map(|(index, legacy_entry)| crate::TopEntry {
+            meme_id: legacy_entry.meme_id,
+            votes: legacy_entry.upvotes as u64, // Use upvotes as the vote count
+            rank: (index + 1) as u32,
+        })
+        .collect();
+
+    if let Err(err) = crate::entitlements::create_entitlements_for_week(period.week_id, &top_entries) {
         return Err(format!(
             "Failed to issue mint entitlements for week {}: {}",
             period.week_id, err
@@ -851,10 +867,39 @@ pub fn force_finalize_current_week() -> Result<String, String> {
     // Clean up old memes and voting data from previous weeks
     cleanup_old_week_data(period.week_id)?;
 
+    // Clear the live votes leaderboard for the new week
+    crate::leaderboard::clear_live_votes();
+
+    // CRITICAL: Also finalize memes in the premarket/rollover system
+    // This sets week_ended=true so old memes are hidden from premarket
+    crate::rollover::finalize_memes_for_week(period.week_id, now / 1_000_000_000);
+
+    // Advance to the next week so new memes can be created
+    let next_week_id = period.week_id + 1;
+    crate::state::set_active_week_id(next_week_id);
+    
+    // Create the next week period to ensure voting is ready
+    WEEKLY_PERIODS.with(|wp| {
+        let mut periods = wp.borrow_mut();
+        if periods.get(&next_week_id).is_none() {
+            let week_start = next_week_id * WEEK_S * 1_000_000_000;
+            let week_end = week_start + (WEEK_S * 1_000_000_000);
+            let new_period = WeeklyPeriod {
+                week_id: next_week_id,
+                start_time: week_start,
+                end_time: week_end,
+                is_completed: false,
+                meme_count: 0,
+            };
+            periods.insert(next_week_id, new_period);
+        }
+    });
+
     Ok(format!(
-        "Week {} force-finalized with {} winners",
+        "Week {} force-finalized with {} winners. Advanced to week {}",
         period.week_id,
-        winners.len()
+        winners_len,
+        next_week_id
     ))
 }
 
@@ -897,7 +942,18 @@ pub fn finalize_week(week_id: u64) -> Result<(), String> {
         }
     };
 
-    if let Err(err) = crate::entitlements::create_entitlements_for_week(week_id, &winners) {
+    // Convert LegacyTopEntry to TopEntry for the entitlements system
+    let top_entries: Vec<crate::TopEntry> = winners
+        .iter()
+        .enumerate()
+        .map(|(index, legacy_entry)| crate::TopEntry {
+            meme_id: legacy_entry.meme_id,
+            votes: legacy_entry.upvotes as u64, // Use upvotes as the vote count
+            rank: (index + 1) as u32,
+        })
+        .collect();
+
+    if let Err(err) = crate::entitlements::create_entitlements_for_week(week_id, &top_entries) {
         return Err(format!(
             "Failed to issue mint entitlements for week {}: {}",
             week_id, err
@@ -906,6 +962,14 @@ pub fn finalize_week(week_id: u64) -> Result<(), String> {
 
     // Clean up old memes and voting data from previous weeks
     cleanup_old_week_data(week_id)?;
+
+    // Clear the live votes leaderboard for the new week
+    crate::leaderboard::clear_live_votes();
+
+    // CRITICAL: Also finalize memes in the premarket/rollover system
+    // This sets week_ended=true so old memes are hidden from premarket
+    let now = time();
+    crate::rollover::finalize_memes_for_week(week_id, now / 1_000_000_000);
 
     Ok(())
 }

@@ -127,24 +127,32 @@ impl From<StorableVecU64> for Vec<u64> {
 
 // ---------- Stable memory setup ----------
 thread_local! {
-    static MEM_MGR: RefCell<MemoryManager<DefaultMemoryImpl>> =
-        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-
+    // CRITICAL: Use shared MEMORY_MANAGER from state module to prevent memory corruption
     static RATE: RefCell<StableBTreeMap<StorablePrincipal, DayUsage, Memory>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(20)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(20)))
+        ));
 
     pub static MEMES: RefCell<StableBTreeMap<u64, StoredMeme, Memory>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(21)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(21)))
+        ));
 
     static USER_MEMES: RefCell<StableBTreeMap<StorablePrincipal, StorableVecU64, Memory>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(22)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(22)))
+        ));
 
     static MEME_COUNTER: RefCell<StableBTreeMap<u8, u64, Memory>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(23)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(23)))
+        ));
 
     // Track unique users who have created memes
     static UNIQUE_USERS: RefCell<StableBTreeMap<StorablePrincipal, bool, Memory>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(24)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(24)))
+        ));
 }
 
 // ---------- Data structures ----------
@@ -894,6 +902,26 @@ pub fn publish_meme(meme: MemeData) -> Result<PublicStoredMeme, String> {
     }
 
     ic_cdk::println!("Publish meme - Authenticated user: {}", user.to_text());
+    
+    // CRITICAL: Check for duplicate - prevent publishing same meme multiple times
+    // Search for existing meme with same image_url from this user
+    let existing_meme = MEMES.with(|m| {
+        let map = m.borrow();
+        map.iter()
+            .find(|entry| {
+                let stored = entry.value();
+                stored.owner == StorablePrincipal::from(user) 
+                    && stored.meme_data.image_url == meme.image_url
+            })
+            .map(|entry| entry.value())
+    });
+    
+    // If already published, return the existing meme
+    if let Some(existing) = existing_meme {
+        ic_cdk::println!("Publish meme - Duplicate detected, returning existing meme ID: {}", existing.id);
+        return Ok(existing.into());
+    }
+    
     crate::rollover::maybe_perform_rollover(crate::leaderboard::DEFAULT_TOP_N);
     let now = time();
 

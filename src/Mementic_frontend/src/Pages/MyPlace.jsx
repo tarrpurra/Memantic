@@ -223,22 +223,22 @@ const MyPlace = () => {
   })();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gray-50 dark:bg-background">
       <Navigation />
 
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Creator studio</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Creator studio</h1>
+            <p className="text-sm text-gray-600 dark:text-muted-foreground">
               Generate and publish memes with your daily AI call allotment.
             </p>
           </div>
           <div
             className={`flex items-center gap-3 rounded-full border px-4 py-2 text-sm font-medium ${
               hasCalls
-                ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
-                : "border-amber-400/40 bg-amber-500/10 text-amber-100"
+                ? "border-emerald-300/50 bg-emerald-100/70 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-200"
+                : "border-amber-300/50 bg-amber-100/70 text-amber-700 dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-100"
             }`}
             title="Remaining meme generation calls"
           >
@@ -256,25 +256,25 @@ const MyPlace = () => {
 
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5" />
+                <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                  <Sparkles className="w-5 h-5 text-purple-500 dark:text-purple-400" />
                   AI Prompt
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Inline upload (moved here since template card is gone) */}
                 <div
-                  className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary transition-colors cursor-pointer"
+                  className="border-2 border-dashed border-gray-300 dark:border-border rounded-lg p-4 text-center hover:border-purple-400 dark:hover:border-primary transition-colors cursor-pointer"
                   onClick={handleUploadClick}
                 >
-                  <ImageIcon className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
+                  <ImageIcon className="w-6 h-6 mx-auto mb-2 text-gray-400 dark:text-muted-foreground" />
+                  <p className="text-sm text-gray-600 dark:text-muted-foreground">
                     {uploadedImage
                       ? "Change uploaded image"
                       : "Upload your own image or drag & drop"}
                   </p>
                   {uploadedImage && (
-                    <div className="mt-2 text-xs text-primary">
+                    <div className="mt-2 text-xs text-emerald-600 dark:text-primary">
                       ✓ Custom image uploaded
                     </div>
                   )}
@@ -291,7 +291,7 @@ const MyPlace = () => {
                   placeholder="Describe your meme idea... (e.g., 'A cat explaining crypto to confused humans')"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  className="min-h-[120px] resize-none"
+                  className="min-h-[120px] resize-none bg-white dark:bg-background border-gray-300 dark:border-border text-gray-900 dark:text-foreground"
                 />
                 <div className="flex flex-wrap gap-2">
                   {["Funny", "Crypto", "Relatable", "Trending", "Sarcastic"].map(
@@ -299,7 +299,7 @@ const MyPlace = () => {
                       <Badge
                         key={tag}
                         variant="outline"
-                        className="cursor-pointer hover:bg-primary/10 transition-colors"
+                        className="cursor-pointer hover:bg-purple-100 dark:hover:bg-primary/10 transition-colors"
                         onClick={() => handleTagClick(tag)}
                       >
                         #{tag}
@@ -327,18 +327,46 @@ const MyPlace = () => {
                 </Button>
               </CardContent>
             </Card>
+
+            {/* Pro Tips */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                  <Sparkles className="w-5 h-5 text-purple-500 dark:text-primary" />
+                  Pro Tips
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-purple-500 dark:bg-purple-500 dark:bg-primary mt-2 flex-shrink-0"></div>
+                  <p>Be specific with your prompts for better results</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-purple-500 dark:bg-purple-500 dark:bg-primary mt-2 flex-shrink-0"></div>
+                  <p>Use trending topics for viral potential</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-purple-500 dark:bg-purple-500 dark:bg-primary mt-2 flex-shrink-0"></div>
+                  <p>Keep text short and punchy</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-purple-500 dark:bg-primary mt-2 flex-shrink-0"></div>
+                  <p>Check spelling before posting</p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Preview Panel */}
           <div className="space-y-8">
             <Card>
               <CardHeader>
-                <CardTitle>Live Preview</CardTitle>
+                <CardTitle className="text-gray-900 dark:text-white">Live Preview</CardTitle>
               </CardHeader>
               <CardContent>
                 {generatedMeme ? (
                   <div className="space-y-4">
-                    <div className="aspect-square bg-gradient-glow rounded-lg p-8 flex items-center justify-center relative">
+                    <div className="aspect-square bg-gradient-to-br from-purple-100/20 to-cyan-100/20 dark:bg-gradient-glow rounded-lg p-8 flex items-center justify-center relative">
                       <div className="text-center w-full">
                         {imageSrc ? (
                           <div className="w-full h-full flex items-center justify-center">
@@ -388,23 +416,23 @@ const MyPlace = () => {
                         ) : generatedMeme.raw_response ? (
                           <div className="w-full h-full flex items-center justify-center p-4">
                             <div className="text-center">
-                              <div className="text-sm text-muted-foreground mb-2">
+                              <div className="text-sm text-gray-600 dark:text-muted-foreground mb-2">
                                 Raw Response from Backend:
                               </div>
-                              <div className="text-xs bg-muted p-3 rounded max-h-40 overflow-auto font-mono">
+                              <div className="text-xs bg-gray-100 dark:bg-muted p-3 rounded max-h-40 overflow-auto font-mono">
                                 {generatedMeme.raw_response.length > 500
                                   ? `${generatedMeme.raw_response.substring(0, 500)}...`
                                   : generatedMeme.raw_response}
                               </div>
-                              <div className="text-xs text-muted-foreground mt-2">
+                              <div className="text-xs text-gray-600 dark:text-muted-foreground mt-2">
                                 Image URL: {generatedMeme.image_url || "Not found"}
                               </div>
                             </div>
                           </div>
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <div className="text-center text-muted-foreground">
-                              <Sparkles className="w-8 h-8 mx-auto mb-2" />
+                            <div className="text-center text-gray-600 dark:text-muted-foreground">
+                              <Sparkles className="w-8 h-8 mx-auto mb-2 text-gray-400 dark:text-muted-foreground" />
                               <p className="text-sm">
                                 Meme generated but no image URL provided
                               </p>
@@ -437,41 +465,13 @@ const MyPlace = () => {
                     {/* ⬇️ Removed inline details block; details now live in lightbox */}
                   </div>
                 ) : (
-                  <div className="aspect-square bg-muted/20 rounded-lg flex items-center justify-center">
-                    <div className="text-center text-muted-foreground">
-                      <Sparkles className="w-12 h-12 mx-auto mb-4" />
+                  <div className="aspect-square bg-gray-100/50 dark:bg-muted/20 rounded-lg flex items-center justify-center">
+                    <div className="text-center text-gray-600 dark:text-muted-foreground">
+                      <Sparkles className="w-12 h-12 mx-auto mb-4 text-gray-400 dark:text-muted-foreground" />
                       <p>Your generated meme will appear here</p>
                     </div>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-
-            {/* Tips */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-primary" />
-                  Pro Tips
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="flex items-start gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                  <p>Be specific with your prompts for better results</p>
-                </div>
-                <div className="flex items-start gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                  <p>Use trending topics for viral potential</p>
-                </div>
-                <div className="flex items-start gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                  <p>Keep text short and punchy</p>
-                </div>
-                <div className="flex items-start gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                  <p>Check spelling before posting</p>
-                </div>
               </CardContent>
             </Card>
           </div>
@@ -486,7 +486,7 @@ const MyPlace = () => {
           onClick={() => setIsPreviewOpen(false)}
         >
           <div
-            className="relative w-full max-w-5xl bg-card rounded-xl shadow-xl border border-border"
+            className="relative w-full max-w-5xl bg-white dark:bg-card rounded-xl shadow-xl border border-gray-200 dark:border-border"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -505,8 +505,8 @@ const MyPlace = () => {
                   className="max-h-[80vh] w-auto object-contain rounded"
                 />
               </div>
-              <div className="md:col-span-2 bg-card p-4 space-y-3 max-h-[80vh] overflow-auto">
-                <h3 className="text-lg font-semibold">Image Details</h3>
+              <div className="md:col-span-2 bg-gray-50 dark:bg-card p-4 space-y-3 max-h-[80vh] overflow-auto">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Image Details</h3>
                 {generatedMeme.metadata?.processing_time != null && (
                   <div className="text-sm">
                     <span className="font-medium">Processing Time: </span>
@@ -518,19 +518,19 @@ const MyPlace = () => {
                 {prompt && (
                   <div className="text-sm">
                     <span className="font-medium">Prompt: </span>
-                    <span className="text-muted-foreground">{prompt}</span>
+                    <span className="text-gray-600 dark:text-muted-foreground">{prompt}</span>
                   </div>
                 )}
                 {uploadedImage && (
                   <div className="text-sm">
                     <span className="font-medium">Custom Image: </span>
-                    <span className="text-muted-foreground">Provided</span>
+                    <span className="text-gray-600 dark:text-muted-foreground">Provided</span>
                   </div>
                 )}
                 {generatedMeme.raw_response && (
                   <div>
-                    <div className="text-sm font-medium mb-1">Raw Response</div>
-                    <pre className="text-xs bg-muted p-2 rounded max-h-48 overflow-auto">
+                    <div className="text-sm font-medium text-gray-900 dark:text-white mb-1">Raw Response</div>
+                    <pre className="text-xs bg-gray-100 dark:bg-muted p-2 rounded max-h-48 overflow-auto">
                       {generatedMeme.raw_response}
                     </pre>
                   </div>
@@ -538,7 +538,7 @@ const MyPlace = () => {
               </div>
             </div>
 
-            <div className="flex gap-2 p-3 border-t border-border justify-end">
+            <div className="flex gap-2 p-3 border-t border-gray-200 dark:border-border justify-end">
               <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
                 Close
               </Button>
@@ -554,23 +554,23 @@ const MyPlace = () => {
       {/* Caption Modal */}
       {isCaptionModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg bg-card rounded-xl shadow-xl border border-border p-6">
-            <h3 className="text-lg font-semibold mb-4">Name & Caption Your Meme</h3>
-            <p className="text-sm text-muted-foreground mb-4">
+          <div className="w-full max-w-lg bg-white dark:bg-card rounded-xl shadow-xl border border-gray-200 dark:border-border p-6">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Name & Caption Your Meme</h3>
+            <p className="text-sm text-gray-600 dark:text-muted-foreground mb-4">
               Give your meme a catchy name and add a caption for the pre-marketplace.
             </p>
 
             {/* Meme Name Input */}
             <div className="mb-4">
-              <label className="text-sm font-medium mb-2 block">Meme Name</label>
+              <label className="text-sm font-medium mb-2 block text-gray-700 dark:text-gray-300">Meme Name</label>
               <Input
                 placeholder="Give your meme a catchy name..."
                 value={memeName}
                 onChange={(e) => setMemeName(e.target.value)}
-                className="mb-2"
+                className="mb-2 bg-white dark:bg-background border-gray-300 dark:border-border text-gray-900 dark:text-foreground"
               />
               {!memeName.trim() && (
-                <p className="text-xs text-destructive">
+                <p className="text-xs text-red-600 dark:text-destructive">
                   Enter a name for your meme.
                 </p>
               )}
@@ -578,15 +578,15 @@ const MyPlace = () => {
 
             {/* Caption Input */}
             <div className="mb-4">
-              <label className="text-sm font-medium mb-2 block">Caption</label>
+              <label className="text-sm font-medium mb-2 block text-gray-700 dark:text-gray-300">Caption</label>
               <Textarea
                 placeholder="Add a caption or description..."
                 value={caption}
                 onChange={(e) => setCaption(e.target.value)}
-                className="min-h-[100px]"
+                className="min-h-[100px] bg-white dark:bg-background border-gray-300 dark:border-border text-gray-900 dark:text-foreground"
               />
               {!caption.trim() && (
-                <p className="text-xs text-destructive mt-1">
+                <p className="text-xs text-red-600 dark:text-destructive mt-1">
                   Enter a caption for your meme.
                 </p>
               )}

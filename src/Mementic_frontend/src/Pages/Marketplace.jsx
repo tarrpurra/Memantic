@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card"
 import { Input } from "../components/ui/Input";
 import PageShell from "../components/layout/PageShell";
 import ListingModal from "../components/ListingModal";
+import NFTDetailModal from "../components/marketplace/NFTDetailModal";
 import backendService from "../services/backendService";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../hooks/use-toast";
@@ -47,6 +48,11 @@ const Marketplace = () => {
     editions: 10,
     isSubmitting: false,
     error: null,
+  });
+  const [nftDetailModal, setNftDetailModal] = useState({
+    open: false,
+    nft: null,
+    isBuying: false,
   });
   const [listingDialog, setListingDialog] = useState({
     open: false,
@@ -179,11 +185,28 @@ const Marketplace = () => {
                 : "";
               const imageUrl = meme?.meme_data?.image_url ?? null;
 
+              // Fetch username for owner
+              let ownerUsername = "Anonymous";
+              if (ownerPrincipal) {
+                try {
+                  const profile = await backendService.getUserProfileByPrincipal(ownerPrincipal);
+                  if (profile?.username) {
+                    ownerUsername = Array.isArray(profile.username) ? profile.username[0] : profile.username;
+                  } else {
+                    ownerUsername = `${ownerPrincipal.slice(0, 8)}...${ownerPrincipal.slice(-6)}`;
+                  }
+                } catch (error) {
+                  console.warn(`Failed to fetch username for ${ownerPrincipal}:`, error);
+                  ownerUsername = `${ownerPrincipal.slice(0, 8)}...${ownerPrincipal.slice(-6)}`;
+                }
+              }
+
               return {
                 memeId: Number(entry.meme_id),
                 rank: index + 1,
                 upvotes: Number(entry.upvotes ?? 0),
                 ownerPrincipal,
+                ownerUsername,
                 meme,
                 imageUrl,
                 prompt,
@@ -201,6 +224,7 @@ const Marketplace = () => {
                 rank: index + 1,
                 upvotes: Number(entry.upvotes ?? 0),
                 ownerPrincipal: "",
+                ownerUsername: "Anonymous",
                 meme: null,
                 imageUrl: null,
                 prompt: "",
@@ -235,11 +259,9 @@ const Marketplace = () => {
     };
   }, []);
 
-  const shortPrincipal = (value) => {
-    if (!value) return "Unknown";
-    const text = String(value);
-    if (text.length <= 10) return text;
-    return `${text.slice(0, 5)}…${text.slice(-4)}`;
+  const displayOwnerName = (winner) => {
+    if (!winner) return "Unknown";
+    return winner.ownerUsername || "Anonymous";
   };
 
   const formatTimestamp = (ns) => {
@@ -439,6 +461,63 @@ const Marketplace = () => {
           console.warn("Failed to refresh minted tokens:", refreshError);
         }
       }
+    }
+  };
+
+  const openNFTDetail = (nft) => {
+    setNftDetailModal({
+      open: true,
+      nft,
+      isBuying: false,
+    });
+  };
+
+  const closeNFTDetail = () => {
+    setNftDetailModal({
+      open: false,
+      nft: null,
+      isBuying: false,
+    });
+  };
+
+  const handleBuyNFT = async (nft) => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please login to purchase NFTs",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setNftDetailModal((prev) => ({ ...prev, isBuying: true }));
+      
+      // Call backend to purchase the NFT
+      await backendService.purchaseMeme(BigInt(nft.memeId));
+      
+      toast({
+        title: "Purchase Successful! 🎉",
+        description: `You've successfully purchased ${nft.title}`,
+      });
+      
+      closeNFTDetail();
+      
+      // Refresh the winners list
+      const latest = await backendService.getLatestWeek();
+      if (latest) {
+        const winners = await backendService.getTop3ForWeek(latest.week_id);
+        // ... refresh logic
+      }
+    } catch (error) {
+      console.error("Purchase failed:", error);
+      toast({
+        title: "Purchase Failed",
+        description: error?.message || "Could not complete the purchase. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setNftDetailModal((prev) => ({ ...prev, isBuying: false }));
     }
   };
 
@@ -686,203 +765,129 @@ const Marketplace = () => {
             </div>
             )}
 
-            <Card className="border-border/50 bg-background/80 shadow-card backdrop-blur-xl">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3 text-lg font-semibold text-muted-foreground">
-                  <Trophy className="h-5 w-5 text-primary" />
-                  Marketplace Leaderboard
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-3">
-                  {winnersLoading ? (
-                    <div className="flex items-center justify-center rounded-2xl border border-border/60 bg-background/60 p-6 text-sm text-muted-foreground">
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" />
-                      Loading weekly champions…
-                    </div>
-                  ) : winnersError ? (
-                    <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-                      {winnersError}
-                    </div>
-                  ) : topWinners.length > 0 ? (
-                    <>
-                      <div className="hidden overflow-hidden rounded-2xl border border-border/60 bg-background/70 md:block">
-                        <table className="min-w-full divide-y divide-border/50 text-left text-sm">
-                          <thead className="bg-background/60 text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                            <tr>
-                              <th className="px-4 py-3 font-medium">Asset</th>
-                              <th className="px-4 py-3 font-medium">Rank</th>
-                              <th className="px-4 py-3 font-medium">Votes</th>
-                              <th className="px-4 py-3 font-medium">Minted</th>
-                              <th className="px-4 py-3 font-medium">Listing</th>
-                              <th className="px-4 py-3 font-medium text-right">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border/40">
-                            {topWinners.map((winner) => {
-                              const mintedCount = winner.mintedTokens?.length ?? 0;
-                              const canMint = canMintWinner(winner);
-                              const canList = canListWinner(winner);
-                              const listingLabel = formatListingStatus(winner.saleSnapshot);
-                              return (
-                                <tr key={winner.memeId} className="transition hover:bg-background/60">
-                                  <td className="px-4 py-4">
-                                    <div className="flex items-center gap-3">
-                                      {winner.imageUrl ? (
-                                        <div className="h-12 w-12 overflow-hidden rounded-xl border border-border/60">
-                                          <img
-                                            src={winner.imageUrl}
-                                            alt={winner.title}
-                                            className="h-full w-full object-cover"
-                                            loading="lazy"
-                                          />
-                                        </div>
-                                      ) : (
-                                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border/60 bg-background/80 text-lg">
-                                          🖼️
-                                        </div>
-                                      )}
-                                      <div>
-                                        <p className="text-sm font-semibold text-foreground">{winner.title}</p>
-                                        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                                          Owner · {shortPrincipal(winner.ownerPrincipal)}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-4 text-sm font-semibold text-primary">#{winner.rank}</td>
-                                  <td className="px-4 py-4 text-sm text-foreground">{winner.upvotes.toLocaleString()}</td>
-                                  <td className="px-4 py-4 text-sm text-foreground">{mintedCount > 0 ? mintedCount : "—"}</td>
-                                  <td className="px-4 py-4 text-xs text-muted-foreground">{listingLabel}</td>
-                                  <td className="px-4 py-4">
-                                    <div className="flex flex-wrap items-center justify-end gap-2">
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        className="border border-border/60 bg-background/70"
-                                        onClick={() => openMintDialog(winner)}
-                                        disabled={!canMint}
-                                      >
-                                        {canMint ? "Mint NFT" : mintedCount > 0 ? "Minted" : "Mint locked"}
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className="border-border/60"
-                                        onClick={() => openListingDialog(winner)}
-                                        disabled={!canList}
-                                      >
-                                        {winner.saleSnapshot?.isListed ? "Listed" : "List to market"}
-                                      </Button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="grid gap-4 md:hidden">
-                        {topWinners.map((winner) => {
-                          const mintedCount = winner.mintedTokens?.length ?? 0;
-                          const canMint = canMintWinner(winner);
-                          const canList = canListWinner(winner);
-                          const listingLabel = formatListingStatus(winner.saleSnapshot);
-
-                          return (
-                            <div
-                              key={`card-${winner.memeId}`}
-                              className="rounded-2xl border border-border/60 bg-background/70 p-4 shadow-card"
-                            >
-                              <div className="flex items-start gap-3">
-                                {winner.imageUrl ? (
-                                  <div className="h-16 w-16 overflow-hidden rounded-xl border border-border/60">
-                                    <img
-                                      src={winner.imageUrl}
-                                      alt={winner.title}
-                                      className="h-full w-full object-cover"
-                                      loading="lazy"
-                                    />
-                                  </div>
-                                ) : (
-                                  <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-border/60 bg-background/80 text-xl">
-                                    🖼️
-                                  </div>
-                                )}
-                                <div className="flex flex-1 flex-col gap-2">
-                                  <div>
-                                    <p className="text-sm font-semibold text-foreground">{winner.title}</p>
-                                    <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                                      #{winner.rank} • {shortPrincipal(winner.ownerPrincipal)}
-                                    </p>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
-                                    <div>
-                                      <p className="font-semibold text-foreground">{winner.upvotes.toLocaleString()}</p>
-                                      <p>Votes</p>
-                                    </div>
-                                    <div>
-                                      <p className="font-semibold text-foreground">{mintedCount > 0 ? mintedCount : "—"}</p>
-                                      <p>Minted</p>
-                                    </div>
-                                    <div className="col-span-2 text-[11px]">
-                                      <span className="inline-flex items-center rounded-full border border-border/60 bg-background/70 px-3 py-1 text-[11px]">
-                                        {listingLabel}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <div className="mt-2 grid gap-2">
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      className="w-full border border-border/60 bg-background/70"
-                                      onClick={() => openMintDialog(winner)}
-                                      disabled={!canMint}
-                                    >
-                                      {canMint ? "Mint NFT" : mintedCount > 0 ? "Minted" : "Mint locked"}
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className="w-full border-border/60"
-                                      onClick={() => openListingDialog(winner)}
-                                      disabled={!canList}
-                                    >
-                                      {winner.saleSnapshot?.isListed ? "Listed" : "List to market"}
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Top winners will appear once a weekly voting round completes.
-                    </p>
-                  )}
+            {/* Modern NFT Grid Layout */}
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
+                    <Trophy className="h-6 w-6 text-primary" />
+                    Marketplace NFTs
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Top minted NFTs from this week's winners
+                  </p>
                 </div>
-                {latestWeek ? (
-                  <div className="rounded-2xl border border-border/60 bg-background/60 p-4 text-xs text-muted-foreground">
-                    <p className="font-semibold text-foreground">
-                      Week #{Number(latestWeek.week_id)} summary
-                    </p>
-                    {latestWeek.end_time ? (
-                      <p className="mt-1">
-                        Voting closed on {formatTimestamp(latestWeek.end_time)}
-                      </p>
-                    ) : null}
-                    <p className="mt-1">
-                      Winning memes can be minted directly from this panel—choose your drop style and launch your NFT in seconds.
-                    </p>
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-          </div>
-        </section>
+              </div>
+
+              {winnersLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="rounded-2xl border border-border/40 bg-card/50 overflow-hidden animate-pulse">
+                      <div className="aspect-square bg-muted/50" />
+                      <div className="p-4 space-y-3">
+                        <div className="h-4 bg-muted/50 rounded w-3/4" />
+                        <div className="h-3 bg-muted/50 rounded w-1/2" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : winnersError ? (
+                <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-6 text-center text-destructive">
+                  {winnersError}
+                </div>
+              ) : topWinners.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {topWinners.map((winner) => {
+                    const mintedCount = winner.mintedTokens?.length ?? 0;
+                    const listingPrice = winner.saleSnapshot?.price ? (winner.saleSnapshot.price / 100000000).toFixed(2) : null;
+                    const isListed = winner.saleSnapshot?.isListed;
+                    
+                    return (
+                      <div
+                        key={winner.memeId}
+                        className="group relative rounded-2xl border border-border/40 bg-card overflow-hidden hover:border-primary/50 hover:shadow-2xl transition-all duration-300 cursor-pointer"
+                        onClick={() => openNFTDetail(winner)}
+                      >
+                        {/* NFT Image */}
+                        <div className="relative aspect-square overflow-hidden bg-muted/20">
+                          {winner.imageUrl ? (
+                            <img
+                              src={winner.imageUrl}
+                              alt={winner.title}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-8xl">
+                              🖼️
+                            </div>
+                          )}
+                          
+                          {/* Rank Badge */}
+                          <div className="absolute top-3 left-3 bg-gradient-to-br from-amber-400 to-orange-500 text-white rounded-lg px-3 py-1.5 shadow-lg flex items-center gap-1.5">
+                            <Trophy className="h-4 w-4" />
+                            <span className="text-sm font-bold">#{winner.rank}</span>
+                          </div>
+                          
+                          {/* Listed Badge */}
+                          {isListed && (
+                            <div className="absolute top-3 right-3 bg-emerald-500/90 text-white rounded-lg px-3 py-1.5 shadow-lg">
+                              <span className="text-xs font-bold">LISTED</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* NFT Info */}
+                        <div className="p-4 space-y-3">
+                          {/* Title */}
+                          <div>
+                            <h3 className="font-bold text-foreground text-lg line-clamp-1 group-hover:text-primary transition-colors">
+                              {winner.title}
+                            </h3>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              by {displayOwnerName(winner)}
+                            </p>
+                          </div>
+
+                          {/* Stats */}
+                          <div className="flex items-center justify-between text-sm">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Votes</p>
+                              <p className="font-bold text-foreground">{winner.upvotes.toLocaleString()}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs text-muted-foreground">Minted</p>
+                              <p className="font-bold text-foreground">{mintedCount}</p>
+                            </div>
+                          </div>
+
+                          {/* Price or Status */}
+                          {isListed && listingPrice ? (
+                            <div className="pt-3 border-t border-border/50">
+                              <p className="text-xs text-muted-foreground">Price</p>
+                              <p className="text-xl font-bold text-primary">{listingPrice} ICP</p>
+                            </div>
+                          ) : (
+                            <div className="pt-3 border-t border-border/50">
+                              <p className="text-xs text-muted-foreground">Status</p>
+                              <p className="text-sm font-semibold text-foreground">Not Listed</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-border/40 bg-card/50 p-12 text-center">
+                  <Trophy className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+                  <p className="text-muted-foreground">No NFTs available yet</p>
+                </div>
+              )}
+            </div>r
+            </div>
+          </section>
+
 
         <section className="page-section space-y-6">
           <Card className="border-border/50 bg-background/80 shadow-card backdrop-blur-xl">
@@ -1020,6 +1025,16 @@ const Marketplace = () => {
               <p className="text-sm text-muted-foreground py-8 text-center">No market feed available yet.</p>
             )}
         </section>
+
+        {/* NFT Detail Modal */}
+        <NFTDetailModal
+          nft={nftDetailModal.nft}
+          isOpen={nftDetailModal.open}
+          onClose={closeNFTDetail}
+          onBuy={handleBuyNFT}
+          isBuying={nftDetailModal.isBuying}
+        />
+
         {mintDialog.open && modalWinner ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
             <Card className="w-full max-w-lg border-border/70 bg-background/95 shadow-2xl">
@@ -1032,7 +1047,7 @@ const Marketplace = () => {
                 <div className="rounded-2xl border border-border/60 bg-background/70 p-4 text-sm text-muted-foreground">
                   <p className="font-semibold text-foreground">{modalWinner.title}</p>
                   <p className="mt-1 text-xs uppercase tracking-[0.3em]">
-                    Owner · {shortPrincipal(modalWinner.ownerPrincipal)}
+                    Owner · {displayOwnerName(modalWinner)}
                   </p>
                   {modalMintedCount > 0 ? (
                     <p className="mt-2 text-emerald-300">

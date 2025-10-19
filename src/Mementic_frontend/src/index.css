@@ -2,178 +2,187 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Mementic Creator Studio Theme (Mint/Violet/Blue) ──
-   Mint        #00FFA3 → hsl(158 100% 50%)
-   Soft Violet #7C3AED → hsl(262 83% 58%)
-   ElectricBlu #3B82F6 → hsl(217 91% 60%)
-   Dark Grey   #121212 → hsl(0 0% 7%)
-   Light Neutr #F4F4F4 → hsl(0 0% 96%)
+/* ── Mementic Creator Studio Theme (Enhanced Modern Palette) ──
+   Light Mode: Warm, inviting with excellent contrast
+   Dark Mode: Rich, vibrant colors that pop without eye strain
+   
+   Color Philosophy:
+   - Primary: Vibrant Teal/Cyan for energy and creativity
+   - Secondary: Rich Purple/Violet for premium feel
+   - Accent: Warm Orange/Coral for calls-to-action
+   - Neutrals: Carefully balanced for readability
 */
 
-/* 1) Tokens via :root */
-/* ---------- Subtle Creator Studio Palette (softer + readable) ---------- */
-/* Mint-Teal, Soft Violet, Clear Sky Blue, Slate neutrals */
-
+/* ========== LIGHT MODE ========== */
 :root {
   color-scheme: light;
 
-  /* Neutrals */
-  --background: 220 33% 98%;        /* #F6F8FC very soft off-white */
-  --foreground: 222 47% 11%;        /* #0F172A slate-900 */
+  /* Neutrals - Warm and inviting */
+  --background: 210 20% 98%;        /* #F8F9FB soft blue-white */
+  --foreground: 220 40% 15%;        /* #1A2332 deep blue-gray */
 
-  --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
+  --card: 0 0% 100%;                /* Pure white cards */
+  --card-foreground: 220 40% 15%;
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
+  --popover-foreground: 220 40% 15%;
 
-  /* Brand (desaturated vs neon) */
-  --primary: 168 64% 40%;           /* soft mint-teal ~ #22C7AB */
-  --primary-foreground: 210 40% 98%; /* near-white for legibility */
+  /* Brand Colors - Vibrant and modern */
+  --primary: 185 85% 45%;           /* #0CB3BA vibrant teal-cyan */
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 262 63% 54%;         /* soft violet ~ #7C3AED toned */
-  --secondary-foreground: 210 40% 98%;
+  --secondary: 265 85% 58%;         /* #7C3FF5 rich purple */
+  --secondary-foreground: 0 0% 100%;
 
-  --accent: 207 90% 55%;            /* sky blue ~ #3B82F6 toned */
-  --accent-foreground: 210 40% 98%;
+  --accent: 25 95% 58%;             /* #F97316 warm orange */
+  --accent-foreground: 0 0% 100%;
 
-  /* UI neutrals */
-  --muted: 215 25% 92%;             /* light slate */
-  --muted-foreground: 220 17% 46%;   /* slate-500 */
+  /* UI Neutrals */
+  --muted: 210 20% 94%;             /* #EEEFF2 light gray-blue */
+  --muted-foreground: 220 15% 45%;  /* #656E7F medium gray */
 
-  /* Status (kept soft) */
-  --destructive: 2 75% 54%;         /* gentle red */
-  --destructive-foreground: 210 40% 98%;
+  /* Status */
+  --destructive: 0 84% 60%;         /* #F43F5E vibrant red */
+  --destructive-foreground: 0 0% 100%;
 
-  --border: 215 20% 86%;
-  --input: 215 20% 86%;
-  --ring: 207 90% 55%;
+  --border: 220 15% 88%;            /* #DADDE3 soft border */
+  --input: 220 15% 88%;
+  --ring: 185 85% 45%;              /* Matches primary */
 
-  /* Charts (balanced) */
-  --chart-1: 168 64% 40%;
-  --chart-2: 207 82% 48%;
-  --chart-3: 262 63% 54%;
-  --chart-4: 168 40% 32%;
-  --chart-5: 207 60% 42%;
+  /* Charts */
+  --chart-1: 185 85% 45%;           /* Teal */
+  --chart-2: 265 85% 58%;           /* Purple */
+  --chart-3: 25 95% 58%;            /* Orange */
+  --chart-4: 160 75% 48%;           /* Green */
+  --chart-5: 340 85% 55%;           /* Pink */
 
-  /* SOFT gradients (low alpha, no neon) */
+  /* Gradients - Vibrant but balanced */
   --gradient-primary: linear-gradient(
-    120deg,
-    hsl(168 64% 40% / 0.28) 0%,
-    hsl(262 63% 54% / 0.22) 50%,
-    hsl(207 90% 55% / 0.20) 100%
+    135deg,
+    hsl(185 85% 45% / 0.15) 0%,
+    hsl(265 85% 58% / 0.12) 50%,
+    hsl(25 95% 58% / 0.10) 100%
   );
   --gradient-secondary: linear-gradient(
     135deg,
-    hsl(262 63% 54% / 0.24) 0%,
-    hsl(168 64% 40% / 0.22) 100%
+    hsl(265 85% 58% / 0.15) 0%,
+    hsl(185 85% 45% / 0.12) 100%
   );
   --gradient-background: radial-gradient(
-      1200px 600px at 10% -10%,
-      hsl(262 63% 54% / 0.08),
+      1400px 700px at 15% -5%,
+      hsl(265 85% 58% / 0.06),
       transparent
     ),
     radial-gradient(
-      900px 500px at 90% 0%,
-      hsl(207 90% 55% / 0.08),
+      1000px 600px at 85% 5%,
+      hsl(185 85% 45% / 0.06),
       transparent
     ),
-    linear-gradient(180deg, hsl(220 33% 98%), hsl(0 0% 100%));
+    linear-gradient(180deg, hsl(210 20% 98%), hsl(0 0% 100%));
   --gradient-hero: linear-gradient(
-    115deg,
-    hsl(168 64% 40% / 0.18) 0%,
-    hsl(207 90% 55% / 0.18) 50%,
-    hsl(262 63% 54% / 0.18) 100%
+    120deg,
+    hsl(185 85% 45% / 0.12) 0%,
+    hsl(265 85% 58% / 0.12) 50%,
+    hsl(25 95% 58% / 0.10) 100%
   );
   --gradient-card: linear-gradient(
     150deg,
-    hsl(0 0% 100% / 0.85) 0%,
-    hsl(0 0% 100% / 0.72) 100%
+    hsl(0 0% 100% / 0.95) 0%,
+    hsl(210 20% 98% / 0.90) 100%
   );
 
-  /* Shadows (no harsh glow) */
-  --shadow-glow: 0 10px 30px hsl(207 90% 25% / 0.10);
-  --shadow-glow-secondary: 0 10px 30px hsl(262 63% 25% / 0.10);
-  --shadow-card: 0 6px 24px hsl(220 10% 30% / 0.08);
-  --shadow-elevation: 0 16px 40px hsl(220 10% 20% / 0.10);
+  /* Shadows - Subtle depth */
+  --shadow-glow: 0 8px 32px hsl(185 85% 35% / 0.12);
+  --shadow-glow-secondary: 0 8px 32px hsl(265 85% 45% / 0.12);
+  --shadow-card: 0 4px 20px hsl(220 15% 20% / 0.08);
+  --shadow-elevation: 0 12px 40px hsl(220 15% 15% / 0.12);
 
   --transition-smooth: all 0.28s cubic-bezier(.4,0,.2,1);
   --transition-bounce: all 0.42s cubic-bezier(.33,1.4,.2,1);
   --radius: 0.9rem;
 }
 
+/* ========== DARK MODE ========== */
 .dark {
   color-scheme: dark;
 
-  --background: 222 47% 8%;        /* #0B1220 subtle navy, not true black */
-  --foreground: 210 40% 96%;        /* near-white */
+  /* Neutrals - Rich dark with depth */
+  --background: 230 25% 10%;        /* #141825 deep blue-black */
+  --foreground: 210 20% 98%;        /* #F8F9FB near-white */
 
-  --card: 222 47% 11%;              /* #0F172A */
-  --card-foreground: 210 40% 96%;
-  --popover: 222 47% 10%;
-  --popover-foreground: 210 40% 96%;
+  --card: 230 22% 13%;              /* #1A1F2E rich dark card */
+  --card-foreground: 210 20% 98%;
+  --popover: 230 25% 12%;
+  --popover-foreground: 210 20% 98%;
 
-  --primary: 168 64% 46%;           /* mint-teal brighter only a bit */
-  --primary-foreground: 222 47% 8%;
-  --secondary: 262 63% 60%;
-  --secondary-foreground: 222 47% 8%;
-  --accent: 207 85% 62%;
-  --accent-foreground: 222 47% 8%;
+  /* Brand Colors - Vibrant and eye-catching */
+  --primary: 185 90% 55%;           /* #14D4DC bright cyan */
+  --primary-foreground: 230 25% 10%;
 
-  --muted: 222 22% 16%;
-  --muted-foreground: 215 20% 78%;
+  --secondary: 265 90% 65%;         /* #9D5CFF vivid purple */
+  --secondary-foreground: 230 25% 10%;
 
-  --destructive: 2 75% 56%;
-  --destructive-foreground: 210 40% 98%;
+  --accent: 25 95% 62%;             /* #FF8A3D bright orange */
+  --accent-foreground: 230 25% 10%;
 
-  --border: 222 22% 18%;
-  --input: 222 22% 18%;
-  --ring: 207 85% 62%;
+  /* UI Neutrals */
+  --muted: 230 18% 18%;             /* #272D3F muted dark */
+  --muted-foreground: 220 12% 75%;  /* #B8BCC5 light gray */
 
-  --chart-1: 168 64% 46%;
-  --chart-2: 207 85% 62%;
-  --chart-3: 262 63% 60%;
-  --chart-4: 168 45% 36%;
-  --chart-5: 207 60% 52%;
+  /* Status */
+  --destructive: 0 90% 65%;         /* #FF4D6D bright red */
+  --destructive-foreground: 0 0% 100%;
 
-  /* Dark gradients: just a tint */
+  --border: 230 18% 22%;            /* #313847 subtle border */
+  --input: 230 18% 22%;
+  --ring: 185 90% 55%;              /* Matches primary */
+
+  /* Charts */
+  --chart-1: 185 90% 55%;           /* Bright Cyan */
+  --chart-2: 265 90% 65%;           /* Vivid Purple */
+  --chart-3: 25 95% 62%;            /* Bright Orange */
+  --chart-4: 160 80% 52%;           /* Bright Green */
+  --chart-5: 340 90% 60%;           /* Bright Pink */
+
+  /* Gradients - Vibrant with glow effect */
   --gradient-primary: linear-gradient(
-    120deg,
-    hsl(168 64% 46% / 0.18) 0%,
-    hsl(262 63% 60% / 0.16) 50%,
-    hsl(207 85% 62% / 0.16) 100%
+    135deg,
+    hsl(185 90% 55% / 0.20) 0%,
+    hsl(265 90% 65% / 0.18) 50%,
+    hsl(25 95% 62% / 0.16) 100%
   );
   --gradient-secondary: linear-gradient(
     135deg,
-    hsl(262 63% 60% / 0.16) 0%,
-    hsl(168 64% 46% / 0.16) 100%
+    hsl(265 90% 65% / 0.20) 0%,
+    hsl(185 90% 55% / 0.18) 100%
   );
   --gradient-background: radial-gradient(
-      1000px 500px at 10% -10%,
-      hsl(262 63% 54% / 0.10),
+      1200px 650px at 15% -5%,
+      hsl(265 90% 45% / 0.12),
       transparent
     ),
     radial-gradient(
-      800px 400px at 90% 0%,
-      hsl(207 90% 55% / 0.10),
+      900px 550px at 85% 5%,
+      hsl(185 90% 45% / 0.12),
       transparent
     ),
-    linear-gradient(180deg, hsl(222 47% 8%), hsl(222 47% 10%));
+    linear-gradient(180deg, hsl(230 25% 10%), hsl(230 25% 12%));
   --gradient-hero: linear-gradient(
-    115deg,
-    hsl(168 64% 46% / 0.16) 0%,
-    hsl(207 85% 62% / 0.16) 50%,
-    hsl(262 63% 60% / 0.16) 100%
+    120deg,
+    hsl(185 90% 55% / 0.18) 0%,
+    hsl(265 90% 65% / 0.18) 50%,
+    hsl(25 95% 62% / 0.16) 100%
   );
   --gradient-card: linear-gradient(
     150deg,
-    hsl(222 47% 12% / 0.96) 0%,
-    hsl(222 47% 10% / 0.88) 100%
+    hsl(230 22% 14% / 0.98) 0%,
+    hsl(230 25% 12% / 0.95) 100%
   );
 
-  --shadow-glow: 0 10px 30px hsl(207 90% 10% / 0.18);
-  --shadow-glow-secondary: 0 10px 30px hsl(262 63% 10% / 0.18);
-  --shadow-card: 0 10px 30px hsl(222 40% 2% / 0.45);
-  --shadow-elevation: 0 20px 48px hsl(222 40% 1% / 0.55);
+  /* Shadows - Dramatic depth with glow */
+  --shadow-glow: 0 12px 40px hsl(185 90% 35% / 0.25);
+  --shadow-glow-secondary: 0 12px 40px hsl(265 90% 45% / 0.25);
+  --shadow-card: 0 8px 32px hsl(230 25% 5% / 0.60);
+  --shadow-elevation: 0 20px 60px hsl(230 25% 3% / 0.70);
 }
 
 

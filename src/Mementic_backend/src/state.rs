@@ -1,6 +1,6 @@
 use crate::model::{Meme, MemeId, WeekId, WeeklyLeaderboard};
 use candid::Principal;
-use ic_stable_structures::cell::StableCell;
+use ic_stable_structures::StableCell;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::storable::{Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
@@ -178,21 +178,21 @@ thread_local! {
         StableCell::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(64))),
             StoredU64(0)
-        ).expect("initialize ACTIVE_WEEK_ID cell")
+        )
     );
 
     static NEXT_MEME_ID_CELL: RefCell<StableCell<StoredU64, Memory>> = RefCell::new(
         StableCell::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(65))),
             StoredU64(1)
-        ).expect("initialize NEXT_MEME_ID cell")
+        )
     );
 
     static WEEK_OFFSET_CELL: RefCell<StableCell<StoredI64, Memory>> = RefCell::new(
         StableCell::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(66))),
             StoredI64(0)
-        ).expect("initialize WEEK_OFFSET cell")
+        )
     );
 }
 
@@ -205,7 +205,7 @@ pub fn set_active_week_id(week_id: WeekId) {
         let mut cell = cell.borrow_mut();
         let current = cell.get().0;
         if current != week_id {
-            cell.set(StoredU64(week_id)).expect("set active week id");
+            cell.set(StoredU64(week_id));
         }
     });
 }
@@ -217,8 +217,7 @@ pub fn get_week_offset() -> i64 {
 pub fn set_week_offset(offset: i64) {
     WEEK_OFFSET_CELL.with(|cell| {
         cell.borrow_mut()
-            .set(StoredI64(offset))
-            .expect("set week offset");
+            .set(StoredI64(offset));
     });
 }
 
@@ -227,7 +226,7 @@ pub fn next_meme_id() -> MemeId {
         let mut cell = cell.borrow_mut();
         let current = cell.get().0;
         let next = current + 1;
-        cell.set(StoredU64(next)).expect("increment meme id");
+        cell.set(StoredU64(next));
         current
     })
 }
@@ -235,8 +234,7 @@ pub fn next_meme_id() -> MemeId {
 pub fn set_next_meme_id(value: MemeId) {
     NEXT_MEME_ID_CELL.with(|cell| {
         cell.borrow_mut()
-            .set(StoredU64(value))
-            .expect("set next meme id");
+            .set(StoredU64(value));
     });
 }
 
@@ -249,7 +247,7 @@ pub fn ensure_next_meme_id_at_least(value: MemeId) {
         let mut cell = cell.borrow_mut();
         let current = cell.get().0;
         if current < value {
-            cell.set(StoredU64(value)).expect("ensure next meme id");
+            cell.set(StoredU64(value));
         }
     });
 }

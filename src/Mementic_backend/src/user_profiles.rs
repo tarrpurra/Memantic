@@ -1,6 +1,6 @@
 use candid::{CandidType, Principal};
 use ic_cdk::api::time;
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -9,17 +9,13 @@ use std::cell::RefCell;
 use crate::http_outcall::StorablePrincipal;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
-type Mem = ic_stable_structures::memory_manager::MemoryManager<DefaultMemoryImpl>;
 
 thread_local! {
-    static MEMORY_MANAGER: RefCell<Mem> = RefCell::new(
-        MemoryManager::init(DefaultMemoryImpl::default())
-    );
-
-    // Memory ID 4 for user profiles
+    // CRITICAL: Use shared MEMORY_MANAGER from state module to prevent memory corruption
+    // Memory ID 67 for user profiles (avoiding conflicts with state.rs IDs 60-66)
     static USER_PROFILES: RefCell<StableBTreeMap<StorablePrincipal, UserProfile, Memory>> =
         RefCell::new(StableBTreeMap::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(4)))
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(67)))
         ));
 }
 
@@ -43,7 +39,13 @@ impl Storable for UserProfile {
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         use candid::Decode;
-        Decode!(bytes.as_ref(), Self).unwrap()
+        Decode!(bytes.as_ref(), Self).unwrap_or_else(|_| UserProfile {
+            principal: Principal::anonymous(),
+            username: None,
+            display_name: None,
+            created_at: 0,
+            updated_at: 0,
+        })
     }
 
     fn into_bytes(self) -> Vec<u8> {

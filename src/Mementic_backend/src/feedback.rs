@@ -40,17 +40,27 @@ impl Storable for Feedback {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::Decode!(&bytes, Feedback).expect("decode Feedback")
+        candid::Decode!(&bytes, Feedback).unwrap_or_else(|_| Feedback {
+            id: 0,
+            user_principal: Principal::anonymous(),
+            name: String::new(),
+            likes: String::new(),
+            dislikes: String::new(),
+            suggestions: String::new(),
+            will_return: false,
+            timestamp: 0,
+            is_approved: false,
+        })
     }
 }
 
 thread_local! {
-    static MEM_MGR: RefCell<MemoryManager<DefaultMemoryImpl>> =
-        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-
+    // CRITICAL: Use shared MEMORY_MANAGER from state module to prevent memory corruption
     // key = feedback_id, val = Feedback
     static FEEDBACK: RefCell<StableBTreeMap<u64, Feedback, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(40)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(70)))
+        ));
 
     // Counter for feedback IDs
     static NEXT_FEEDBACK_ID: RefCell<u64> = RefCell::new(1);

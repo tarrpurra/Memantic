@@ -67,7 +67,7 @@ fn finalize_week(week_id: WeekId, top_n: usize) {
     clear_live_votes();
 }
 
-fn finalize_memes_for_week(week_id: WeekId, finalized_at: u64) {
+pub(crate) fn finalize_memes_for_week(week_id: WeekId, finalized_at: u64) {
     let meme_ids = week_meme_ids(week_id);
     MEMES.with(|memes| {
         let mut memes = memes.borrow_mut();

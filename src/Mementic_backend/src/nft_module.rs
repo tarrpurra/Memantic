@@ -53,7 +53,7 @@ impl Storable for SNat {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::Decode!(&bytes, SNat).expect("decode SNat")
+        candid::Decode!(&bytes, SNat).unwrap_or_else(|_| SNat(Nat::from(0u32)))
     }
 }
 
@@ -72,7 +72,7 @@ impl Storable for SPrincipal {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::Decode!(&bytes, SPrincipal).expect("decode SPrincipal")
+        candid::Decode!(&bytes, SPrincipal).unwrap_or_else(|_| SPrincipal(Principal::anonymous()))
     }
 }
 
@@ -89,7 +89,7 @@ impl Storable for OwnerTokens {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::Decode!(&bytes, OwnerTokens).expect("decode OwnerTokens")
+        candid::Decode!(&bytes, OwnerTokens).unwrap_or_else(|_| OwnerTokens(Vec::new()))
     }
 }
 
@@ -105,7 +105,7 @@ impl Storable for MemeTokenList {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::Decode!(&bytes, MemeTokenList).expect("decode MemeTokenList")
+        candid::Decode!(&bytes, MemeTokenList).unwrap_or_else(|_| MemeTokenList(Vec::new()))
     }
 }
 
@@ -121,7 +121,7 @@ impl Storable for ImageBlob {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::Decode!(&bytes, ImageBlob).expect("decode ImageBlob")
+        candid::Decode!(&bytes, ImageBlob).unwrap_or_else(|_| ImageBlob(Vec::new()))
     }
 }
 
@@ -235,7 +235,15 @@ impl Storable for TokenRecord {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::Decode!(&bytes, TokenRecord).expect("decode TokenRecord")
+        candid::Decode!(&bytes, TokenRecord).unwrap_or_else(|_| TokenRecord {
+            token_id: Nat::from(0u32),
+            owner: Principal::anonymous(),
+            minted_at: 0,
+            meme_id: 0,
+            metadata: Vec::new(),
+            mime_type: None,
+            has_image: false,
+        })
     }
 }
 
@@ -251,31 +259,39 @@ impl Storable for TokenSaleMetadata {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::Decode!(&bytes, TokenSaleMetadata).expect("decode TokenSaleMetadata")
+        candid::Decode!(&bytes, TokenSaleMetadata).unwrap_or_else(|_| TokenSaleMetadata::default())
     }
 }
 
 thread_local! {
-    static MEM_MGR: RefCell<MemoryManager<DefaultMemoryImpl>> =
-        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-
+    // CRITICAL: Use shared MEMORY_MANAGER from state module to prevent memory corruption
     static TOKENS: RefCell<StableBTreeMap<SNat, TokenRecord, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(0)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0)))
+        ));
 
     static OWNER_INDEX: RefCell<StableBTreeMap<SPrincipal, OwnerTokens, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(1)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1)))
+        ));
 
     static MINT_INDEX: RefCell<StableBTreeMap<u64, MemeTokenList, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(2)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))
+        ));
 
     static STATE: RefCell<CollectionState> = RefCell::new(CollectionState::default());
 
     // NEW: store actual image bytes (ImageBlob wraps Vec<u8>)
     static STORED_IMAGES: RefCell<StableBTreeMap<u64, ImageBlob, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(6)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(6)))
+        ));
 
     static TOKEN_SALES: RefCell<StableBTreeMap<SNat, TokenSaleMetadata, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(5)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(5)))
+        ));
 }
 
 // ---------- Init ----------

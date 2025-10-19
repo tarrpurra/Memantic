@@ -29,11 +29,30 @@ type LeaderboardEntry = record {
   rank : nat32;
   meme_data : opt PublicStoredMeme;
 };
+type LegacyTopEntry = record {
+  upvotes : nat32;
+  last_vote_time : nat64;
+  meme_id : nat64;
+  score : float64;
+  downvotes : nat32;
+};
+type LegacyWeeklyLeaderboard = record {
+  week_id : nat64;
+  period : WeeklyPeriod;
+  top_memes : vec LeaderboardEntry;
+  is_active : bool;
+};
 type ListingStrategy = variant {
   Auction : record { start_price_e8s : nat64 };
   FixedPrice : record { price_e8s : nat64 };
 };
 type ListingType = variant { None; Auction; FixedPrice };
+type MemeCard = record {
+  id : nat64;
+  creator : principal;
+  image_cid : text;
+  caption : text;
+};
 type MemeData = record {
   image_url : text;
   metadata : PythonMetadata;
@@ -125,20 +144,7 @@ type TokenSaleMetadata = record {
   auction_highest_bid : opt nat64;
   listed_at : opt nat64;
 };
-type LegacyTopEntry = record {
-  upvotes : nat32;
-  last_vote_time : nat64;
-  meme_id : nat64;
-  score : float64;
-  downvotes : nat32;
-};
-type MemeCard = record {
-  id : nat64;
-  caption : text;
-  image_cid : text;
-  creator : principal;
-};
-type MemeStatus = variant { InVoting; Finalized };
+type TopEntry = record { meme_id : nat64; votes : nat64; rank : nat32 };
 type TopLikedLeaderboard = record {
   total_ranked : nat32;
   top_memes : vec LeaderboardEntry;
@@ -159,17 +165,10 @@ type VoteResponse = record {
   user_previous_vote : opt VoteType;
 };
 type VoteType = variant { Downvote; Upvote };
-type LegacyWeeklyLeaderboard = record {
-  week_id : nat64;
-  period : WeeklyPeriod;
-  top_memes : vec LeaderboardEntry;
-  is_active : bool;
-};
-type TopEntry = record { meme_id : nat64; votes : nat64; rank : nat32 };
 type WeeklyLeaderboard = record {
+  top : vec TopEntry;
   week_id : nat64;
   finalized_at : nat64;
-  top : vec TopEntry;
 };
 type WeeklyPeriod = record {
   meme_count : nat32;
@@ -191,11 +190,14 @@ type WinnerNotice = record {
   meme_title : text;
 };
 service : (opt InitArgs) -> {
+  admin_rollover_now : () -> (opt nat64);
+  admin_set_week_offset : (int64) -> ();
   // Approve feedback for public display (admin function)
   approve_feedback : (nat64) -> (Result);
   check_remaining_calls : () -> (nat8) query;
   // Mark any past weeks complete if their end_time has passed
   close_finished_weeks : () -> ();
+  create_meme : (text, text) -> (nat64);
   // Delete all memes in the system (admin function, deletes all memes regardless of ownership, except minted NFTs)
   delete_all_user_memes : () -> (Result_1);
   // Delete feedback (admin function)
@@ -210,6 +212,7 @@ service : (opt InitArgs) -> {
   // Force finalize current week for testing (admin function)
   force_finalize_current_week : () -> (Result);
   generate_meme : (text) -> (Result);
+  get_active_week : () -> (nat64) query;
   get_admin : () -> (principal) query;
   // Get all feedback (admin function)
   get_all_feedback : () -> (vec Feedback) query;
@@ -218,22 +221,22 @@ service : (opt InitArgs) -> {
   get_all_minted_tokens : () -> (vec TokenRecord) query;
   // Get all approved feedback for public display
   get_approved_feedback : (opt nat32) -> (vec Feedback) query;
-  create_meme : (text, text) -> (nat64);
   // Completed weeks
   get_completed_weeks : () -> (vec WeeklyPeriod) query;
-  // Current weekly leaderboard (active week) with pagination.
   get_current_leaderboard : (nat32, nat32) -> (vec TopEntry) query;
-  // Legacy current leaderboard snapshot.
-  get_current_leaderboard_legacy : (opt nat32) -> (LegacyWeeklyLeaderboard) query;
+  // Legacy leaderboard query kept for backwards compatibility.
+  get_current_leaderboard_legacy : (opt nat32) -> (
+      LegacyWeeklyLeaderboard,
+    ) query;
   // Status for current week
   get_current_week_status : () -> (nat64, nat64, nat64, bool) query;
   get_entitlements_for_meme : (nat64) -> (vec MintEntitlement) query;
   // Get feedback statistics
   get_feedback_stats : () -> (nat32, nat32, float64) query;
+  get_leaderboard_by_week : (nat64) -> (opt WeeklyLeaderboard) query;
   // Get only memes that are listed for sale on the marketplace
   get_marketplace_memes : () -> (vec PublicStoredMeme) query;
   get_meme : (nat64) -> (opt PublicStoredMeme) query;
-  get_leaderboard_by_week : (nat64) -> (opt WeeklyLeaderboard) query;
   // Get per-meme votes
   get_meme_votes : (nat64) -> (opt MemeVotes) query;
   get_my_mint_entitlements : () -> (vec MintEntitlement) query;
@@ -261,12 +264,10 @@ service : (opt InitArgs) -> {
   // Did caller vote on meme?
   get_user_vote : (nat64) -> (opt VoteRecord) query;
   // Leaderboard for any week id. Returns None if week not found.
-  get_week_leaderboard : (nat64, opt nat32) -> (opt LegacyWeeklyLeaderboard) query;
-  get_active_week : () -> (nat64) query;
+  get_week_leaderboard : (nat64, opt nat32) -> (
+      opt LegacyWeeklyLeaderboard,
+    ) query;
   get_week_offset : () -> (int64) query;
-  list_finalized_weeks : (nat32, nat32) -> (vec nat64) query;
-  list_memes_by_flag : (bool, nat32, nat32) -> (vec MemeCard) query;
-  list_premarket_memes : (nat32, nat32) -> (vec MemeCard) query;
   health : () -> (text) query;
   icrc7_name : () -> (text) query;
   icrc7_owner_of : (vec nat) -> (vec opt principal) query;
@@ -278,13 +279,14 @@ service : (opt InitArgs) -> {
   increment_meme_views : (nat64) -> (Result_2);
   // Check if a meme has been minted as an NFT
   is_meme_minted : (nat64) -> (bool) query;
+  list_finalized_weeks : (nat32, nat32) -> (vec nat64) query;
   // List a meme for sale on the marketplace
   list_meme_for_sale : (nat64, ListingStrategy) -> (Result_2);
+  list_memes_by_flag : (bool, nat32, nat32) -> (vec MemeCard) query;
+  list_premarket_memes : (nat32, nat32) -> (vec MemeCard) query;
   mint_to : (nat64, MintingMode) -> (Result_4);
   // Store a generated meme into marketplace (associated to caller)
   publish_meme : (MemeData) -> (Result_5);
-  admin_rollover_now : () -> (opt nat64);
-  admin_set_week_offset : (int64) -> ();
   // Record a sale (called internally or by marketplace canister)
   record_meme_sale : (nat64, nat64) -> (Result_2);
   // Remove all memes from the marketplace (admin function)
@@ -300,9 +302,9 @@ service : (opt InitArgs) -> {
   sync_week_state : () -> (text);
   transform : (TransformArgs) -> (HttpResponse) query;
   update_user_profile : (opt text, opt text) -> (Result_2);
+  vote : (nat64, bool) -> (Result_2);
   // Cast or change a vote on a meme in the **current active week**.
   // Rejects if meme is not from current week or if the week is completed/expired.
   vote_meme : (nat64, VoteType) -> (Result_6);
-  vote : (nat64, bool) -> (Result_2);
   whoami : () -> (principal) query;
 }

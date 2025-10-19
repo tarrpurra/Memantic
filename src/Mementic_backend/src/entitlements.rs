@@ -86,7 +86,19 @@ impl Storable for MintEntitlement {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::Decode!(&bytes, MintEntitlement).expect("decode MintEntitlement")
+        candid::Decode!(&bytes, MintEntitlement).unwrap_or_else(|_| MintEntitlement {
+            entitlement_id: 0,
+            meme_id: 0,
+            owner: Principal::anonymous(),
+            week_id: 0,
+            rank: 0,
+            meme_title: String::new(),
+            created_at: 0,
+            expires_at: 0,
+            status: EntitlementStatus::Expired,
+            used_at: None,
+            minted_token_ids: Vec::new(),
+        })
     }
 }
 
@@ -106,17 +118,21 @@ pub struct WinnerNotice {
 
 // ---------- Stable storage ----------
 thread_local! {
-    static MEM_MGR: RefCell<MemoryManager<DefaultMemoryImpl>> =
-        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-
+    // CRITICAL: Use shared MEMORY_MANAGER from state module to prevent memory corruption
     static ENTITLEMENTS: RefCell<StableBTreeMap<u64, MintEntitlement, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(60)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(50)))
+        ));
 
     static ENTITLEMENT_COUNTER: RefCell<StableBTreeMap<u64, u64, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(61)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(51)))
+        ));
 
     static WEEK_MEME_INDEX: RefCell<StableBTreeMap<WeekMemeKey, u64, Mem>> =
-        RefCell::new(StableBTreeMap::init(MEM_MGR.with(|m| m.borrow().get(MemoryId::new(62)))));
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(52)))
+        ));
 }
 
 // ---------- Helpers ----------

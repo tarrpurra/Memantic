@@ -27,6 +27,16 @@ pub fn register_meme_with_id(
     image_cid: String,
     created_at_secs: u64,
 ) {
+    // Check if this meme_id already exists (safety check)
+    let already_exists = MEMES.with(|memes| {
+        memes.borrow().get(&meme_id).is_some()
+    });
+    
+    if already_exists {
+        // Meme already registered, skip duplicate registration
+        return;
+    }
+    
     let week_id = compute_week_id(created_at_secs);
     let meme = Meme {
         id: meme_id,
