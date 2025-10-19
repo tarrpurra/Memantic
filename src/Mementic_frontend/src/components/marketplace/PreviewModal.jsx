@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Button } from "../ui/Button";
 import { X, Heart, Eye, Coins } from "lucide-react";
+import backendService from "../../services/backendService";
+import { toOptionalBigInt } from "../../utils/marketplaceUtils";
 
 function PreviewModal({
   open,
@@ -64,7 +66,7 @@ function PreviewModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center w-screen">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-[95vw] max-w-7xl h-[95vh] overflow-hidden">
+      <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-[85vw] max-w-5xl h-[85vh] overflow-hidden">
         <div className="flex h-full">
           {/* Left Panel: Image */}
           <div className="flex-1 flex items-center justify-center bg-muted p-4 overflow-auto ">
@@ -72,18 +74,18 @@ function PreviewModal({
               <img
                 src={meme.image_url}
                 alt={meme.title}
-                className="max-w-full"
+                className="max-w-full max-h-full object-contain"
                 loading="lazy"
               />
             ) : (
-              <div className="text-9xl">
+              <div className="text-7xl">
                 {meme.emoji || "🖼️"}
               </div>
             )}
           </div>
 
           {/* Right Panel: Info */}
-          <div className="w-96 flex flex-col border-l border-border">
+          <div className="w-80 flex flex-col border-l border-border">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div className="flex items-center gap-3">

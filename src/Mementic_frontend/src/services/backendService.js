@@ -546,6 +546,20 @@ class BackendService {
   }
 
   /**
+   * Get total lifetime votes
+   */
+  async getLifetimeVotes() {
+    return await this._safeCall('get_lifetime_votes');
+  }
+
+  /**
+   * Get total memes in current week
+   */
+  async getCurrentWeekMemeCount() {
+    return await this._safeCall('get_current_week_meme_count');
+  }
+
+  /**
     * Vote on a meme
     */
   async voteMeme(memeId, voteType) {

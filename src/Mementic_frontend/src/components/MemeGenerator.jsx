@@ -532,8 +532,8 @@ export const MemeGenerator = () => {
 
       const memeData = {
         prompt: generatedMeme.prompt || prompt,
+        name: [name], // Wrap in array for Candid opt text
         caption: [caption], // Wrap in array for Candid opt text
-        title: name,
         image_url: generatedMeme.image_url,
         image_filename: generatedMeme.image_filename || "generated_meme.jpg",
         image_format: generatedMeme.image_format || "jpg",

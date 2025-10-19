@@ -71,7 +71,7 @@ const Landing = () => {
   const navigate = useNavigate();
   const { isAuthenticated, principal, username } = useAuth();
 
-  const [globalStats, setGlobalStats] = useState({ memesCreated: 12 });
+  const [globalStats, setGlobalStats] = useState({ memesCreated: 0});
   const [globalLoading, setGlobalLoading] = useState(true);
   const [feedback, setFeedback] = useState([]);
   const [feedbackLoading, setFeedbackLoading] = useState(true);

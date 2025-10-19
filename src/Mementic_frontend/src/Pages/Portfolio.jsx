@@ -802,11 +802,41 @@ const Portfolio = () => {
             <div className="flex flex-col gap-8">
               {/* Header Section */}
               <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <p className="text-xs font-medium uppercase tracking-[0.3em] text-primary/70 pt-3">Creator Profile</p>
-                  <h1 className="text-3xl font-semibold md:text-4xl">
-                    {displayName || "Anonymous"}
-                  </h1>
+                  
+                  {/* Username Display */}
+                  <div className="flex items-center gap-3">
+                    {hasUsername ? (
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl font-bold">
+                        {sanitizedUsername.charAt(0).toUpperCase()}
+                      </div>
+                    ) : (
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                        <User className="h-6 w-6" />
+                      </div>
+                    )}
+                    <div>
+                      <h1 className="text-3xl font-semibold md:text-4xl">
+                        {hasUsername ? sanitizedUsername : "Anonymous"}
+                      </h1>
+                      {hasUsername && (
+                        <p className="text-xs text-muted-foreground mt-1">@{sanitizedUsername}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Identity/Principal Display */}
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 max-w-2xl">
+                    <div className="flex items-center gap-2 mb-1">
+                      <User className="h-4 w-4 text-primary" />
+                      <p className="text-xs font-medium text-primary/70">Your Identity (Principal ID):</p>
+                    </div>
+                    <p className="text-xs font-mono text-primary break-all">
+                      {principal || 'Loading...'}
+                    </p>
+                  </div>
+
                   <p className="max-w-md text-sm text-foreground/80">
                     Track your meme creations, earnings, and momentum across the Mementic universe.
                   </p>
@@ -926,14 +956,6 @@ const Portfolio = () => {
                       )}
                     </div>
                   </div>
-                  {!hasUsername && (
-                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-                      <p className="text-xs font-medium text-primary/70 mb-1">Your Principal ID:</p>
-                      <p className="text-xs font-mono text-primary break-all">
-                        {principal ? `${principal.slice(0, 20)}...${principal.slice(-8)}` : 'Loading...'}
-                      </p>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -1266,121 +1288,90 @@ const Portfolio = () => {
               {generatedMemes.map((nft) => (
                 <div
                   key={nft.id}
-                  className="group relative cursor-pointer overflow-hidden rounded-xl bg-white dark:bg-gray-900 shadow-lg hover:shadow-2xl transition-all duration-300 w-full max-w-sm mx-auto transform hover:-translate-y-1"
+                  className="group relative cursor-pointer overflow-hidden rounded-2xl bg-slate-50 dark:bg-slate-800 shadow-lg hover:shadow-2xl transition-all duration-300 w-full max-w-sm mx-auto transform hover:-translate-y-1 border border-slate-200 dark:border-slate-700"
                 >
-                  {/* Aspect ratio container - Made larger */}
-                  <div className="aspect-[4/5] w-full relative">
-                    {/* Main Image Container */}
-                    <div className="relative w-full h-full overflow-hidden">
+                  {/* Larger Image Container */}
+                  <div className="aspect-[3/4] w-full relative">
+                    {/* Main Image */}
+                    <div className="relative w-full h-full overflow-hidden bg-slate-100 dark:bg-slate-900">
                       {nft.imageUrl ? (
                         <img
                           src={nft.imageUrl}
                           alt={nft.title}
-                          className="w-full h-full transition-transform duration-500 group-hover:scale-105"
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                           loading="lazy"
                         />
                       ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center">
-                          <span className="text-6xl filter drop-shadow-lg">
+                        <div className="w-full h-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+                          <span className="text-7xl filter drop-shadow-lg">
                             {nft.emoji || "🖼️"}
                           </span>
                         </div>
                       )}
 
-                      {/* Enhanced Gradient Overlay */}
-                      <div
-                        className={`absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity duration-300 ${
-                          true ? "opacity-100" : "opacity-60"
-                        }`}
-                      />
+                      {/* Solid Gradient Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/30 to-transparent" />
 
-                      {/* Interactive Overlay Content */}
-                      <div className="absolute inset-0 flex flex-col justify-between p-4">
-                        {/* Top Section - Badges */}
+                      {/* Content Overlay */}
+                      <div className="absolute inset-0 flex flex-col justify-between p-5">
+                        {/* Top Badges */}
                         <div className="flex justify-between items-start">
                           <div className="flex flex-wrap gap-2">
                             {nft.activeEntitlement && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/90 px-3 py-1 text-xs font-semibold text-black shadow">
-                                🏆 You won this week!
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-bold text-black shadow-lg">
+                                🏆 Winner!
                               </span>
                             )}
                             {!nft.activeEntitlement &&
                               Array.isArray(nft.entitlements) &&
                               nft.entitlements.some((ent) => ent.status === 'Expired') && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/80 px-3 py-1 text-xs font-semibold text-white">
-                                  Mint window expired
+                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg">
+                                  Expired
                                 </span>
                               )}
                           </div>
-
-                          {/* Action indicators */}
-                          <div
-                            className={`transition-opacity duration-300 ${
-                              true ? "opacity-100" : "opacity-0"
-                            }`}
-                          >
-                            <div className="bg-black/40 backdrop-blur-sm rounded-full p-2">
-                              <span className="text-white text-xs">View</span>
-                            </div>
-                          </div>
                         </div>
 
-                        {/* Bottom Section - Info and Stats */}
+                        {/* Bottom Info */}
                         <div className="space-y-3">
-                          {/* Stats Row - Always Visible */}
-                          <div className="flex items-center justify-between text-white">
-                            <div className="flex items-center gap-4">
-                              <div className="flex items-center gap-1">
-                                <span className="font-semibold text-sm">{nft.votes}</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <span className="font-semibold text-sm">{nft.views} views</span>
-                              </div>
+                          {/* Votes Only - No Views */}
+                          <div className="flex items-center gap-2">
+                            <div className="bg-slate-800/80 dark:bg-slate-700/80 rounded-full px-3 py-1.5">
+                              <span className="font-bold text-white text-sm">❤️ {nft.votes} votes</span>
                             </div>
                           </div>
 
-                          {/* Title and Creator */}
+                          {/* Title */}
                           <div className="text-white">
-                            <h3 className="font-bold text-lg leading-tight mb-1 line-clamp-2">
+                            <h3 className="font-bold text-xl leading-tight mb-2 line-clamp-2 drop-shadow-lg">
                               {nft.title}
                             </h3>
-                            <p className="text-white/80 text-sm">by @{displayName || "Anonymous"}</p>
-                            <p className="text-white/60 text-xs">
-                              {new Date(nft.created_at || Date.now()).toLocaleString("en-IN", {
-                                timeZone: "Asia/Kolkata",
-                                dateStyle: "short",
-                                timeStyle: "short",
-                              })}
-                            </p>
+                            <p className="text-slate-200 text-sm font-medium">@{displayName || "Anonymous"}</p>
                           </div>
 
-                          {nft.activeEntitlement ? (
+                          {/* Action Button */}
+                          {nft.activeEntitlement && (
                             <div className="space-y-2">
-                              <p className="text-xs text-white/80">
-                                Mint window closes in {formatMintCountdown(nft.activeEntitlement.expiresAtMs)}
+                              <p className="text-xs text-slate-200 font-medium">
+                                Closes in {formatMintCountdown(nft.activeEntitlement.expiresAtMs)}
                               </p>
                               <Button
                                 size="sm"
-                                className="w-full bg-gradient-to-r from-amber-400 to-rose-400 text-black hover:opacity-90"
+                                className="w-full bg-amber-500 hover:bg-amber-600 text-black font-bold shadow-lg"
                                 onClick={() => openMintModal(nft)}
                                 disabled={minting && mintTarget?.id === nft.id}
                               >
-                                Mint Meme
+                                Mint Now
                               </Button>
                             </div>
-                          ) : (
-                            Array.isArray(nft.entitlements) &&
-                            nft.entitlements.some((ent) => ent.status === 'Expired') && (
-                              <p className="text-xs text-rose-200/80">Mint window expired</p>
-                            )
                           )}
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Subtle border glow effect */}
-                  <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                  {/* Hover Border Effect */}
+                  <div className="absolute inset-0 rounded-2xl border-2 border-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                 </div>
               ))}
             </div>
@@ -1423,77 +1414,73 @@ const Portfolio = () => {
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {mintedNFTs.map((nft) => (
-                <Card key={nft.id} className="group relative overflow-hidden border border-secondary/30 bg-gradient-to-br from-card via-card to-secondary/5 shadow-xl shadow-secondary/20 transition-all hover:shadow-2xl hover:shadow-secondary/30">
-                  <CardHeader className="pb-4">
-                    <div className="flex items-start gap-4">
-                      {nft.imageUrl ? (
-                        <div className="relative">
-                          <img
-                            src={nft.imageUrl}
-                            alt={nft.title}
-                            className="h-20 w-20 rounded-2xl object-cover ring-2 ring-secondary/20 transition-transform group-hover:scale-105"
-                          />
-                          <div className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg">
-                            <Crown className="h-4 w-4 text-white" />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="relative">
-                          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-secondary/30 to-secondary/10 text-4xl ring-2 ring-secondary/20 transition-transform group-hover:scale-105">
-                            {nft.emoji}
-                          </div>
-                          <div className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg">
-                            <Crown className="h-4 w-4 text-white" />
-                          </div>
-                        </div>
-                      )}
-                      <div className="flex-1 space-y-2">
-                        <h3 className="text-lg font-bold text-card-foreground line-clamp-2 leading-tight">{nft.title}</h3>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center rounded-full bg-secondary/20 px-2.5 py-0.5 text-xs font-semibold text-secondary">
-                            #{nft.id}
-                          </span>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-emerald-500/20 to-teal-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-300">
-                            <Crown className="h-3 w-3" />
-                            Minted
-                          </span>
-                        </div>
+                <div key={nft.id} className="group relative overflow-hidden rounded-2xl bg-emerald-50 dark:bg-emerald-950 border-2 border-emerald-200 dark:border-emerald-800 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+                  {/* Large Image Section */}
+                  <div className="relative aspect-square w-full overflow-hidden bg-emerald-100 dark:bg-emerald-900">
+                    {nft.imageUrl ? (
+                      <img
+                        src={nft.imageUrl}
+                        alt={nft.title}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center">
+                        <span className="text-8xl filter drop-shadow-lg">
+                          {nft.emoji || "🏆"}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Minted Badge Overlay */}
+                    <div className="absolute top-4 right-4">
+                      <div className="flex items-center gap-2 bg-emerald-600 dark:bg-emerald-500 rounded-full px-4 py-2 shadow-lg">
+                        <Crown className="h-4 w-4 text-white" />
+                        <span className="text-white font-bold text-sm">NFT Minted</span>
                       </div>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Stats Grid */}
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="group/stat rounded-xl bg-gradient-to-br from-blue-500/10 to-cyan-500/10 p-4 transition-all hover:from-blue-500/20 hover:to-cyan-500/20">
-                        <div className="flex items-center gap-2">
-                          <Eye className="h-4 w-4 text-cyan-400" />
-                          <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300/90">Views</p>
-                        </div>
-                        <p className="mt-2 text-2xl font-bold text-cyan-100">{nft.views.toLocaleString()}</p>
+                  </div>
+
+                  {/* Content Section */}
+                  <div className="p-5 space-y-4 bg-white dark:bg-slate-900">
+                    {/* Meme Name */}
+                    <div>
+                      <h3 className="text-xl font-bold text-emerald-900 dark:text-emerald-100 line-clamp-2 leading-tight mb-2">
+                        {nft.title}
+                      </h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-900 px-3 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                          #{nft.id}
+                        </span>
+                        <span className="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900 px-3 py-1 text-xs font-bold text-amber-700 dark:text-amber-300">
+                          ❤️ {nft.votes} votes
+                        </span>
                       </div>
-                      <div className="group/stat rounded-xl bg-gradient-to-br from-emerald-500/10 to-green-500/10 p-4 transition-all hover:from-emerald-500/20 hover:to-green-500/20">
-                        <div className="flex items-center gap-2">
-                          <Coins className="h-4 w-4 text-emerald-400" />
-                          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300/90">Earned</p>
-                        </div>
-                        <p className="mt-2 text-2xl font-bold text-emerald-100">{nft.earnedIcp.toFixed(4)} ICP</p>
+                    </div>
+
+                    {/* Earnings - No Views */}
+                    <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/50 p-4 border border-emerald-200 dark:border-emerald-800">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Coins className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                        <p className="text-xs font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Total Earned</p>
                       </div>
+                      <p className="text-2xl font-bold text-emerald-900 dark:text-emerald-100">{nft.earnedIcp.toFixed(4)} ICP</p>
                     </div>
 
                     {/* Mint Details */}
                     {nft.mintedEntitlement && (
-                      <div className="rounded-xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-rose-500/10 p-4">
-                        <div className="flex items-center gap-2">
-                          <TrendingUp className="h-4 w-4 text-amber-400" />
-                          <p className="text-xs font-semibold uppercase tracking-wide text-amber-300/90">
+                      <div className="rounded-xl bg-amber-100 dark:bg-amber-900/50 p-4 border border-amber-200 dark:border-amber-800">
+                        <div className="flex items-center gap-2 mb-2">
+                          <TrendingUp className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                          <p className="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">
                             Week {nft.mintedEntitlement.weekId} Winner
                           </p>
                         </div>
-                        <p className="mt-2 text-sm font-semibold text-amber-100">
+                        <p className="text-sm font-bold text-amber-900 dark:text-amber-100">
                           {formatDateTime(nft.mintedEntitlement.usedAtMs)
                             ? `Minted on ${formatDateTime(nft.mintedEntitlement.usedAtMs)}`
                             : "Minted"}
-                          <span className="ml-2 inline-flex items-center rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-200">
+                          <span className="ml-2 inline-flex items-center rounded-full bg-amber-200 dark:bg-amber-800 px-2 py-0.5 text-xs font-bold text-amber-800 dark:text-amber-200">
                             #{nft.mintedEntitlement.rank} Place
                           </span>
                         </p>
@@ -1502,57 +1489,51 @@ const Portfolio = () => {
 
                     {/* Listing Price */}
                     {typeof nft.listingPrice === "number" && (
-                      <div className="rounded-xl border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-pink-500/10 p-4">
-                        <div className="flex items-center gap-2">
-                          <Zap className="h-4 w-4 text-purple-400" />
-                          <p className="text-xs font-semibold uppercase tracking-wide text-purple-300/90">Last Listing</p>
+                      <div className="rounded-xl bg-purple-100 dark:bg-purple-900/50 p-4 border border-purple-200 dark:border-purple-800">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Gem className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                          <p className="text-xs font-bold uppercase tracking-wide text-purple-700 dark:text-purple-300">Listed Price</p>
                         </div>
-                        <p className="mt-2 text-xl font-bold text-purple-100">{nft.listingPrice.toFixed(2)} ICP</p>
+                        <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">{nft.listingPrice.toFixed(2)} ICP</p>
                       </div>
                     )}
-                    <div className="flex flex-wrap gap-3">
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-wrap gap-2 pt-2">
                       {nft.isListed ? (
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleDelist(nft.id)}
-                          className="border-rose-300 text-rose-100 hover:bg-rose-500/20"
+                          className="flex-1 border-rose-600 dark:border-rose-400 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900"
                           disabled={listingLoading}
                         >
-                          Remove listing
+                          Remove Listing
                         </Button>
                       ) : (
                         <>
                           <Button
                             size="sm"
                             onClick={() => openListingModal(nft, "marketplace")}
-                            className="bg-gradient-to-r from-amber-400 to-rose-400 text-black hover:opacity-90"
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white font-bold"
                             disabled={listingLoading}
                           >
-                            List on marketplace
+                            List for Sale
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => openListingModal(nft, "auction")}
-                            className="border border-secondary/40 bg-transparent text-secondary-foreground hover:bg-secondary/10"
+                            className="flex-1 border-emerald-600 dark:border-emerald-400 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900"
                             disabled={listingLoading}
                           >
-                            Launch auction
+                            Auction
                           </Button>
                         </>
                       )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate("/marketplace")}
-                        className="border-secondary/40 text-foreground hover:bg-secondary/10"
-                      >
-                        View marketplace
-                      </Button>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))}
             </div>
           )}

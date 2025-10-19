@@ -130,6 +130,7 @@ impl Storable for Meme {
             status: crate::model::MemeStatus::InVoting,
             week_ended: false,
             finalized_at: None,
+            finalized: false,
         })
     }
 }

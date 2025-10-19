@@ -200,6 +200,7 @@ impl Storable for DayUsage {
 #[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
 pub struct MemeData {
     pub prompt: String,
+    pub name: Option<String>,
     pub caption: Option<String>,
     pub image_url: String,
     pub image_filename: String,
@@ -223,6 +224,12 @@ pub struct StoredMeme {
     pub canister_timestamp: u64,
     #[serde(default)]
     pub views: u64,
+    #[serde(default)]
+    pub finalized: bool,
+    #[serde(default)]
+    pub week_ended: bool,
+    #[serde(default)]
+    pub finalized_at: Option<u64>,
 }
 impl Storable for StoredMeme {
     const BOUND: Bound = Bound::Unbounded;
@@ -238,6 +245,7 @@ impl Storable for StoredMeme {
             owner: StorablePrincipal(Principal::anonymous()),
             meme_data: MemeData {
                 prompt: String::new(),
+                name: None,
                 caption: None,
                 image_url: String::new(),
                 image_filename: String::new(),
@@ -252,6 +260,9 @@ impl Storable for StoredMeme {
             created_at: 0,
             canister_timestamp: 0,
             views: 0,
+            finalized: false,
+            week_ended: false,
+            finalized_at: None,
         })
     }
 }
@@ -264,6 +275,9 @@ pub struct PublicStoredMeme {
     pub canister_timestamp: u64,
     pub views: u64,
     pub sale_metadata: Option<TokenSaleMetadata>,
+    pub finalized: bool,
+    pub week_ended: bool,
+    pub finalized_at: Option<u64>,
 }
 impl From<StoredMeme> for PublicStoredMeme {
     fn from(sm: StoredMeme) -> Self {
@@ -275,6 +289,9 @@ impl From<StoredMeme> for PublicStoredMeme {
             canister_timestamp: sm.canister_timestamp,
             views: sm.views,
             sale_metadata: crate::nft_module::get_sale_metadata_for_meme(sm.id),
+            finalized: sm.finalized,
+            week_ended: sm.week_ended,
+            finalized_at: sm.finalized_at,
         }
     }
 }
@@ -480,6 +497,7 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
 
                 MemeData {
                     prompt,
+                    name: None,
                     caption: None,
                     image_url,
                     image_filename,
@@ -547,6 +565,7 @@ pub async fn generate_meme(prompt: String) -> Result<String, String> {
 
                         MemeData {
                             prompt,
+                            name: None,
                             caption: None,
                             image_url,
                             image_filename,
@@ -936,6 +955,9 @@ pub fn publish_meme(meme: MemeData) -> Result<PublicStoredMeme, String> {
         created_at: now,         // when published
         canister_timestamp: now, // canister-side write ts
         views: 0,
+        finalized: false,
+        week_ended: false,
+        finalized_at: None,
     };
 
     // Insert into global index

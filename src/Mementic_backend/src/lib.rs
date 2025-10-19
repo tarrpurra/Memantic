@@ -52,9 +52,9 @@ pub use http_outcall::{
 pub use voting::{
     finalize_finished_weeks, finalize_week, get_completed_weeks, get_current_week_status,
     get_meme_votes, get_top3_for_week, get_top_liked_memes, get_user_vote, get_voting_stats,
-    get_week_leaderboard, remove_vote, vote_meme, LeaderboardEntry, LegacyTopEntry,
-    LegacyWeeklyLeaderboard, MemeVotes, TopLikedLeaderboard, VoteRecord, VoteResponse, VoteType,
-    WeeklyPeriod,
+    get_week_leaderboard, remove_vote, vote_meme,
+    LeaderboardEntry, LegacyTopEntry, LegacyWeeklyLeaderboard, MemeVotes, TopLikedLeaderboard, 
+    VoteRecord, VoteResponse, VoteType, WeeklyPeriod,
 };
 
 pub use entitlements::{
@@ -154,6 +154,16 @@ pub fn get_active_week() -> u64 {
 #[query]
 pub fn get_week_offset() -> i64 {
     state::get_week_offset()
+}
+
+#[query]
+pub fn get_lifetime_votes() -> u64 {
+    voting::get_lifetime_votes()
+}
+
+#[query]
+pub fn get_current_week_meme_count() -> u64 {
+    voting::get_current_week_meme_count()
 }
 
 #[post_upgrade]

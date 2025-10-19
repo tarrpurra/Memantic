@@ -161,9 +161,9 @@ const MyPlace = () => {
 
       const md = generatedMeme.metadata || {};
       const memeData = {
-        prompt: generatedMeme.prompt || prompt || "",
+        prompt: prompt.trim(),
+        name: [memeName.trim()], // Wrap in array for Candid opt text
         caption: [caption.trim()], // Wrap in array for Candid opt text
-        title: memeName.trim(),
         image_url: url,
         image_filename: filename,
         image_format: ext,

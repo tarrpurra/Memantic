@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import backendService from "../services/backendService";
 import { useToast } from "../hooks/use-toast";
-import { safeBigIntToNumber, toOptionalBigInt, ensureArray } from "../utils/marketplaceUtils";
+import { safeBigIntToNumber, toOptionalBigInt, ensureArray, normalizeMeme } from "../utils/marketplaceUtils";
 
 export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, setMemes, setTopMemes) => {
   const { toast } = useToast();
@@ -118,69 +118,67 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
 
       await backendService.voteMeme(bid, "Upvote");
       toast({
-        title: "Voted! 🚀",
+        title: "Voted! ",
         description: "Your vote has been recorded successfully",
       });
 
-      // Refresh the leaderboard after successful vote
-      setTimeout(() => {
-        backendService
-          .getTopLikedMemes(3)
-          .then(async (res) => {
-            const entries = ensureArray(res?.top_memes ?? res);
+      // Refresh the current-week leaderboard after successful vote
+      setTimeout(async () => {
+        try {
+          const res = await backendService.getCurrentLeaderboard(0, 3);
+          const entries = ensureArray(res);
 
-            // Get unique owners for profile fetching
-            const uniqueOwners = [...new Set(entries.map(e => {
-              const owner = e?.owner;
-              if (owner) {
-                if (typeof owner === "string") return owner;
-                if (typeof owner === "object" && owner.toText) return owner.toText();
-                return String(owner);
-              }
-              return null;
-            }).filter(Boolean))];
-
-            // Fetch user profiles for leaderboard owners
-            const userProfiles = new Map();
-            for (const principal of uniqueOwners) {
+          // Fetch full meme data for each leaderboard entry
+          const resolved = await Promise.all(
+            entries.map(async (entry) => {
+              const rawId = Array.isArray(entry?.meme_id) ? entry.meme_id[0] : entry?.meme_id;
+              const memeIdNum = safeBigIntToNumber(rawId);
+              if (!Number.isFinite(memeIdNum) || memeIdNum <= 0) return null;
               try {
-                const profile = await backendService.getUserProfileByPrincipal(principal);
-                if (profile) {
-                  userProfiles.set(principal, profile);
-                }
+                const meme = await backendService.getMeme(memeIdNum);
+                return meme ? { entry, meme } : null;
               } catch (error) {
-                console.warn(`Failed to fetch profile for ${principal}:`, error);
+                console.warn(`Failed to fetch meme ${memeIdNum} for leaderboard:`, error);
+                return null;
               }
-            }
+            })
+          );
 
-            const arr = entries.map((e) => {
-              const pm = Array.isArray(e?.meme_data)
-                ? e.meme_data[0]
-                : e?.meme_data;
-              const normalized = pm
-                ? normalizeMeme(pm, { rank: e?.rank, votes: e?.votes }, userProfiles)
-                : normalizeMeme(
-                    { id: e?.meme_id, owner: e?.owner, meme_data: e?.meme_data },
-                    { rank: e?.rank, votes: e?.votes },
-                    userProfiles
-                  );
+          const valid = resolved.filter(Boolean);
 
-              const likeCount = safeBigIntToNumber(e?.votes?.upvotes ?? normalized.votes ?? 0);
-              const downvoteCount = safeBigIntToNumber(e?.votes?.downvotes ?? 0);
+          // Optionally fetch profiles (kept minimal for speed)
+          const userProfiles = new Map();
 
+          // Build normalized top list with filters: only show current, active, and with votes > 0
+          const top = valid
+            .filter(({ meme, entry }) => {
+              const isFinalized = meme?.finalized || meme?.meme_data?.finalized;
+              const isWeekEnded = meme?.week_ended || meme?.meme_data?.week_ended;
+              const voteCount = safeBigIntToNumber(entry?.votes ?? 0);
+              return !isFinalized && !isWeekEnded && voteCount > 0;
+            })
+            .map(({ entry, meme }) => {
+              const normalized = normalizeMeme(
+                meme,
+                { rank: entry?.rank, votes: entry?.votes },
+                userProfiles
+              );
+              const likeCount = safeBigIntToNumber(entry?.votes ?? normalized.votes ?? 0);
               return {
                 ...normalized,
                 votes: likeCount,
                 likeCount,
-                downvoteCount,
-                voteScore: normalized.votes,
-                voteDetails: e?.votes ?? null,
+                downvoteCount: 0,
+                voteScore: likeCount,
+                voteDetails: null,
               };
             });
-            setTopMemes(arr);
-          })
-          .catch((err) => console.warn("Failed to refresh leaderboard:", err));
-      }, 1000);
+
+          setTopMemes(top);
+        } catch (err) {
+          console.warn("Failed to refresh leaderboard:", err);
+        }
+      }, 800);
     } catch (error) {
       console.error("Voting failed:", error);
 

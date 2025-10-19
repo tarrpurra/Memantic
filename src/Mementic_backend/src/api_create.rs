@@ -48,6 +48,7 @@ pub fn register_meme_with_id(
         status: MemeStatus::InVoting,
         week_ended: false,
         finalized_at: None,
+        finalized: false,
     };
 
     MEMES.with(|memes| {

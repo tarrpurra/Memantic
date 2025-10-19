@@ -222,7 +222,7 @@ pub struct VoteResponse {
 
 // ---------- Helpers ----------
 
-const WEEK_S: u64 = 864_000; // 7 days for testing (864_000 seconds = 7 days, matches frontend expectations)
+const WEEK_S: u64 = 600; // 10 minutes for testing (600 seconds = 10 minutes)
 
 /// Week index (0-based) from timestamp ns
 fn get_week_id(timestamp_ns: u64) -> u64 {
@@ -440,6 +440,10 @@ pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, Stri
 
         map.insert(meme_id, mv.clone());
 
+        // Keep LIVE_VOTES (used by current_week leaderboard) in sync with upvotes
+        // so the frontend leaderboard reflects changes immediately.
+        crate::leaderboard::set_vote_count(meme_id, mv.upvotes as u64);
+
         Ok(VoteResponse {
             success: true,
             message: "Vote recorded".into(),
@@ -561,11 +565,20 @@ pub fn get_current_leaderboard_legacy(limit: Option<u32>) -> LegacyWeeklyLeaderb
 #[query]
 pub fn get_top_liked_memes(limit: Option<u32>) -> TopLikedLeaderboard {
     let lim = limit.unwrap_or(3).max(1).min(50) as usize;
+    let current_week_id = crate::state::get_active_week_id();
 
     let mut items: Vec<(u64, MemeVotes)> = VOTES.with(|v| {
         v.borrow()
             .iter()
-            .map(|entry| (*entry.key(), entry.value().clone()))
+            .filter_map(|entry| {
+                let mv = entry.value();
+                // Only show memes from the current active week
+                if mv.created_week == current_week_id {
+                    Some((*entry.key(), mv.clone()))
+                } else {
+                    None
+                }
+            })
             .collect()
     });
 
@@ -1005,18 +1018,19 @@ pub fn delete_meme_data(meme_id: u64) -> Result<(), String> {
 }
 
 /// Clean up old voting data from previous weeks
-/// This function removes ONLY voting data and temporary data from weeks that are older than the current week
+/// This function removes ONLY voting data and temporary data from weeks that are older than or equal to the finalized week
 /// MEMES are preserved so users can always access their portfolio
-fn cleanup_old_week_data(current_week_id: u64) -> Result<(), String> {
+fn cleanup_old_week_data(finalized_week_id: u64) -> Result<(), String> {
     let mut votes_to_remove = Vec::new();
     let mut user_votes_to_remove = Vec::new();
 
-    // Find all votes for memes from previous weeks
+    // Find all votes for memes from the finalized week and earlier
+    // This ensures old votes don't appear in the leaderboard
     VOTES.with(|v| {
         let map = v.borrow();
         for entry in map.iter() {
             let mv = entry.value();
-            if mv.created_week < current_week_id {
+            if mv.created_week <= finalized_week_id {
                 votes_to_remove.push(*entry.key());
             }
         }
@@ -1076,6 +1090,27 @@ pub fn get_voting_stats() -> (u32, u32) {
 
     let total_memes_with_votes = VOTES.with(|v| v.borrow().len() as u32);
     (total_votes, total_memes_with_votes)
+}
+
+/// Get total lifetime votes (all upvotes ever cast across all memes)
+pub fn get_lifetime_votes() -> u64 {
+    VOTES.with(|v| {
+        let votes = v.borrow();
+        votes
+            .iter()
+            .map(|e| {
+                let mv = e.value();
+                mv.upvotes as u64
+            })
+            .sum()
+    })
+}
+
+/// Get total memes created in current week
+pub fn get_current_week_meme_count() -> u64 {
+    let week_id = crate::state::get_active_week_id();
+    let meme_ids = crate::index::week_meme_ids(week_id);
+    meme_ids.len() as u64
 }
 
 /// Maintenance function to ensure week state is always synchronized

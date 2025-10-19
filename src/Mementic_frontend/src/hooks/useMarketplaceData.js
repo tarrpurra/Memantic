@@ -188,13 +188,20 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
             ? arr
             : arr.filter((meme) => {
                 const week = deriveWeekIdFromMs(meme?.created_at);
-                if (week !== null && previousWeekId !== null && week === previousWeekId) {
-                  return false;
-                }
-                return week == null || week === currentWeekId;
+                // Only include memes from the current week
+                // Exclude all memes from previous weeks (not just the immediate previous one)
+                return week === currentWeekId;
               });
 
-        if (!cancelled) setTopMemes(filtered);
+        // Filter out finalized, week-ended memes, and memes with 0 votes from leaderboard
+        const cleanedFiltered = filtered.filter((meme) => {
+          const isFinalized = Boolean(meme?.finalized);
+          const isWeekEnded = Boolean(meme?.week_ended);
+          const hasVotes = (meme?.votes ?? 0) > 0;
+          return !isFinalized && !isWeekEnded && hasVotes;
+        });
+
+        if (!cancelled) setTopMemes(cleanedFiltered);
       } catch (e) {
         if (!cancelled) setErrorMsg("Failed to load top memes.");
       } finally {
@@ -341,16 +348,17 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
           ? arr
           : arr.filter((meme) => {
               const week = deriveWeekIdFromMs(meme?.created_at);
-              if (week !== null && previousWeekId !== null && week === previousWeekId) {
-                return false;
-              }
-              return week == null || week === currentWeekId;
+              // Only include memes from the current week
+              // Exclude all memes from previous weeks
+              return week === currentWeekId;
             });
 
         const filteredForListing = filteredByWeek.filter((meme) => {
           const sale = meme?.sale_metadata ?? meme?.market_data ?? {};
           const isListed = Boolean(sale?.is_listed ?? sale?.isListed);
-          return !isListed;
+          const isFinalized = Boolean(meme?.finalized); // Don't show finalized memes from completed weeks
+          const isWeekEnded = Boolean(meme?.week_ended); // Don't show memes from ended weeks
+          return !isListed && !isFinalized && !isWeekEnded;
         });
 
         const slice = filteredForListing;
@@ -391,7 +399,15 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
             );
             const sanitizedUpdates = updatedMemes.filter((meme) => {
               const sale = meme?.sale_metadata ?? meme?.market_data ?? {};
-              return !(sale?.is_listed ?? sale?.isListed);
+              const isListed = sale?.is_listed ?? sale?.isListed;
+              const isFinalized = meme?.finalized; // Filter out finalized memes
+              const isWeekEnded = meme?.week_ended; // Filter out memes from ended weeks
+              
+              // Also filter by week - only include current week memes
+              const week = deriveWeekIdFromMs(meme?.created_at);
+              const isCurrentWeek = currentWeekId == null || week === currentWeekId;
+              
+              return !isListed && !isFinalized && !isWeekEnded && isCurrentWeek;
             });
 
             setMemes((prev) => {
@@ -403,7 +419,15 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
                 .slice(0, -slice.length)
                 .filter((meme) => {
                   const sale = meme?.sale_metadata ?? meme?.market_data ?? {};
-                  return !(sale?.is_listed ?? sale?.isListed);
+                  const isListed = sale?.is_listed ?? sale?.isListed;
+                  const isFinalized = meme?.finalized; // Filter out finalized memes
+                  const isWeekEnded = meme?.week_ended; // Filter out memes from ended weeks
+                  
+                  // Also filter by week - only include current week memes
+                  const week = deriveWeekIdFromMs(meme?.created_at);
+                  const isCurrentWeek = currentWeekId == null || week === currentWeekId;
+                  
+                  return !isListed && !isFinalized && !isWeekEnded && isCurrentWeek;
                 });
 
               return [...preserved, ...sanitizedUpdates];

@@ -31,6 +31,8 @@ pub struct Meme {
     pub week_ended: bool,
     #[serde(default)]
     pub finalized_at: Option<Timestamp>,
+    #[serde(default)]
+    pub finalized: bool,
 }
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]

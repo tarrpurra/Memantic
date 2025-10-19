@@ -295,6 +295,7 @@ const PreMarketplace = () => {
             timeLeft={timeLeft}
             onPreview={openPreview}
             isWeekCompleted={weekCompleted}
+            externalTopMemes={topMemes}
           />
 
           <MarketplaceFeed

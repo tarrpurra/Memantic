@@ -21,7 +21,12 @@ pub fn list_premarket_memes(offset: u32, limit: u32) -> Vec<MemeCard> {
             MEMES
                 .with(|memes| memes.borrow().get(&id))
                 .and_then(|meme| {
+                    // Only show memes that are:
+                    // 1. In voting status
+                    // 2. Not finalized (week hasn't ended)
+                    // 3. From the current active week
                     if meme.status == MemeStatus::InVoting
+                        && !meme.finalized
                         && !meme.week_ended
                         && meme.week_id == week_id
                     {

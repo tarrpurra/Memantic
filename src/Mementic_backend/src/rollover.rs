@@ -19,7 +19,8 @@ pub fn start_rollover_timer() {
         if let Some(id) = cell.borrow_mut().take() {
             clear_timer(id);
         }
-        let id = set_timer_interval(Duration::from_secs(3600), || {
+        // Check every 60 seconds for testing (was 3600 for production)
+        let id = set_timer_interval(Duration::from_secs(60), || {
             maybe_perform_rollover(DEFAULT_TOP_N);
         });
         cell.borrow_mut().replace(id);
@@ -44,8 +45,14 @@ pub fn maybe_perform_rollover(top_n: usize) -> Option<WeekId> {
     }
 
     let finalized_week = active;
-    finalize_week(finalized_week, top_n);
+    
+    // CRITICAL: Advance to the new week BEFORE finalizing
+    // This ensures all queries (list_premarket_memes, get_top_liked_memes, etc.)
+    // see the new week ID during cleanup, preventing old memes from appearing
     set_active_week_id(current);
+    
+    // Now finalize the old week
+    finalize_week(finalized_week, top_n);
 
     println!(
         "Finalized week {} -> new active week {}",
@@ -59,9 +66,40 @@ fn finalize_week(week_id: WeekId, top_n: usize) {
 
     finalize_memes_for_week(week_id, finalized_at);
 
-    if crate::leaderboard::get_weekly_leaderboard(week_id).is_none() {
-        let board = snapshot_weekly_leaderboard(week_id, finalized_at, top_n);
-        store_weekly_leaderboard(board);
+    // Create leaderboard snapshot
+    let board = if let Some(existing_board) = crate::leaderboard::get_weekly_leaderboard(week_id) {
+        existing_board
+    } else {
+        let new_board = snapshot_weekly_leaderboard(week_id, finalized_at, top_n);
+        store_weekly_leaderboard(new_board.clone());
+        new_board
+    };
+
+    // CRITICAL: Create mint entitlements for top 3 winners
+    if board.top.len() > 0 {
+        let top3: Vec<crate::model::TopEntry> = board.top.iter().take(3).map(|e| {
+            crate::model::TopEntry {
+                meme_id: e.meme_id,
+                votes: e.votes,
+                rank: e.rank,
+            }
+        }).collect();
+
+        match crate::entitlements::create_entitlements_for_week(week_id, &top3) {
+            Ok(entitlements) => {
+                println!(
+                    "Created {} mint entitlements for week {} winners",
+                    entitlements.len(),
+                    week_id
+                );
+            }
+            Err(e) => {
+                println!(
+                    "Failed to create mint entitlements for week {}: {}",
+                    week_id, e
+                );
+            }
+        }
     }
 
     clear_live_votes();
@@ -69,14 +107,32 @@ fn finalize_week(week_id: WeekId, top_n: usize) {
 
 pub(crate) fn finalize_memes_for_week(week_id: WeekId, finalized_at: u64) {
     let meme_ids = week_meme_ids(week_id);
+    
+    // Update state::MEMES (MemoryId 60)
     MEMES.with(|memes| {
         let mut memes = memes.borrow_mut();
-        for meme_id in meme_ids {
-            if let Some(mut meme) = memes.get(&meme_id) {
+        for meme_id in meme_ids.iter() {
+            if let Some(mut meme) = memes.get(meme_id) {
                 meme.status = MemeStatus::Finalized;
                 meme.week_ended = true;
                 meme.finalized_at = Some(finalized_at);
-                memes.insert(meme_id, meme);
+                meme.finalized = true; // Mark as finalized to hide from pre-marketplace
+                memes.insert(*meme_id, meme);
+            }
+        }
+    });
+    
+    // CRITICAL: Also update http_outcall::MEMES (MemoryId 21) to keep storages in sync
+    // This ensures the leaderboard and other queries see the finalized status
+    crate::http_outcall::MEMES.with(|memes| {
+        let mut memes = memes.borrow_mut();
+        for meme_id in meme_ids.iter() {
+            if let Some(mut stored_meme) = memes.get(meme_id) {
+                // Now StoredMeme has finalized/week_ended fields - update them!
+                stored_meme.finalized = true;
+                stored_meme.week_ended = true;
+                stored_meme.finalized_at = Some(finalized_at);
+                memes.insert(*meme_id, stored_meme);
             }
         }
     });

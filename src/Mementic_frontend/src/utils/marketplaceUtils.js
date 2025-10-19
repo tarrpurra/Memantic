@@ -68,7 +68,7 @@ export const formatIcp = (value) => {
   return n.toFixed(4);
 };
 
-export const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
+export const WEEK_IN_MS = 10 * 60 * 1000; // 10 minutes for testing
 
 export const deriveWeekIdFromMs = (ms) => {
   const value = Number(ms);
@@ -186,6 +186,12 @@ export const normalizeMeme = (m, extra = {}, userProfiles = new Map()) => {
     }
   }
 
+  const nameCandidate = unwrapOptional(md?.name ?? m?.name);
+  const safeName =
+    typeof nameCandidate === "string" && nameCandidate.trim().length > 0
+      ? nameCandidate.trim()
+      : "";
+
   const captionCandidate = unwrapOptional(md?.caption ?? m?.caption);
   const safeCaption =
     typeof captionCandidate === "string" && captionCandidate.trim().length > 0
@@ -218,11 +224,12 @@ export const normalizeMeme = (m, extra = {}, userProfiles = new Map()) => {
   return {
     id: toSafeIdString(m?.id ?? m?.meme_id ?? m?._id ?? m?.uuid ?? Date.now()),
     title:
+      safeName ||
       safeCaption ||
       md?.title ||
       m?.title ||
-      promptText ||
       "Untitled Meme",
+    name: safeName,
     caption: safeCaption,
     prompt: promptText,
     creator,
@@ -239,7 +246,7 @@ export const normalizeMeme = (m, extra = {}, userProfiles = new Map()) => {
 };
 
 export function getWeekEndIST(now = new Date()) {
-  const offsetIST = 330; // +05:30
+  const offsetIST = 198; // +03:18
   const utc = now.getTime() + now.getTimezoneOffset() * 60000;
   const ist = new Date(utc + offsetIST * 60000);
 

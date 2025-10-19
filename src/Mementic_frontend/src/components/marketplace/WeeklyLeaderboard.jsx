@@ -5,22 +5,27 @@ import { Crown, User, Eye, Heart } from "lucide-react";
 import { formatNumber, ensureArray, normalizeMeme, safeBigIntToNumber } from "../../utils/marketplaceUtils";
 import backendService from "../../services/backendService";
 
-const WeeklyLeaderboard = ({ timeLeft, onPreview, isWeekCompleted = false }) => {
+const WeeklyLeaderboard = ({ timeLeft, onPreview, isWeekCompleted = false, externalTopMemes = null, onRefresh = null }) => {
   const [topMemes, setTopMemes] = useState([]);
   const [loadingTop, setLoadingTop] = useState(true);
+  const [lifetimeVotes, setLifetimeVotes] = useState(0);
+  const [currentWeekMemes, setCurrentWeekMemes] = useState(0);
+  
+  // Use external top memes if provided, otherwise use internal state
+  const displayMemes = externalTopMemes !== null ? externalTopMemes : topMemes;
 
   const topTrending = useMemo(
-    () => ensureArray(topMemes).filter(Boolean).slice(0, 3),
-    [topMemes]
+    () => ensureArray(displayMemes).filter(Boolean).slice(0, 3),
+    [displayMemes]
   );
 
   const totalVotes = useMemo(
     () =>
-      ensureArray(topMemes).reduce(
+      ensureArray(displayMemes).reduce(
         (acc, meme) => acc + safeBigIntToNumber(meme?.likeCount ?? meme?.votes ?? 0),
         0
       ),
-    [topMemes]
+    [displayMemes]
   );
 
   const shareOfTop = useMemo(() => {
@@ -34,6 +39,14 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview, isWeekCompleted = false }) => 
     let cancelled = false;
     let intervalId;
 
+    // Skip fetching if external memes are provided
+    if (externalTopMemes !== null) {
+      setLoadingTop(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     if (isWeekCompleted) {
       setTopMemes([]);
       setLoadingTop(false);
@@ -45,12 +58,42 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview, isWeekCompleted = false }) => 
 
     const fetchTopMemes = async () => {
       try {
-        const res = await backendService.getTopLikedMemes(3);
-        const entries = ensureArray(res?.top_memes ?? res);
+        // Use getCurrentLeaderboard instead of getTopLikedMemes for weekly data
+        const res = await backendService.getCurrentLeaderboard(0, 3);
+        const entries = ensureArray(res);
+        
+        console.log('Leaderboard raw data:', entries);
+        console.log('Leaderboard entries count:', entries.length);
+
+        // Fetch full meme data for each leaderboard entry
+        const resolved = await Promise.all(
+          entries.map(async (entry) => {
+            const rawId = Array.isArray(entry?.meme_id) ? entry.meme_id[0] : entry?.meme_id;
+            const memeId = safeBigIntToNumber(rawId);
+            if (!Number.isFinite(memeId) || memeId <= 0) {
+              return null;
+            }
+            try {
+              const meme = await backendService.getMeme(memeId);
+              return meme ? { entry, meme } : null;
+            } catch (error) {
+              console.warn(`Failed to fetch meme ${memeId} for leaderboard:`, error);
+              return null;
+            }
+          })
+        );
+
+        const valid = resolved.filter(Boolean);
+        console.log('Valid memes fetched:', valid.length);
+
+        if (valid.length === 0) {
+          if (!cancelled) setTopMemes([]);
+          return;
+        }
 
         // Get unique owners for profile fetching
-        const uniqueOwners = [...new Set(entries.map(e => {
-          const owner = e?.owner;
+        const uniqueOwners = [...new Set(valid.map(({ meme }) => {
+          const owner = meme?.owner;
           if (owner) {
             if (typeof owner === "string") return owner;
             if (typeof owner === "object" && owner.toText) return owner.toText();
@@ -72,36 +115,47 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview, isWeekCompleted = false }) => 
           }
         }
 
-        const arr = entries.map((e) => {
-          const pm = Array.isArray(e?.meme_data)
-            ? e.meme_data[0]
-            : e?.meme_data;
-          const normalized = pm
-            ? normalizeMeme(pm, { rank: e?.rank, votes: e?.votes }, userProfiles)
-            : normalizeMeme(
-                {
-                  id: e?.meme_id,
-                  title: `Meme #${e?.meme_id ?? "?"}`,
-                  owner: e?.owner,
-                  meme_data: e?.meme_data,
-                },
-                { rank: e?.rank, votes: e?.votes },
-                userProfiles
-              );
+        const arr = valid
+          .filter(({ meme, entry }) => {
+            // Filter out finalized or week-ended memes
+            const isFinalized = meme?.finalized || meme?.meme_data?.finalized;
+            const isWeekEnded = meme?.week_ended || meme?.meme_data?.week_ended;
+            
+            // Only show memes with at least 1 vote
+            const voteCount = safeBigIntToNumber(entry?.votes ?? 0);
+            const hasVotes = voteCount > 0;
+            
+            const shouldInclude = !isFinalized && !isWeekEnded && hasVotes;
+            console.log(`Meme ${meme?.id}: finalized=${isFinalized}, weekEnded=${isWeekEnded}, votes=${voteCount}, include=${shouldInclude}`);
+            return shouldInclude;
+          })
+          .map(({ entry, meme }) => {
+            // Normalize the meme data
+            const normalized = normalizeMeme(
+              meme,
+              { rank: entry?.rank, votes: entry?.votes },
+              userProfiles
+            );
 
-          const likeCount = safeBigIntToNumber(e?.votes?.upvotes ?? normalized.votes ?? 0);
-          const downvoteCount = safeBigIntToNumber(e?.votes?.downvotes ?? 0);
+            const likeCount = safeBigIntToNumber(entry?.votes ?? normalized.votes ?? 0);
+            const downvoteCount = 0;
 
-          return {
-            ...normalized,
-            votes: likeCount,
-            likeCount,
-            downvoteCount,
-            voteScore: normalized.votes,
-            voteDetails: e?.votes ?? null,
-          };
-        });
-        if (!cancelled) setTopMemes(arr);
+            const result = {
+              ...normalized,
+              votes: likeCount,
+              likeCount,
+              downvoteCount,
+              voteScore: likeCount,
+              voteDetails: { upvotes: likeCount, downvotes: 0 },
+            };
+            
+            console.log('Normalized meme:', result);
+            return result;
+          });
+        if (!cancelled) {
+          console.log('Setting top memes:', arr);
+          setTopMemes(arr);
+        }
       } catch (e) {
         if (!cancelled) console.warn("Failed to load top memes:", e);
       } finally {
@@ -119,7 +173,38 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview, isWeekCompleted = false }) => 
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [isWeekCompleted]);
+  }, [isWeekCompleted, externalTopMemes]);
+
+  // Fetch lifetime stats
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchStats = async () => {
+      try {
+        const [votes, memeCount] = await Promise.all([
+          backendService.getLifetimeVotes(),
+          backendService.getCurrentWeekMemeCount(),
+        ]);
+        
+        if (!cancelled) {
+          setLifetimeVotes(Number(votes) || 0);
+          setCurrentWeekMemes(Number(memeCount) || 0);
+        }
+      } catch (error) {
+        console.warn("Failed to fetch leaderboard stats:", error);
+      }
+    };
+
+    fetchStats();
+    
+    // Refresh stats every 30 seconds
+    const intervalId = setInterval(fetchStats, 30000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, []);
 
   return (
     <Card className="overflow-hidden border-border bg-gradient-to-br from-primary/20 via-card/80 to-transparent w-full">
@@ -130,7 +215,25 @@ const WeeklyLeaderboard = ({ timeLeft, onPreview, isWeekCompleted = false }) => 
               <Crown className="h-5 w-5" />
               <span className="text-lg font-semibold text-foreground">Top Liked Leaderboard</span>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Lifetime Votes
+                </p>
+                <p className="text-xl font-semibold text-primary">
+                  {formatNumber(lifetimeVotes)}
+                </p>
+              </div>
+              <div className="h-8 w-px bg-border"></div>
+              <div className="text-center">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  This Week
+                </p>
+                <p className="text-xl font-semibold text-foreground">
+                  {formatNumber(currentWeekMemes)} memes
+                </p>
+              </div>
+              <div className="h-8 w-px bg-border"></div>
               <div className="text-center">
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">
                   {isWeekCompleted ? "Next cycle begins" : "Voting resets in"}

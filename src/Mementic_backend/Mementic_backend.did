@@ -56,6 +56,7 @@ type MemeCard = record {
 type MemeData = record {
   image_url : text;
   metadata : PythonMetadata;
+  name : opt text;
   image_format : text;
   caption : opt text;
   prompt : text;
@@ -98,7 +99,10 @@ type PublicStoredMeme = record {
   owner : principal;
   created_at : nat64;
   meme_data : MemeData;
+  finalized : bool;
   canister_timestamp : nat64;
+  week_ended : bool;
+  finalized_at : opt nat64;
 };
 type PythonMetadata = record {
   "service" : text;
@@ -228,12 +232,14 @@ service : (opt InitArgs) -> {
   get_current_leaderboard_legacy : (opt nat32) -> (
       LegacyWeeklyLeaderboard,
     ) query;
+  get_current_week_meme_count : () -> (nat64) query;
   // Status for current week
   get_current_week_status : () -> (nat64, nat64, nat64, bool) query;
   get_entitlements_for_meme : (nat64) -> (vec MintEntitlement) query;
   // Get feedback statistics
   get_feedback_stats : () -> (nat32, nat32, float64) query;
   get_leaderboard_by_week : (nat64) -> (opt WeeklyLeaderboard) query;
+  get_lifetime_votes : () -> (nat64) query;
   // Get only memes that are listed for sale on the marketplace
   get_marketplace_memes : () -> (vec PublicStoredMeme) query;
   get_meme : (nat64) -> (opt PublicStoredMeme) query;
