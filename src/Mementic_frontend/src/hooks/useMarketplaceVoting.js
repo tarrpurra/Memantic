@@ -2,12 +2,26 @@ import { useEffect, useRef, useState } from "react";
 import backendService from "../services/backendService";
 import { useToast } from "../hooks/use-toast";
 import { safeBigIntToNumber, toOptionalBigInt, ensureArray, normalizeMeme } from "../utils/marketplaceUtils";
-import useVotingPower from "./useVotingPower";
 
-export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, setMemes, setTopMemes) => {
+// Accept voting power controls from parent to keep UI in sync
+export const useMarketplaceVoting = (
+  isAuthenticated,
+  hasProfileName,
+  memes,
+  setMemes,
+  setTopMemes,
+  votingControls
+) => {
   const { toast } = useToast();
   const votingLock = useRef(false);
-  const { power, VOTE_COST, canAfford, consume, refund, refresh } = useVotingPower();
+  const {
+    power,
+    VOTE_COST,
+    canAfford,
+    consume,
+    refund,
+    refresh,
+  } = votingControls || {};
 
   const checkMemeOwnership = (meme, principal) => {
     if (!principal || !meme) return false;
@@ -92,6 +106,12 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
       return;
     }
 
+    // Inform user that voting will consume power
+    const confirmCost = window.confirm(
+      `Casting this vote will use ${VOTE_COST} voting power. Continue?`
+    );
+    if (!confirmCost) return;
+
     if (votingLock.current) return;
     votingLock.current = true;
 
@@ -128,14 +148,14 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
         throw new Error("Invalid meme id (non-numeric) for voting");
       }
       // Pre-consume locally to reflect instantly
-      consume(VOTE_COST);
+      if (typeof consume === "function") consume(VOTE_COST);
       await backendService.voteWithPower(bid, "Upvote", VOTE_COST);
       toast({
         title: "Voted! ",
         description: "Your vote has been recorded successfully",
       });
       // Refresh backend power in background
-      refresh().catch(() => {});
+      if (typeof refresh === "function") refresh().catch(() => {});
 
       // Refresh the current-week leaderboard after successful vote
       setTimeout(async () => {
@@ -207,7 +227,7 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
       );
 
       // refund local power on failure
-      refund(VOTE_COST);
+      if (typeof refund === "function") refund(VOTE_COST);
 
       setTopMemes((prev) =>
         ensureArray(prev).map((m) =>
@@ -262,5 +282,8 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
     checkMemeOwnership,
     votingPower: power,
     votingCost: VOTE_COST,
+    consume,
+    refund,
+    refresh,
   };
 };

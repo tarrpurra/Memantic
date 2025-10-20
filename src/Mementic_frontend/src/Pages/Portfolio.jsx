@@ -27,6 +27,7 @@ import Navigation from "../components/Navigation";
 import backendService from "../services/backendService";
 import MintingModal from "../components/MintingModal";
 import ListingModal from "../components/ListingModal";
+import useVotingPower from "../hooks/useVotingPower";
 
 
 
@@ -151,6 +152,8 @@ const Portfolio = () => {
 
   const generatedMemes = nfts.filter(nft => !nft.isMinted);
   const mintedNFTs = nfts.filter(nft => nft.isMinted);
+
+  const { power: votingPower, WEEKLY_CAP } = useVotingPower();
 
   const handleLogout = async () => {
     await logout();
@@ -891,8 +894,8 @@ const Portfolio = () => {
                     <Sparkles className="h-5 w-5 text-primary" />
                   </div>
                   <p className="text-xs uppercase tracking-wide text-primary/70">Voting Power</p>
-                  <p className="mt-2 text-2xl font-semibold text-primary">{totalVotes.toLocaleString()}</p>
-                  <p className="text-xs text-primary/60 mt-1">Total upvotes</p>
+                  <p className="mt-2 text-2xl font-semibold text-primary">{Math.max(0, Number(votingPower ?? 0))}/{WEEKLY_CAP}</p>
+                  <p className="text-xs text-primary/60 mt-1">Remaining this week</p>
                 </div>
 
                 <div className="rounded-2xl border border-secondary/30 bg-secondary/10 p-4 text-center">

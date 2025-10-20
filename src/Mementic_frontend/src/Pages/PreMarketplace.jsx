@@ -55,7 +55,8 @@ const PreMarketplace = () => {
   } = useMarketplaceData(isAuthenticated, hasProfileName, page, sort, searchQuery);
 
   // Voting power
-  const { power: votingPower, WEEKLY_CAP, VOTE_COST } = useVotingPower();
+  const votingControls = useVotingPower();
+  const { power: votingPower, WEEKLY_CAP, VOTE_COST } = votingControls;
 
   // Compute time left from backend-reported remainingNs (ns -> ms)
   const timeLeft = useMemo(() => {
@@ -73,7 +74,14 @@ const PreMarketplace = () => {
   const {
     handleVote,
     checkMemeOwnership,
-  } = useMarketplaceVoting(isAuthenticated, hasProfileName, memes, setMemes, setTopMemes);
+  } = useMarketplaceVoting(
+    isAuthenticated,
+    hasProfileName,
+    memes,
+    setMemes,
+    setTopMemes,
+    votingControls
+  );
 
   // Filter memes based on search query and creator
   const filteredMemes = useMemo(() => {
