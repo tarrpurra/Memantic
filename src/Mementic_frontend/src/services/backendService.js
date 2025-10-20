@@ -19,6 +19,32 @@ class BackendService {
   }
 
   /**
+   * Current week status: { weekId, remainingNs, endTimeNs, isCompleted }
+   */
+  async getCurrentWeekStatus() {
+    // Backend returns a tuple: (u64, u64, u64, bool)
+    const tuple = await this._safeCall('get_current_week_status');
+    if (!Array.isArray(tuple) || tuple.length < 4) {
+      return { weekId: null, remainingNs: 0, endTimeNs: 0, isCompleted: false };
+    }
+    const [weekId, remainingNs, endTimeNs, isCompleted] = tuple;
+    return {
+      weekId: Number(weekId),
+      remainingNs: Number(remainingNs),
+      endTimeNs: Number(endTimeNs),
+      isCompleted: Boolean(isCompleted),
+    };
+  }
+
+  /**
+   * Get previous week id for filtering
+   */
+  async getPreviousWeekId() {
+    const result = await this._safeCall('get_previous_week_id');
+    return result == null ? null : Number(result);
+  }
+
+  /**
    * Initialize the backend service
    */
   async initialize() {
@@ -89,13 +115,25 @@ class BackendService {
     * Ensure service is ready before making calls
     */
    async ensureReady() {
+     // If already initialized and have an actor, we're ready
      if (this.initialized && this.actor) return true;
-     if (this.initialized && !this.actor) {
-       // If initialized but no actor, user needs to login first
-       console.log("No actor available. User must login to perform actions.");
-       return false;
+
+     // Initialize if needed
+     if (!this.initialized) {
+       await this.initialize();
      }
-     return this.initialize();
+
+     // If still no actor (likely not authenticated), set up anonymous actor
+     if (!this.actor) {
+       try {
+         await this._setupAnonymousAgent();
+       } catch (e) {
+         console.warn("Failed to set up anonymous agent:", e);
+         throw e;
+       }
+     }
+
+     return true;
    }
 
   /**
@@ -498,10 +536,12 @@ class BackendService {
   }
 
   /**
-   * List pre-market memes for the current active week with pagination
+   * List pre-market memes (non-finalized, current active week)
    */
-  async listPremarketMemes(offset = 0, limit = 12) {
-    const result = await this._safeCall('list_premarket_memes', offset, limit);
+  async listPremarketMemes(offset = 0, limit = 25) {
+    // Backend API: list_memes_by_flag(week_ended: bool, offset: u32, limit: u32)
+    // We pass week_ended = false to get current premarket memes
+    const result = await this._safeCall('list_memes_by_flag', false, offset, limit);
     return Array.isArray(result) ? result : [];
   }
 
@@ -730,8 +770,10 @@ class BackendService {
    * Force finalize current week for testing
    */
   async forceFinalizeCurrentWeek() {
-    const result = await this._safeCall('force_finalize_current_week');
-    return this._unwrapResult(result, "force_finalize_current_week failed");
+    // Calls the admin update to immediately rollover/finalize the week if due
+    const result = await this._safeCall('admin_rollover_now');
+    // admin_rollover_now returns Option<week_id>; unwrap result is not needed
+    return result;
   }
 
   /**

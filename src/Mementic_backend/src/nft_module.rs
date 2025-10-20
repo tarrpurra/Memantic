@@ -642,15 +642,13 @@ pub async fn mint_to(meme_id: u64, mode: MintingMode) -> Result<Vec<Nat>, String
         return Err("Only the winning meme owner can mint this NFT".into());
     }
 
-    let votes = crate::voting::get_meme_votes(meme_id)
-        .ok_or_else(|| "Meme has no recorded votes".to_string())?;
-    let top3 = crate::voting::get_top3_for_week(votes.created_week)?;
-    if !top3.iter().any(|entry| entry.meme_id == meme_id) {
-        return Err("Only top 3 weekly winners can be minted".into());
-    }
+    // Eligibility is guaranteed by the active mint entitlement below.
+    // Previously this validated via vote records and top3 snapshot, but
+    // vote data is intentionally cleaned up after finalization.
+    // The entitlement encodes the correct week and rank for this meme.
 
     let request_time = ic_cdk::api::time();
-    let (entitlement_id, _) =
+    let (entitlement_id, _entitlement) =
         crate::entitlements::require_active_entitlement(caller, meme_id, request_time)?;
 
     let image_url = stored_meme_data.meme_data.image_url.clone();

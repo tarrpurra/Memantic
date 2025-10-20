@@ -551,12 +551,47 @@ const Portfolio = () => {
             .filter((ent) => ent.status === 'Used')
             .sort((a, b) => (b.usedAtMs || 0) - (a.usedAtMs || 0));
 
+          // If minted and entitled, try to fetch finalized winner votes from Top-3 snapshot for that week
+          let winnerVotes = null;
+          // Also fetch live votes as a fallback for active entitlements (week not yet finalized)
+          let liveVotes = null;
+          const mintedEntitlement = usedEntitlements.length > 0 ? usedEntitlements[0] : null;
+          if (mintedEntitlement && Number.isFinite(numericId)) {
+            try {
+              const top3 = await backendService.getTop3ForWeek(mintedEntitlement.weekId);
+              const match = Array.isArray(top3)
+                ? top3.find((e) => Number(e?.meme_id) === numericId)
+                : null;
+              if (match) {
+                winnerVotes = Number(match.votes ?? match.upvotes ?? 0);
+                if (!Number.isFinite(winnerVotes)) winnerVotes = null;
+              }
+            } catch (err) {
+              // ignore and fall back to baseUi.votes
+            }
+          }
+
+          // For active entitlements or when snapshot missing, try to fetch live votes from backend
+          if (Number.isFinite(numericId) && (winnerVotes == null)) {
+            try {
+              const voteData = await backendService.getMemeVotes(BigInt(numericId));
+              if (voteData) {
+                const up = Number(voteData.upvotes ?? 0);
+                const down = Number(voteData.downvotes ?? 0);
+                const score = Number.isFinite(up - down) ? up - down : up;
+                liveVotes = Number.isFinite(score) ? score : null;
+              }
+            } catch {}
+          }
+
           return {
             ...baseUi,
             isMinted: Boolean(isMinted),
             entitlements: entitlementList,
             activeEntitlement,
-            mintedEntitlement: usedEntitlements.length > 0 ? usedEntitlements[0] : null,
+            mintedEntitlement,
+            winnerVotes,
+            votes: liveVotes != null ? liveVotes : baseUi.votes,
           };
         })
       );
@@ -681,6 +716,9 @@ const Portfolio = () => {
       }
       closeListingModal();
       await fetchData();
+      try {
+        window.dispatchEvent(new CustomEvent('marketplace:listings-updated', { detail: { memeId: Number(idAsString) } }));
+      } catch {}
     } catch (error) {
       console.error("Listing failed:", error);
       setListingError(error?.message ?? "Failed to list NFT");
@@ -708,6 +746,9 @@ const Portfolio = () => {
         description: "Your NFT listing has been removed.",
       });
       await fetchData();
+      try {
+        window.dispatchEvent(new CustomEvent('marketplace:listings-updated', { detail: { memeId: Number(idAsString) } }));
+      } catch {}
     } catch (error) {
       console.error("Failed to remove listing:", error);
       toast({
@@ -882,15 +923,7 @@ const Portfolio = () => {
                 </div>
               </div>
 
-              {/* Principal Info */}
-              <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-right">
-                    <p className="text-xs text-primary/70">Marketplace Listings</p>
-                    <p className="text-lg font-semibold text-primary">{listedCount.toLocaleString()}</p>
-                  </div>
-                </div>
-              </div>
+              {/* Removed marketplace listing count card to declutter creator profile */}
 
               {/* Username Editor */}
               {usernameSaved && !showUsernameEditor && (
@@ -1453,8 +1486,13 @@ const Portfolio = () => {
                           #{nft.id}
                         </span>
                         <span className="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900 px-3 py-1 text-xs font-bold text-amber-700 dark:text-amber-300">
-                          ❤️ {nft.votes} votes
+                          ❤️ {Number(nft.winnerVotes ?? nft.votes ?? 0).toLocaleString()} votes
                         </span>
+                        {typeof nft.winnerVotes === 'number' && (
+                          <span className="inline-flex items-center rounded-full bg-purple-100 dark:bg-purple-900 px-3 py-1 text-xs font-bold text-purple-700 dark:text-purple-300">
+                            🏆 {nft.winnerVotes.toLocaleString()} final votes
+                          </span>
+                        )}
                       </div>
                     </div>
 

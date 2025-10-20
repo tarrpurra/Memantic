@@ -72,6 +72,8 @@ const Landing = () => {
   const { isAuthenticated, principal, username } = useAuth();
 
   const [globalStats, setGlobalStats] = useState({ memesCreated: 0});
+  const [marketplaceCount, setMarketplaceCount] = useState(0);
+  const [leaderboardCount, setLeaderboardCount] = useState(0);
   const [globalLoading, setGlobalLoading] = useState(true);
   const [feedback, setFeedback] = useState([]);
   const [feedbackLoading, setFeedbackLoading] = useState(true);
@@ -84,9 +86,25 @@ const Landing = () => {
         setGlobalLoading(true);
         await backendService.ensureReady();
         const totalMemes = await backendService.getTotalMemes();
+        // Current-week counts
+        let weekCount = 0;
+        let lbCount = 0;
+        try {
+          weekCount = Number(await backendService.getCurrentWeekMemeCount()) || 0;
+        } catch {}
+        try {
+          const lb = await backendService.getCurrentLeaderboard(0, 1000);
+          const entries = Array.isArray(lb) ? lb : [];
+          lbCount = entries.filter((e) => {
+            const votes = typeof e?.votes === 'bigint' ? Number(e.votes) : Number(e?.votes || 0);
+            return Number.isFinite(votes) && votes > 0;
+          }).length;
+        } catch {}
 
         if (!isMounted) return;
         setGlobalStats({ memesCreated: Number(totalMemes) || 0 });
+        setMarketplaceCount(weekCount);
+        setLeaderboardCount(lbCount);
       } catch (error) {
         console.warn(
           "Failed to fetch total memes, falling back to placeholder",
@@ -222,6 +240,15 @@ const Landing = () => {
             >
               {globalLoading ? "…" : formatNumber(globalStats.memesCreated)}
             </motion.div>
+            {/* Weekly stats chips */}
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+              <span className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-background/70 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Weekly Memes: <span className="text-foreground">{formatNumber(marketplaceCount)}</span>
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-background/70 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                On Leaderboard: <span className="text-foreground">{formatNumber(leaderboardCount)}</span>
+              </span>
+            </div>
             <p className="mt-4 max-w-2xl text-base text-muted-foreground">
               Every meme minted here is verifiable on-chain. Track community
               growth, preview upcoming drops, and prime your submission in the

@@ -519,6 +519,9 @@ pub fn remove_vote(meme_id: u64) -> Result<VoteResponse, String> {
 
             map.insert(meme_id, mv.clone());
 
+            // Sync LIVE_VOTES with current upvote count after removal
+            crate::leaderboard::set_vote_count(meme_id, mv.upvotes as u64);
+
             Ok(VoteResponse {
                 success: true,
                 message: "Vote removed".into(),

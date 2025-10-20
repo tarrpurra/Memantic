@@ -8,7 +8,7 @@ import MarketplaceFeed from "../components/marketplace/MarketplaceFeed";
 import PreviewModal from "../components/marketplace/PreviewModal";
 import { useMarketplaceData } from "../hooks/useMarketplaceData";
 import { useMarketplaceVoting } from "../hooks/useMarketplaceVoting";
-import { getWeekEndIST, formatRemaining } from "../utils/marketplaceUtils";
+import { formatRemaining } from "../utils/marketplaceUtils";
 import backendService from "../services/backendService";
 
 
@@ -28,14 +28,7 @@ const PreMarketplace = () => {
   const [selectedCreator, setSelectedCreator] = useState("all");
   const [page, setPage] = useState(1);
 
-  // Week countdown
-  const [now, setNow] = useState(new Date());
-  const weekEnd = useMemo(() => getWeekEndIST(now), [now]);
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(t);
-  }, []);
-  const timeLeft = formatRemaining(weekEnd.getTime() - now.getTime());
+  // Week countdown is computed after we have currentWeekStatus from useMarketplaceData
 
   // Debounce search
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,7 +53,17 @@ const PreMarketplace = () => {
     currentWeekStatus,
   } = useMarketplaceData(isAuthenticated, hasProfileName, page, sort, searchQuery);
 
-  const weekCompleted = Boolean(currentWeekStatus?.isCompleted);
+  // Compute time left from backend-reported remainingNs (ns -> ms)
+  const timeLeft = useMemo(() => {
+    const ns = Number(currentWeekStatus?.remainingNs || 0);
+    const ms = ns > 0 ? Math.floor(ns / 1_000_000) : 0;
+    return formatRemaining(ms);
+  }, [currentWeekStatus?.remainingNs]);
+
+  // Consider timer end as completed state while rollover finalizes
+  const remainingNs = Number(currentWeekStatus?.remainingNs || 0);
+  const due = Number.isFinite(remainingNs) ? remainingNs <= 0 : false;
+  const weekCompleted = Boolean(currentWeekStatus?.isCompleted) || due;
   const activeMemes = weekCompleted ? [] : memes;
 
   const {
@@ -271,10 +274,10 @@ const PreMarketplace = () => {
             <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-6 text-center">
               <div className="flex items-center justify-center gap-3 mb-4">
                 <div className="animate-spin h-8 w-8 border-2 border-amber-400 border-t-transparent rounded-full"></div>
-                <h3 className="text-lg font-semibold text-amber-200">Weekly Reset in Progress</h3>
+                <h3 className="text-lg font-semibold text-amber-200">Voting ended</h3>
               </div>
               <p className="text-sm text-amber-200 mb-4">
-                The pre-marketplace is being cleared for the next drop. New memes will appear as soon as the fresh week begins.
+                A new week will start in a moment. We’re finalizing winners and clearing the pre-marketplace.
               </p>
               <div className="bg-amber-500/20 rounded-lg p-4 border border-amber-400/30">
                 <p className="text-xs text-amber-300">

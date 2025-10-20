@@ -16,6 +16,8 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
   const [loadingTop, setLoadingTop] = useState(true);
   const [loadingList, setLoadingList] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [marketplaceCount, setMarketplaceCount] = useState(0);
+  const [leaderboardCount, setLeaderboardCount] = useState(0);
   const defaultWeekStatus = useMemo(
     () => ({ weekId: null, remainingNs: 0, endTimeNs: 0, isCompleted: false }),
     []
@@ -25,6 +27,7 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
   const [previousWeekId, setPreviousWeekId] = useState(null);
   const [clearedWeekId, setClearedWeekId] = useState(null);
   const [clearedCompletionWeekId, setClearedCompletionWeekId] = useState(null);
+  const [finalizeAckWeekId, setFinalizeAckWeekId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,10 +61,57 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
       }
     })();
 
+    // Poll status periodically to detect rollover promptly
+    const intervalId = setInterval(async () => {
+      try {
+        const status = await backendService.getCurrentWeekStatus();
+        const previousWeek = await backendService.getPreviousWeekId();
+        if (!cancelled) {
+          const weekId = Number(status?.weekId);
+          const normalizedWeekId = Number.isFinite(weekId) ? weekId : null;
+          const normalizedPreviousWeekId = previousWeek ? Number(previousWeek) : null;
+
+          setCurrentWeekId((prev) => (prev !== normalizedWeekId ? normalizedWeekId : prev));
+          setPreviousWeekId(normalizedPreviousWeekId);
+          setCurrentWeekStatus({
+            weekId: normalizedWeekId,
+            remainingNs: Number(status?.remainingNs) || 0,
+            endTimeNs: Number(status?.endTimeNs) || 0,
+            isCompleted: Boolean(status?.isCompleted),
+          });
+        }
+      } catch (e) {
+        // swallow
+      }
+    }, 10000); // every 10s
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [defaultWeekStatus]);
+
+  // Fetch total memes created in the current week (marketplace count)
+  useEffect(() => {
+    const weekId = currentWeekStatus?.weekId;
+    if (weekId == null) {
+      setMarketplaceCount(0);
+      setLeaderboardCount(0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const count = await backendService.getCurrentWeekMemeCount();
+        if (!cancelled) setMarketplaceCount(Number(count) || 0);
+      } catch {
+        if (!cancelled) setMarketplaceCount(0);
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [defaultWeekStatus]);
+  }, [currentWeekStatus?.weekId]);
 
   useEffect(() => {
     const weekId = currentWeekStatus?.weekId;
@@ -91,6 +141,54 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
     }
   }, [clearedCompletionWeekId, currentWeekStatus, previousWeekId]);
 
+  // Auto-finalize when the countdown ends (testing: 10-minute weeks)
+  useEffect(() => {
+    const { weekId, remainingNs, isCompleted } = currentWeekStatus ?? {};
+    if (weekId == null) return;
+    if (finalizeAckWeekId === weekId) return; // already attempted for this week
+
+    const remainingMs = Number(remainingNs) / 1_000_000; // ns -> ms
+    const due = Number.isFinite(remainingMs) ? remainingMs <= 0 : Boolean(isCompleted);
+    if (!due && !isCompleted) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        await backendService.ensureReady();
+        // Best-effort finalize; backend returns Option<week_id>
+        await backendService.forceFinalizeCurrentWeek();
+      } catch (e) {
+        // Ignore errors; timer or permissions may handle rollover elsewhere
+      } finally {
+        if (!cancelled) setFinalizeAckWeekId(weekId);
+        // Refresh status and reset lists to reflect new week
+        try {
+          const status = await backendService.getCurrentWeekStatus();
+          const prev = await backendService.getPreviousWeekId();
+          if (!cancelled) {
+            const normalizedWeekId = Number.isFinite(Number(status?.weekId)) ? Number(status.weekId) : null;
+            const normalizedPreviousWeekId = prev ? Number(prev) : null;
+            setCurrentWeekId(normalizedWeekId);
+            setPreviousWeekId(normalizedPreviousWeekId);
+            setCurrentWeekStatus({
+              weekId: normalizedWeekId,
+              remainingNs: Number(status?.remainingNs) || 0,
+              endTimeNs: Number(status?.endTimeNs) || 0,
+              isCompleted: Boolean(status?.isCompleted),
+            });
+            setTopMemes([]);
+            setMemes([]);
+            setTotal(0);
+          }
+        } catch {}
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWeekStatus, finalizeAckWeekId]);
+
   // Fetch Top 3
   useEffect(() => {
     if (!isAuthenticated || !hasProfileName) {
@@ -104,7 +202,7 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
       setLoadingTop(true);
       setErrorMsg("");
       try {
-        const leaderboard = await backendService.getCurrentLeaderboard(0, 50);
+        const leaderboard = await backendService.getCurrentLeaderboard(0, 1000);
         const entries = ensureArray(leaderboard);
 
         if (entries.length === 0) {
@@ -201,7 +299,10 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
           return !isFinalized && !isWeekEnded && hasVotes;
         });
 
-        if (!cancelled) setTopMemes(cleanedFiltered);
+        if (!cancelled) {
+          setTopMemes(cleanedFiltered);
+          setLeaderboardCount(cleanedFiltered.length);
+        }
       } catch (e) {
         if (!cancelled) setErrorMsg("Failed to load top memes.");
       } finally {
@@ -227,12 +328,7 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
       return;
     }
 
-    if (currentWeekStatus?.isCompleted) {
-      setMemes([]);
-      setTotal(0);
-      setLoadingList(false);
-      return;
-    }
+    // Do not hard-block listing on isCompleted; status may be stale right after rollover.
 
     setLoadingList(true);
     setErrorMsg("");
@@ -465,6 +561,8 @@ export const useMarketplaceData = (isAuthenticated, hasProfileName, page, sort, 
     fetchList,
     setTopMemes,
     setMemes,
+    marketplaceCount,
+    leaderboardCount,
     currentWeekStatus,
   };
 };
