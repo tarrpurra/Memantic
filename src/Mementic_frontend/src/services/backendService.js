@@ -616,22 +616,47 @@ class BackendService {
    * Graceful fallback to 100 if backend method not available.
    */
   async getVotingPower() {
+    const fallback = { remaining: 100, cap: 100 };
+    const toNumber = (value, defaultValue) => {
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : defaultValue;
+      }
+      if (typeof value === 'bigint') {
+        const max = BigInt(Number.MAX_SAFE_INTEGER);
+        const bounded = value < BigInt(0) ? BigInt(0) : value > max ? max : value;
+        return Number(bounded);
+      }
+      if (Array.isArray(value) && value.length > 0) {
+        return toNumber(value[0], defaultValue);
+      }
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : defaultValue;
+    };
+
     try {
       if (!this.actor || typeof this.actor['get_voting_power'] !== 'function') {
-        // Fallback default until backend is updated
-        return 100;
+        return fallback;
       }
+
       const res = await this._safeCall('get_voting_power');
-      // Support either number or { remaining: nat, cap: nat }
-      if (typeof res === 'number') return res;
-      if (res && typeof res === 'object') {
-        const remaining = Array.isArray(res.remaining) ? res.remaining[0] : res.remaining;
-        return Number(remaining ?? 100);
+
+      if (typeof res === 'number') {
+        return { ...fallback, remaining: toNumber(res, fallback.remaining) };
       }
-      return 100;
+
+      if (res && typeof res === 'object') {
+        const remaining = toNumber(res.remaining, fallback.remaining);
+        const cap = toNumber(res.cap, fallback.cap);
+        return {
+          remaining: Number.isFinite(remaining) ? remaining : fallback.remaining,
+          cap: Number.isFinite(cap) && cap > 0 ? cap : fallback.cap,
+        };
+      }
+
+      return fallback;
     } catch (e) {
       console.warn('get_voting_power failed, using default 100:', e);
-      return 100;
+      return fallback;
     }
   }
 
@@ -644,9 +669,15 @@ class BackendService {
       throw new Error("Authentication required: Please login to vote on memes");
     }
     const voteVariant = this._toVoteVariant(voteType);
+    const normalizedCost = Math.max(1, Math.floor(Number(cost) || 0));
     try {
       if (this.actor && typeof this.actor['vote_with_power'] === 'function') {
-        const result = await this._safeCall('vote_with_power', memeId, voteVariant, BigInt(cost));
+        const result = await this._safeCall(
+          'vote_with_power',
+          memeId,
+          voteVariant,
+          BigInt(normalizedCost)
+        );
         return this._unwrapResult(result, 'vote_with_power failed');
       }
     } catch (e) {

@@ -236,10 +236,18 @@ pub struct UserPower {
 impl Storable for UserPower {
     const BOUND: Bound = Bound::Unbounded;
 
-    fn to_bytes(&self) -> Cow<[u8]> { Cow::Owned(Encode!(&self).expect("encode UserPower")) }
-    fn into_bytes(self) -> Vec<u8> { Encode!(&self).expect("encode UserPower") }
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(Encode!(&self).expect("encode UserPower"))
+    }
+    fn into_bytes(self) -> Vec<u8> {
+        Encode!(&self).expect("encode UserPower")
+    }
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        Decode!(&bytes, UserPower).unwrap_or(UserPower { week_id: 0, remaining: WEEKLY_POWER_CAP, cap: WEEKLY_POWER_CAP })
+        Decode!(&bytes, UserPower).unwrap_or(UserPower {
+            week_id: 0,
+            remaining: WEEKLY_POWER_CAP,
+            cap: WEEKLY_POWER_CAP,
+        })
     }
 }
 
@@ -298,7 +306,11 @@ fn get_or_reset_user_power(user: Principal, week_id: u64) -> UserPower {
             }
             p
         } else {
-            let p = UserPower { week_id, remaining: WEEKLY_POWER_CAP, cap: WEEKLY_POWER_CAP };
+            let p = UserPower {
+                week_id,
+                remaining: WEEKLY_POWER_CAP,
+                cap: WEEKLY_POWER_CAP,
+            };
             map.insert(user, p.clone());
             p
         }
@@ -309,9 +321,11 @@ fn get_or_reset_user_power(user: Principal, week_id: u64) -> UserPower {
 fn spend_power(user: Principal, week_id: u64, cost: u32) -> Result<(), String> {
     USER_POWERS.with(|up| {
         let mut map = up.borrow_mut();
-        let mut p = map
-            .get(&user)
-            .unwrap_or(UserPower { week_id, remaining: WEEKLY_POWER_CAP, cap: WEEKLY_POWER_CAP });
+        let mut p = map.get(&user).unwrap_or(UserPower {
+            week_id,
+            remaining: WEEKLY_POWER_CAP,
+            cap: WEEKLY_POWER_CAP,
+        });
         if p.week_id != week_id {
             p.week_id = week_id;
             p.remaining = WEEKLY_POWER_CAP;
@@ -411,69 +425,61 @@ fn close_finished_weeks() {
 
 /// Cast or change a vote on a meme in the **current active week**.
 /// Rejects if meme is not from current week or if the week is completed/expired.
-#[update]
-pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, String> {
-    let user = caller();
-    ic_cdk::println!("Vote meme - Caller principal: {}", user.to_text());
+fn perform_vote(
+    user: Principal,
+    meme_id: u64,
+    vote_type: VoteType,
+    cost: u32,
+) -> Result<VoteResponse, String> {
+    ic_cdk::println!(
+        "Processing vote - Caller: {}, Meme: {}, Cost: {}",
+        user.to_text(),
+        meme_id,
+        cost
+    );
 
     if user == Principal::anonymous() {
-        ic_cdk::println!("Vote meme - Anonymous user detected, rejecting request");
         return Err("Authentication required".into());
     }
-
-    ic_cdk::println!("Vote meme - Authenticated user: {}", user.to_text());
-    let now = time();
-
-    // Input validation
     if meme_id == 0 {
         return Err("Invalid meme ID".into());
     }
+    if cost == 0 {
+        return Err("Voting cost must be greater than zero".into());
+    }
+    if cost > WEEKLY_POWER_CAP {
+        return Err("Voting cost exceeds weekly cap".into());
+    }
 
-    // Ensure week periods are up to date and there's always an active week
+    let now = time();
+
     close_finished_weeks();
     ensure_active_week();
 
-    // Validate meme exists
     let meme = get_meme(meme_id).ok_or("Meme not found")?;
-
-    // Prevent self-voting: check if caller is the meme owner
     if meme.owner == user {
         return Err("Cannot vote on your own meme".into());
     }
 
-    // Determine meme's week and current week
     let meme_week = get_week_id(meme.created_at);
     let period = get_or_create_current_week();
     let current_week = period.week_id;
 
-    // Only allow votes for memes created this week
     if meme_week != current_week {
         return Err("Can only vote on memes from the current week".into());
     }
-    // Block voting if the week is completed or time passed
     if period.is_completed || now > period.end_time {
         return Err("Voting period for the current week has ended".into());
     }
 
-    // Enforce weekly voting power before recording a fresh vote
-    let _ = ensure_active_week();
-    let current_week = get_current_week_id();
-
-    // Prevent multiple votes per meme (legacy behavior) and then charge for first vote
-    // Track previous vote
     let key = UserMemeKey(user, meme_id);
     let previous_vote = USER_VOTES.with(|uv| uv.borrow().get(&key));
-
-    // Prevent multiple votes per user per meme
     if previous_vote.is_some() {
         return Err("You have already voted on this meme".into());
     }
 
-    // Spend voting power (default cost)
-    let cost = DEFAULT_VOTE_COST;
     spend_power(user, current_week, cost)?;
 
-    // Update user's vote record
     USER_VOTES.with(|uv| {
         uv.borrow_mut().insert(
             key,
@@ -484,7 +490,6 @@ pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, Stri
         );
     });
 
-    // Update aggregates
     VOTES.with(|v| {
         let mut map = v.borrow_mut();
         let mut mv = map.get(&meme_id).unwrap_or(MemeVotes {
@@ -497,7 +502,6 @@ pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, Stri
             last_vote_time: now,
         });
 
-        // undo previous vote (if switching)
         if let Some(prev) = &previous_vote {
             match prev.vote_type {
                 VoteType::Upvote => mv.upvotes = mv.upvotes.saturating_sub(1),
@@ -507,21 +511,17 @@ pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, Stri
             mv.total_voters = mv.total_voters.saturating_add(1);
         }
 
-        // apply new
         match vote_type {
             VoteType::Upvote => mv.upvotes = mv.upvotes.saturating_add(1),
             VoteType::Downvote => mv.downvotes = mv.downvotes.saturating_add(1),
         }
 
-        // recompute score
         let age_hours = (now - meme.created_at) as f64 / 1_000_000_000.0 / 3600.0;
         mv.score = calculate_score(mv.upvotes, mv.downvotes, age_hours);
         mv.last_vote_time = now;
 
         map.insert(meme_id, mv.clone());
 
-        // Keep LIVE_VOTES (used by current_week leaderboard) in sync with upvotes
-        // so the frontend leaderboard reflects changes immediately.
         crate::leaderboard::set_vote_count(meme_id, mv.upvotes as u64);
 
         Ok(VoteResponse {
@@ -531,6 +531,29 @@ pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, Stri
             user_previous_vote: previous_vote.map(|v| v.vote_type),
         })
     })
+}
+
+#[update]
+pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, String> {
+    let user = caller();
+    perform_vote(user, meme_id, vote_type, DEFAULT_VOTE_COST)
+}
+
+#[update]
+pub fn vote_with_power(
+    meme_id: u64,
+    vote_type: VoteType,
+    cost: u32,
+) -> Result<VoteResponse, String> {
+    let user = caller();
+    let charge = if cost == 0 {
+        DEFAULT_VOTE_COST
+    } else if cost > WEEKLY_POWER_CAP {
+        return Err("Voting cost exceeds weekly cap".into());
+    } else {
+        cost
+    };
+    perform_vote(user, meme_id, vote_type, charge)
 }
 
 /// Remove your vote (works only for current active week)
@@ -615,8 +638,6 @@ pub fn remove_vote(meme_id: u64) -> Result<VoteResponse, String> {
 }
 
 // ---------- Queries ----------
-
- 
 
 /// Legacy leaderboard query kept for backwards compatibility.
 #[query(name = "get_current_leaderboard_legacy")]
@@ -965,7 +986,9 @@ pub fn force_finalize_current_week() -> Result<String, String> {
         })
         .collect();
 
-    if let Err(err) = crate::entitlements::create_entitlements_for_week(period.week_id, &top_entries) {
+    if let Err(err) =
+        crate::entitlements::create_entitlements_for_week(period.week_id, &top_entries)
+    {
         return Err(format!(
             "Failed to issue mint entitlements for week {}: {}",
             period.week_id, err
@@ -985,7 +1008,7 @@ pub fn force_finalize_current_week() -> Result<String, String> {
     // Advance to the next week so new memes can be created
     let next_week_id = period.week_id + 1;
     crate::state::set_active_week_id(next_week_id);
-    
+
     // Create the next week period to ensure voting is ready
     WEEKLY_PERIODS.with(|wp| {
         let mut periods = wp.borrow_mut();
@@ -1005,9 +1028,7 @@ pub fn force_finalize_current_week() -> Result<String, String> {
 
     Ok(format!(
         "Week {} force-finalized with {} winners. Advanced to week {}",
-        period.week_id,
-        winners_len,
-        next_week_id
+        period.week_id, winners_len, next_week_id
     ))
 }
 
