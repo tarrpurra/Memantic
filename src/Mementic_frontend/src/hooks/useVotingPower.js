@@ -8,10 +8,11 @@ import backendService from "../services/backendService";
  * - Auto-refreshes on mount and when week changes.
  */
 export default function useVotingPower() {
-  const WEEKLY_CAP = 100;
+  const DEFAULT_WEEKLY_CAP = 100;
   const VOTE_COST = 10;
 
-  const [power, setPower] = useState(WEEKLY_CAP);
+  const [cap, setCap] = useState(DEFAULT_WEEKLY_CAP);
+  const [power, setPower] = useState(DEFAULT_WEEKLY_CAP);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [weekId, setWeekId] = useState(null);
@@ -26,12 +27,18 @@ export default function useVotingPower() {
       }
       const res = await backendService.getVotingPower();
       if (typeof res === "number" && Number.isFinite(res)) {
+        setCap(DEFAULT_WEEKLY_CAP);
         setPower(res);
-      } else if (res && typeof res.remaining === "number") {
-        setPower(res.remaining);
+      } else if (res && typeof res === "object") {
+        const nextCap = Number(res.cap);
+        const safeCap = Number.isFinite(nextCap) && nextCap > 0 ? nextCap : DEFAULT_WEEKLY_CAP;
+        const nextRemaining = Number(res.remaining);
+        const safeRemaining = Number.isFinite(nextRemaining) ? nextRemaining : safeCap;
+        setCap(safeCap);
+        setPower(Math.min(safeCap, safeRemaining));
       } else {
-        // Fallback if backend not yet implemented: assume full power
-        setPower(WEEKLY_CAP);
+        setCap(DEFAULT_WEEKLY_CAP);
+        setPower(DEFAULT_WEEKLY_CAP);
       }
     } catch (e) {
       setError(e?.message || "Failed to load voting power");
@@ -72,16 +79,19 @@ export default function useVotingPower() {
     setPower((p) => Math.max(0, p - amount));
   }, []);
 
-  const refund = useCallback((amount = VOTE_COST) => {
-    setPower((p) => Math.min(WEEKLY_CAP, p + amount));
-  }, []);
+  const refund = useCallback(
+    (amount = VOTE_COST) => {
+      setPower((p) => Math.min(cap, p + amount));
+    },
+    [cap]
+  );
 
   return {
     power,
     weekId,
     loading,
     error,
-    WEEKLY_CAP,
+    WEEKLY_CAP: cap,
     VOTE_COST,
     canAfford,
     refresh,
