@@ -154,6 +154,7 @@ type TopLikedLeaderboard = record {
   top_memes : vec LeaderboardEntry;
 };
 type TransformArgs = record { context : blob; response : HttpResponse };
+type UserPower = record { cap : nat32; week_id : nat64; remaining : nat32 };
 type UserProfile = record {
   updated_at : nat64;
   "principal" : principal;
@@ -269,6 +270,8 @@ service : (opt InitArgs) -> {
   get_user_profile_by_principal : (principal) -> (opt UserProfile) query;
   // Did caller vote on meme?
   get_user_vote : (nat64) -> (opt VoteRecord) query;
+  // Get the authenticated user's current weekly voting power
+  get_voting_power : () -> (UserPower) query;
   // Leaderboard for any week id. Returns None if week not found.
   get_week_leaderboard : (nat64, opt nat32) -> (
       opt LegacyWeeklyLeaderboard,

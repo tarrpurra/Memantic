@@ -9,6 +9,14 @@
   - [Tech Stack](#tech-stack)
   - [On-Chain Architecture](#on-chain-architecture)
   - [Features](#features)
+    - [Frontend Features](#frontend-features)
+    - [Backend / On-chain Features](#backend--on-chain-features)
+    - [Voting \& Power Mechanics](#voting--power-mechanics)
+    - [Weekly Lifecycle](#weekly-lifecycle)
+    - [Marketplace \& Trading](#marketplace--trading)
+    - [Portfolio \& Creator Tools](#portfolio--creator-tools)
+    - [Leaderboards](#leaderboards)
+    - [Notifications \& Entitlements](#notifications--entitlements)
   - [Monetization](#monetization)
   - [Roadmap](#roadmap)
   - [Team](#team)
@@ -18,7 +26,13 @@
     - [Quick Setup (Recommended)](#quick-setup-recommended)
     - [Manual Setup](#manual-setup)
     - [Environment Variables](#environment-variables)
+      - [Google Sign-In via Internet Identity 2.0](#google-sign-in-via-internet-identity-20)
     - [Note on frontend environment variables](#note-on-frontend-environment-variables)
+  - [Weekly Rollover Operations](#weekly-rollover-operations)
+    - [Week boundary logic](#week-boundary-logic)
+    - [Automatic timers](#automatic-timers)
+    - [Manual rollover](#manual-rollover)
+    - [Legacy meme migration](#legacy-meme-migration)
   - [Contributing](#contributing)
 - [Mementic](#mementic)
 
@@ -42,11 +56,69 @@ All content and voting logic is fully on-chain. AI integration is handled via HT
 
 ## Features
 ![Tech Stack](./images/6.jpg)
-- AI meme generation
-- MemeStaking
-- Community voting
-- NFT minting with royalties
-- On-chain meme gallery
+- AI meme generation 
+- Community voting in pre-marketplace
+- Weekly voting power system 
+- Dynamic leaderboards 
+- NFT minting for weekly winners 
+- Marketplace listings 
+- User portfolios with entitlements and winner notices
+- On-chain meme gallery and views tracking
+- Internet Identity 2.0 auth with Google login
+
+### Frontend Features
+- Pre-Marketplace (`src/Pages/PreMarketplace.jsx`)
+  - Weekly feed of active memes (current, non-finalized week)
+  - Vote button with cost hint; shows remaining voting power badge
+  - Weekly leaderboard panel shows only memes with votes > 0
+  - Preview modal with vote control and stats
+- Portfolio (`src/Pages/Portfolio.jsx`)
+  - Creator profile, stats, user memes overview
+  - Winner notices and mint entitlements surfaced
+  - Minting flow orchestration (single/collection)
+- Marketplace (`src/Pages/Marketplace.jsx`)
+  - Winners showcase, live listings grid, order-tape style ticker
+  - List NFT for sale (Fixed Price) and refresh snapshots
+- Hooks & Services
+  - `useMarketplaceData` for week status, lists, leaderboard
+  - `useMarketplaceVoting` enforces vote rules
+  - `useVotingPower` tracks cap/remaining with backend fallback
+  - Centralized `backendService` for canister calls
+
+### Backend / On-chain Features
+- Weekly periods tracked in stable memory; automatic and manual finalization
+- Vote recording with up/down, score, last activity time, and week binding
+- Top 3 extraction per completed week for NFT minting
+- Sale metadata and listing APIs (FixedPrice live, Auction scaffolded)
+- User profiles, views, totals, and safety checks (no self-voting)
+
+### Voting & Power Mechanics
+- Weekly cap: 100 power per user
+- Cost per vote: 10 power (first vote per meme; one vote per meme enforced)
+- Power resets lazily on week change upon first interaction/query
+
+### Weekly Lifecycle
+- Active week open for submissions and voting
+- Rollover finalizes previous week, snapshots winners, clears live state
+- Pre-market feed resets for the new week
+
+### Marketplace & Trading
+- Fixed-price listings directly from winners and portfolio
+- Marketplace grid shows live items with floor/avg metrics
+- Auction flow planned (UI hooks present; backend variants scaffolded)
+
+### Portfolio & Creator Tools
+- My memes view with live vote refresh
+- Mint entitlement handling and post-mint tracking
+- Listing management (create, refresh, remove)
+
+### Leaderboards
+- Pre-market "Top Liked" shows only current-week memes with > 0 votes
+- Weekly leaderboards per `week_id` and Top 3 snapshot for minting
+
+### Notifications & Entitlements
+- Winner notices for Top 3 with expiry windows
+- Entitlements redeemable for minting single or collection NFTs
 
 ## Monetization
 ![Tech Stack](./images/7.jpg)

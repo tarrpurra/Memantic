@@ -612,6 +612,52 @@ class BackendService {
   }
 
   /**
+   * Get remaining weekly voting power for authenticated user
+   * Graceful fallback to 100 if backend method not available.
+   */
+  async getVotingPower() {
+    try {
+      if (!this.actor || typeof this.actor['get_voting_power'] !== 'function') {
+        // Fallback default until backend is updated
+        return 100;
+      }
+      const res = await this._safeCall('get_voting_power');
+      // Support either number or { remaining: nat, cap: nat }
+      if (typeof res === 'number') return res;
+      if (res && typeof res === 'object') {
+        const remaining = Array.isArray(res.remaining) ? res.remaining[0] : res.remaining;
+        return Number(remaining ?? 100);
+      }
+      return 100;
+    } catch (e) {
+      console.warn('get_voting_power failed, using default 100:', e);
+      return 100;
+    }
+  }
+
+  /**
+   * Vote with power cost enforcement on backend if available.
+   * Falls back to vote_meme when new API is unavailable.
+   */
+  async voteWithPower(memeId, voteType, cost = 10) {
+    if (!this.isAuthenticated) {
+      throw new Error("Authentication required: Please login to vote on memes");
+    }
+    const voteVariant = this._toVoteVariant(voteType);
+    try {
+      if (this.actor && typeof this.actor['vote_with_power'] === 'function') {
+        const result = await this._safeCall('vote_with_power', memeId, voteVariant, BigInt(cost));
+        return this._unwrapResult(result, 'vote_with_power failed');
+      }
+    } catch (e) {
+      console.warn('vote_with_power failed, falling back to vote_meme:', e);
+    }
+    // Fallback to legacy voting
+    const result = await this._safeCall('vote_meme', memeId, voteVariant);
+    return this._unwrapResult(result, 'vote_meme failed');
+  }
+
+  /**
     * Remove vote from a meme
     */
   async removeVote(memeId) {

@@ -54,7 +54,7 @@ pub use voting::{
     get_meme_votes, get_top3_for_week, get_top_liked_memes, get_user_vote, get_voting_stats,
     get_week_leaderboard, remove_vote, vote_meme,
     LeaderboardEntry, LegacyTopEntry, LegacyWeeklyLeaderboard, MemeVotes, TopLikedLeaderboard, 
-    VoteRecord, VoteResponse, VoteType, WeeklyPeriod,
+    VoteRecord, VoteResponse, VoteType, WeeklyPeriod, UserPower,
 };
 
 pub use entitlements::{

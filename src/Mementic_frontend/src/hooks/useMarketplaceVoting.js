@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import backendService from "../services/backendService";
 import { useToast } from "../hooks/use-toast";
 import { safeBigIntToNumber, toOptionalBigInt, ensureArray, normalizeMeme } from "../utils/marketplaceUtils";
+import useVotingPower from "./useVotingPower";
 
 export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, setMemes, setTopMemes) => {
   const { toast } = useToast();
   const votingLock = useRef(false);
+  const { power, VOTE_COST, canAfford, consume, refund, refresh } = useVotingPower();
 
   const checkMemeOwnership = (meme, principal) => {
     if (!principal || !meme) return false;
@@ -80,6 +82,16 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
       return;
     }
 
+    // Enforce voting power requirement
+    if (!canAfford) {
+      toast({
+        title: "Insufficient voting power",
+        description: `You need ${VOTE_COST} power to vote. Please wait for next week reset.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (votingLock.current) return;
     votingLock.current = true;
 
@@ -115,12 +127,15 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
         // Non-numeric/sample ids cannot be voted via backend
         throw new Error("Invalid meme id (non-numeric) for voting");
       }
-
-      await backendService.voteMeme(bid, "Upvote");
+      // Pre-consume locally to reflect instantly
+      consume(VOTE_COST);
+      await backendService.voteWithPower(bid, "Upvote", VOTE_COST);
       toast({
         title: "Voted! ",
         description: "Your vote has been recorded successfully",
       });
+      // Refresh backend power in background
+      refresh().catch(() => {});
 
       // Refresh the current-week leaderboard after successful vote
       setTimeout(async () => {
@@ -191,6 +206,9 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
         )
       );
 
+      // refund local power on failure
+      refund(VOTE_COST);
+
       setTopMemes((prev) =>
         ensureArray(prev).map((m) =>
           String(m.id) === String(memeId)
@@ -221,6 +239,9 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
         } else if (error.message.includes("Authentication required")) {
           errorTitle = "Authentication Required";
           errorDescription = "Please login to vote on memes";
+        } else if (error.message.includes("Insufficient voting power")) {
+          errorTitle = "Insufficient voting power";
+          errorDescription = `You need ${VOTE_COST} power to vote.`;
         } else {
           errorDescription = error.message;
         }
@@ -239,5 +260,7 @@ export const useMarketplaceVoting = (isAuthenticated, hasProfileName, memes, set
   return {
     handleVote,
     checkMemeOwnership,
+    votingPower: power,
+    votingCost: VOTE_COST,
   };
 };

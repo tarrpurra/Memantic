@@ -7,6 +7,7 @@ import WeeklyLeaderboard from "../components/marketplace/WeeklyLeaderboard";
 import MarketplaceFeed from "../components/marketplace/MarketplaceFeed";
 import PreviewModal from "../components/marketplace/PreviewModal";
 import { useMarketplaceData } from "../hooks/useMarketplaceData";
+import useVotingPower from "../hooks/useVotingPower";
 import { useMarketplaceVoting } from "../hooks/useMarketplaceVoting";
 import { formatRemaining } from "../utils/marketplaceUtils";
 import backendService from "../services/backendService";
@@ -52,6 +53,9 @@ const PreMarketplace = () => {
     setMemes,
     currentWeekStatus,
   } = useMarketplaceData(isAuthenticated, hasProfileName, page, sort, searchQuery);
+
+  // Voting power
+  const { power: votingPower, WEEKLY_CAP, VOTE_COST } = useVotingPower();
 
   // Compute time left from backend-reported remainingNs (ns -> ms)
   const timeLeft = useMemo(() => {
@@ -270,6 +274,15 @@ const PreMarketplace = () => {
 
       <div className="w-screen flex flex-col gap-10 px-4 py-10 lg:px-6">
         <main className="w-full w- max-w-[200rem] space-y-6">
+          {/* Voting power badge */}
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-muted-foreground">
+              Each vote uses <span className="font-semibold text-primary">{VOTE_COST}</span> voting power.
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              Voting Power: {Math.max(0, Number(votingPower ?? 0))}/{WEEKLY_CAP}
+            </div>
+          </div>
           {weekCompleted && (
             <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-6 text-center">
               <div className="flex items-center justify-center gap-3 mb-4">

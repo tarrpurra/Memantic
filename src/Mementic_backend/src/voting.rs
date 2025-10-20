@@ -64,6 +64,12 @@ thread_local! {
         RefCell::new(StableBTreeMap::init(
             crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(42)))
         ));
+
+    // key = user Principal, val = UserPower for current (or last) week
+    static USER_POWERS: RefCell<StableBTreeMap<Principal, UserPower, Mem>> =
+        RefCell::new(StableBTreeMap::init(
+            crate::state::MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(43)))
+        ));
 }
 
 // ---------- Data structures ----------
@@ -220,9 +226,28 @@ pub struct VoteResponse {
     pub user_previous_vote: Option<VoteType>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, CandidType)]
+pub struct UserPower {
+    pub week_id: u64,
+    pub remaining: u32,
+    pub cap: u32,
+}
+
+impl Storable for UserPower {
+    const BOUND: Bound = Bound::Unbounded;
+
+    fn to_bytes(&self) -> Cow<[u8]> { Cow::Owned(Encode!(&self).expect("encode UserPower")) }
+    fn into_bytes(self) -> Vec<u8> { Encode!(&self).expect("encode UserPower") }
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Decode!(&bytes, UserPower).unwrap_or(UserPower { week_id: 0, remaining: WEEKLY_POWER_CAP, cap: WEEKLY_POWER_CAP })
+    }
+}
+
 // ---------- Helpers ----------
 
 const WEEK_S: u64 = 600; // 10 minutes for testing (600 seconds = 10 minutes)
+const WEEKLY_POWER_CAP: u32 = 100;
+const DEFAULT_VOTE_COST: u32 = 10;
 
 /// Week index (0-based) from timestamp ns
 fn get_week_id(timestamp_ns: u64) -> u64 {
@@ -252,6 +277,52 @@ fn get_or_create_current_week() -> WeeklyPeriod {
             periods.insert(week_id, new_period.clone());
             new_period
         }
+    })
+}
+
+/// Return the current active week id, creating the period if needed
+fn get_current_week_id() -> u64 {
+    get_or_create_current_week().week_id
+}
+
+/// Get user's voting power for the given week, resetting if week changed
+fn get_or_reset_user_power(user: Principal, week_id: u64) -> UserPower {
+    USER_POWERS.with(|up| {
+        let mut map = up.borrow_mut();
+        if let Some(mut p) = map.get(&user) {
+            if p.week_id != week_id {
+                p.week_id = week_id;
+                p.remaining = WEEKLY_POWER_CAP;
+                p.cap = WEEKLY_POWER_CAP;
+                map.insert(user, p.clone());
+            }
+            p
+        } else {
+            let p = UserPower { week_id, remaining: WEEKLY_POWER_CAP, cap: WEEKLY_POWER_CAP };
+            map.insert(user, p.clone());
+            p
+        }
+    })
+}
+
+/// Spend voting power for the user in the given week
+fn spend_power(user: Principal, week_id: u64, cost: u32) -> Result<(), String> {
+    USER_POWERS.with(|up| {
+        let mut map = up.borrow_mut();
+        let mut p = map
+            .get(&user)
+            .unwrap_or(UserPower { week_id, remaining: WEEKLY_POWER_CAP, cap: WEEKLY_POWER_CAP });
+        if p.week_id != week_id {
+            p.week_id = week_id;
+            p.remaining = WEEKLY_POWER_CAP;
+            p.cap = WEEKLY_POWER_CAP;
+        }
+        if p.remaining < cost {
+            return Err("Insufficient voting power".into());
+        }
+        p.remaining = p.remaining.saturating_sub(cost);
+        map.insert(user, p);
+        Ok(())
     })
 }
 
@@ -384,6 +455,11 @@ pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, Stri
         return Err("Voting period for the current week has ended".into());
     }
 
+    // Enforce weekly voting power before recording a fresh vote
+    let _ = ensure_active_week();
+    let current_week = get_current_week_id();
+
+    // Prevent multiple votes per meme (legacy behavior) and then charge for first vote
     // Track previous vote
     let key = UserMemeKey(user, meme_id);
     let previous_vote = USER_VOTES.with(|uv| uv.borrow().get(&key));
@@ -392,6 +468,10 @@ pub fn vote_meme(meme_id: u64, vote_type: VoteType) -> Result<VoteResponse, Stri
     if previous_vote.is_some() {
         return Err("You have already voted on this meme".into());
     }
+
+    // Spend voting power (default cost)
+    let cost = DEFAULT_VOTE_COST;
+    spend_power(user, current_week, cost)?;
 
     // Update user's vote record
     USER_VOTES.with(|uv| {
@@ -535,6 +615,8 @@ pub fn remove_vote(meme_id: u64) -> Result<VoteResponse, String> {
 }
 
 // ---------- Queries ----------
+
+ 
 
 /// Legacy leaderboard query kept for backwards compatibility.
 #[query(name = "get_current_leaderboard_legacy")]
@@ -708,6 +790,16 @@ pub fn get_top3_for_week(week_id: u64) -> Result<Vec<LegacyTopEntry>, String> {
 #[query]
 pub fn get_meme_votes(meme_id: u64) -> Option<MemeVotes> {
     VOTES.with(|v| v.borrow().get(&meme_id))
+}
+
+/// Get the authenticated user's current weekly voting power
+#[query]
+pub fn get_voting_power() -> UserPower {
+    // Ensure week is active so week_id is current
+    ensure_active_week();
+    let user = caller();
+    let week_id = get_current_week_id();
+    get_or_reset_user_power(user, week_id)
 }
 
 /// Did caller vote on meme?
